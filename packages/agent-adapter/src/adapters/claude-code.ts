@@ -41,8 +41,8 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
-  async handleMessage(msg: SkynetMessage): Promise<string> {
-    const prompt = this.messageToPrompt(msg);
+  async handleMessage(msg: SkynetMessage, senderName?: string): Promise<string> {
+    const prompt = this.messageToPrompt(msg, senderName);
     return this.runClaude(prompt);
   }
 
@@ -70,18 +70,19 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     // No persistent process to clean up; each call is a new process
   }
 
-  private messageToPrompt(msg: SkynetMessage): string {
+  private messageToPrompt(msg: SkynetMessage, senderName?: string): string {
+    const sender = senderName ?? msg.from;
     switch (msg.type) {
       case MessageType.CHAT: {
         const payload = msg.payload as { text: string };
-        return `Message from ${msg.from}: ${payload.text}`;
+        return `Message from ${sender}: ${payload.text}`;
       }
       case MessageType.TASK_ASSIGN: {
         const payload = msg.payload as TaskPayload;
         return `Task assigned: ${payload.title}\n\n${payload.description}`;
       }
       default:
-        return `Received ${msg.type} from ${msg.from}: ${JSON.stringify(msg.payload)}`;
+        return `Received ${msg.type} from ${sender}: ${JSON.stringify(msg.payload)}`;
     }
   }
 

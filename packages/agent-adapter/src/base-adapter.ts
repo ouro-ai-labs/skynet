@@ -15,7 +15,7 @@ export abstract class AgentAdapter {
   abstract isAvailable(): Promise<boolean>;
 
   /** Convert a network message into a CLI agent call and return the response */
-  abstract handleMessage(msg: SkynetMessage): Promise<string>;
+  abstract handleMessage(msg: SkynetMessage, senderName?: string): Promise<string>;
 
   /** Execute a standalone task */
   abstract executeTask(task: TaskPayload): Promise<TaskResult>;
