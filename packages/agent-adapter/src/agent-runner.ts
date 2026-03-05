@@ -43,6 +43,7 @@ export class AgentRunner {
     });
 
     this.adapter = options.adapter;
+    this.adapter.setRoomId(options.roomId);
   }
 
   async start(): Promise<RoomState> {

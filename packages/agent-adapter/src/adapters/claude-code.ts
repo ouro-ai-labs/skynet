@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { execaCommand } from 'execa';
 import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
@@ -6,21 +8,28 @@ export interface ClaudeCodeOptions {
   projectRoot: string;
   allowedTools?: string[];
   model?: string;
+  sessionStorePath?: string;
 }
 
 export class ClaudeCodeAdapter extends AgentAdapter {
   readonly type = AgentType.CLAUDE_CODE;
   readonly name = 'claude-code';
-  private lastSessionId: string | null = null;
+  private roomId: string | null = null;
   private projectRoot: string;
   private allowedTools?: string[];
   private model?: string;
+  private sessionStorePath: string;
 
   constructor(options: ClaudeCodeOptions) {
     super();
     this.projectRoot = options.projectRoot;
     this.allowedTools = options.allowedTools;
     this.model = options.model;
+    this.sessionStorePath = options.sessionStorePath ?? join(options.projectRoot, '.skynet', 'sessions.json');
+  }
+
+  override setRoomId(roomId: string): void {
+    this.roomId = roomId;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -76,6 +85,29 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
+  private loadSessionId(): string | null {
+    if (!this.roomId) return null;
+    try {
+      const data = JSON.parse(readFileSync(this.sessionStorePath, 'utf-8')) as Record<string, string>;
+      return data[this.roomId] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private saveSessionId(sessionId: string): void {
+    if (!this.roomId) return;
+    let data: Record<string, string> = {};
+    try {
+      data = JSON.parse(readFileSync(this.sessionStorePath, 'utf-8')) as Record<string, string>;
+    } catch {
+      // File doesn't exist yet
+    }
+    data[this.roomId] = sessionId;
+    mkdirSync(join(this.sessionStorePath, '..'), { recursive: true });
+    writeFileSync(this.sessionStorePath, JSON.stringify(data, null, 2));
+  }
+
   private async runClaude(prompt: string): Promise<string> {
     const args = ['-p', prompt, '--output-format', 'text'];
 
@@ -87,8 +119,9 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       args.push('--model', this.model);
     }
 
-    if (this.lastSessionId) {
-      args.push('--resume', this.lastSessionId);
+    const sessionId = this.loadSessionId();
+    if (sessionId) {
+      args.push('--resume', sessionId);
     }
 
     const result = await execaCommand(`claude ${args.map((a) => `"${a}"`).join(' ')}`, {
@@ -99,7 +132,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     // Try to capture session ID from output for context continuity
     const sessionMatch = result.stderr?.match(/session[:\s]+([a-f0-9-]+)/i);
     if (sessionMatch) {
-      this.lastSessionId = sessionMatch[1];
+      this.saveSessionId(sessionMatch[1]);
     }
 
     return result.stdout;
