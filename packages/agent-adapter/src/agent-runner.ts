@@ -94,6 +94,7 @@ export class AgentRunner {
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[AgentRunner] Error processing message from ${msg.from}:`, err);
         this.client.chat(`Error processing message: ${errorMsg}`, msg.from);
       }
     }
