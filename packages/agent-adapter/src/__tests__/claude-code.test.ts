@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { MessageType } from '@skynet/protocol';
 import { ClaudeCodeAdapter } from '../adapters/claude-code.js';
+
+vi.mock('execa', () => ({
+  execa: vi.fn().mockResolvedValue({ stdout: 'mock response', stderr: '' }),
+  execaCommand: vi.fn().mockResolvedValue({ stdout: 'claude 1.0.0', stderr: '' }),
+}));
 
 describe('ClaudeCodeAdapter session persistence', () => {
   let tempDir: string;
@@ -108,5 +114,96 @@ describe('ClaudeCodeAdapter session persistence', () => {
 
     const data = JSON.parse(readFileSync(defaultPath, 'utf-8'));
     expect(data).toEqual({ 'room-1': 'session-default' });
+  });
+});
+
+describe('ClaudeCodeAdapter handleMessage', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('calls execa with separate args instead of shell string', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    const msg = {
+      id: 'msg-1',
+      type: MessageType.CHAT as const,
+      from: 'human-123',
+      to: null,
+      roomId: 'room-1',
+      timestamp: Date.now(),
+      payload: { text: 'hello "world" $HOME' },
+    };
+
+    const result = await adapter.handleMessage(msg);
+
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      ['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'text'],
+      expect.objectContaining({ cwd: tempDir, timeout: 300_000 }),
+    );
+    expect(result).toBe('mock response');
+  });
+
+  it('includes --resume flag when session exists', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    adapter.setRoomId('room-1');
+
+    mkdirSync(join(tempDir, '.skynet'), { recursive: true });
+    writeFileSync(join(tempDir, '.skynet', 'sessions.json'), JSON.stringify({ 'room-1': 'sess-abc' }));
+
+    const msg = {
+      id: 'msg-1',
+      type: MessageType.CHAT as const,
+      from: 'human-123',
+      to: null,
+      roomId: 'room-1',
+      timestamp: Date.now(),
+      payload: { text: 'test' },
+    };
+
+    await adapter.handleMessage(msg);
+
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      expect.arrayContaining(['--resume', 'sess-abc']),
+      expect.any(Object),
+    );
+  });
+
+  it('includes --model and --allowedTools when configured', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({
+      projectRoot: tempDir,
+      model: 'opus',
+      allowedTools: ['Read', 'Write'],
+    });
+
+    const msg = {
+      id: 'msg-1',
+      type: MessageType.CHAT as const,
+      from: 'human-123',
+      to: null,
+      roomId: 'room-1',
+      timestamp: Date.now(),
+      payload: { text: 'test' },
+    };
+
+    await adapter.handleMessage(msg);
+
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      expect.arrayContaining(['--model', 'opus', '--allowedTools', 'Read,Write']),
+      expect.any(Object),
+    );
   });
 });

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { execaCommand } from 'execa';
+import { execa, execaCommand } from 'execa';
 import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 
@@ -124,7 +124,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       args.push('--resume', sessionId);
     }
 
-    const result = await execaCommand(`claude ${args.map((a) => `"${a}"`).join(' ')}`, {
+    const result = await execa('claude', args, {
       cwd: this.projectRoot,
       timeout: 300_000, // 5 min timeout
     });
