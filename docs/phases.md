@@ -127,7 +127,7 @@ Web dashboard shows real-time agent activity; humans can join the network via te
 
 ### Human Agent
 
-**Terminal Mode** (`packages/human-agent`):
+**Terminal Mode** (`packages/chat`):
 - IRC/Slack-like TUI; human chats with agents in terminal
 - Can @agent-name to target specific agent
 - Can view and approve/reject agent code changes
@@ -141,7 +141,7 @@ Web dashboard shows real-time agent activity; humans can join the network via te
 - `packages/monitor/ui/src/views/MessageStream.tsx`
 - `packages/monitor/ui/src/views/TaskBoard.tsx`
 - `packages/monitor/ui/src/views/NetworkGraph.tsx`
-- `packages/human-agent/src/tui.ts`
+- `packages/chat/src/tui.ts`
 
 ### Validation
 - Open monitor web page, see real-time agent message stream

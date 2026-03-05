@@ -40,11 +40,39 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/chat:
+    dependencies:
+      '@skynet/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@skynet/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      blessed:
+        specifier: ^0.1.81
+        version: 0.1.81
+    devDependencies:
+      '@types/blessed':
+        specifier: ^0.1.27
+        version: 0.1.27
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.13
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@22.19.13)(tsx@4.21.0)
+
   packages/cli:
     dependencies:
       '@skynet/agent-adapter':
         specifier: workspace:*
         version: link:../agent-adapter
+      '@skynet/chat':
+        specifier: workspace:*
+        version: link:../chat
       '@skynet/coordinator':
         specifier: workspace:*
         version: link:../coordinator
@@ -82,22 +110,6 @@ importers:
       execa:
         specifier: ^9.0.0
         version: 9.6.1
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.13
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  packages/human-agent:
-    dependencies:
-      '@skynet/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@skynet/sdk':
-        specifier: workspace:*
-        version: link:../sdk
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -637,6 +649,9 @@ packages:
   '@types/better-sqlite3@7.6.13':
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
 
+  '@types/blessed@0.1.27':
+    resolution: {integrity: sha512-ZOQGjLvWDclAXp0rW5iuUBXeD6Gr1PkitN7tj7/G8FCoSzTsij6OhXusOzMKhwrZ9YlL2Pmu0d6xJ9zVvk+Hsg==}
+
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -725,6 +740,11 @@ packages:
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
+
+  blessed@0.1.81:
+    resolution: {integrity: sha512-LoF5gae+hlmfORcG1M5+5XZi4LBmvlXTzwJWzUlPryN/SJdSflZvROM2TwkT0GMpq7oqT48NRd4GS7BiVBc5OQ==}
+    engines: {node: '>= 0.8.0'}
+    hasBin: true
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
@@ -1688,6 +1708,10 @@ snapshots:
     dependencies:
       '@types/node': 22.19.13
 
+  '@types/blessed@0.1.27':
+    dependencies:
+      '@types/node': 22.19.13
+
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -1788,6 +1812,8 @@ snapshots:
       buffer: 5.7.1
       inherits: 2.0.4
       readable-stream: 3.6.2
+
+  blessed@0.1.81: {}
 
   buffer@5.7.1:
     dependencies:

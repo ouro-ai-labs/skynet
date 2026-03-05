@@ -13,13 +13,14 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@skynet/protocol": "workspace:*",
-    "@skynet/server": "workspace:*",
-    "@skynet/sdk": "workspace:*",
     "@skynet/agent-adapter": "workspace:*",
     "@skynet/coordinator": "workspace:*",
-    "commander": "^13.0.0",
+    "@skynet/chat": "workspace:*",
+    "@skynet/protocol": "workspace:*",
+    "@skynet/sdk": "workspace:*",
+    "@skynet/server": "workspace:*",
     "chalk": "^5.4.0",
+    "commander": "^13.0.0",
     "inquirer": "^12.0.0"
   },
   "devDependencies": {
