@@ -102,17 +102,21 @@ export function InputBar({ onSubmit, isFocused, onFocusChange }: InputBarProps):
     <Box
       width="100%"
       height={3}
-      borderStyle="single"
-      borderColor={isFocused ? 'cyan' : 'gray'}
+      borderStyle="round"
+      borderColor={isFocused ? 'cyan' : '#444444'}
       paddingX={1}
     >
-      <Text dimColor>{isFocused ? '> ' : 'Enter message (/help) '}</Text>
-      {isFocused && (
-        <Text>
-          {before}
-          <Text inverse>{cursor}</Text>
-          {after}
-        </Text>
+      {isFocused ? (
+        <>
+          <Text color="cyan">❯ </Text>
+          <Text>
+            {before}
+            <Text inverse color="cyan">{cursor}</Text>
+            {after}
+          </Text>
+        </>
+      ) : (
+        <Text dimColor>Type a message...  ·  /help for commands</Text>
       )}
     </Box>
   );

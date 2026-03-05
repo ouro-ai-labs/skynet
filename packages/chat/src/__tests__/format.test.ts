@@ -151,7 +151,8 @@ describe('formatMessage', () => {
     });
     const lines = formatMessage(msg, resolve);
     const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('[task]');
+    expect(plain).toContain('◆');
+    expect(plain).toContain('task');
     expect(plain).toContain('Alice');
     expect(plain).toContain('Fix bug');
     expect(plain).toContain('Bob');
@@ -164,7 +165,8 @@ describe('formatMessage', () => {
     });
     const lines = formatMessage(msg, resolve);
     const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('[result]');
+    expect(plain).toContain('◆');
+    expect(plain).toContain('result');
     expect(plain).toContain('OK');
     expect(plain).toContain('All good');
   });
@@ -187,7 +189,8 @@ describe('formatMessage', () => {
     });
     const lines = formatMessage(msg, resolve);
     const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('[task]');
+    expect(plain).toContain('◆');
+    expect(plain).toContain('task');
     expect(plain).toContain('in-progress');
     expect(plain).toContain('abcdef12');
   });
@@ -199,7 +202,8 @@ describe('formatMessage', () => {
     });
     const lines = formatMessage(msg, resolve);
     const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('[context]');
+    expect(plain).toContain('◇');
+    expect(plain).toContain('context');
     expect(plain).toContain('2 file(s)');
   });
 
@@ -210,7 +214,7 @@ describe('formatMessage', () => {
     });
     const lines = formatMessage(msg, resolve);
     const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('[modified]');
+    expect(plain).toContain('~ modified');
     expect(plain).toContain('Bob');
     expect(plain).toContain('src/index.ts');
   });
@@ -264,7 +268,7 @@ describe('formatSystemMessage', () => {
   it('wraps text in dim formatting', () => {
     const result = formatSystemMessage('hello');
     const plain = stripAnsi(result);
-    expect(plain).toContain('--');
+    expect(plain).toContain('·');
     expect(plain).toContain('hello');
   });
 });

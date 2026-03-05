@@ -15,13 +15,13 @@ interface AppProps {
 
 export function App({ options }: AppProps): React.ReactElement {
   const { exit } = useApp();
-  const { state, sendChat, close } = useSkynet(options);
+  const { state, sendChat, close, agentId } = useSkynet(options);
   const { rows } = useTerminalSize();
   const [inputFocused, setInputFocused] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
 
-  // Reserve space: header=1, input=3, remaining for messages+sidebar
-  const contentHeight = Math.max(5, rows - 4);
+  // Reserve space: header=3 (with border), input=3, remaining for messages+sidebar
+  const contentHeight = Math.max(5, rows - 7);
 
   const handleSubmit = useCallback((text: string) => {
     // Handle commands
@@ -79,8 +79,8 @@ export function App({ options }: AppProps): React.ReactElement {
   // Loading state
   if (state.connecting) {
     return (
-      <Box flexDirection="column">
-        <Text>Connecting to <Text bold>{options.roomId}</Text> at {options.serverUrl}...</Text>
+      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
+        <Text>Connecting to <Text bold color="cyan">{options.roomId}</Text> at {options.serverUrl}...</Text>
       </Box>
     );
   }
@@ -88,7 +88,7 @@ export function App({ options }: AppProps): React.ReactElement {
   // Error state
   if (state.error && !state.connected) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={2} paddingY={1}>
         <Text color="red">Failed to connect: {state.error}</Text>
         <Text dimColor>Press Ctrl+C to exit</Text>
       </Box>
@@ -115,7 +115,7 @@ export function App({ options }: AppProps): React.ReactElement {
           isInputFocused={inputFocused}
         />
         {/* Sidebar */}
-        <Sidebar members={state.members} height={contentHeight} />
+        <Sidebar members={state.members} height={contentHeight} selfId={agentId} />
       </Box>
 
       {/* Input */}
