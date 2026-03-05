@@ -14,22 +14,29 @@ import {
   serialize,
 } from '@skynet/protocol';
 import { RoomManager } from './room.js';
-import { MessageStore } from './store.js';
+import type { Store } from './store.js';
 
 export interface SkynetServerOptions {
   port?: number;
   host?: string;
-  dbPath?: string;
+  store: Store;
 }
 
 export class SkynetServer {
   private fastify = Fastify({ logger: true });
   private rooms = new RoomManager();
-  private store: MessageStore;
+  private store: Store;
   private socketAgentMap = new WeakMap<WebSocket, { agentId: string; roomId: string }>();
 
-  constructor(private options: SkynetServerOptions = {}) {
-    this.store = new MessageStore(options.dbPath);
+  constructor(private options: SkynetServerOptions) {
+    this.store = options.store;
+    this.restoreRooms();
+  }
+
+  private restoreRooms(): void {
+    for (const persisted of this.store.listRooms()) {
+      this.rooms.getOrCreate(persisted.id);
+    }
   }
 
   async start(): Promise<void> {
@@ -57,6 +64,7 @@ export class SkynetServer {
       if (!room) {
         return reply.status(409).send({ error: `Room '${roomId}' already exists` });
       }
+      this.store.saveRoom(roomId);
       return reply.status(201).send({ id: room.id, memberCount: 0 });
     });
 
@@ -66,6 +74,7 @@ export class SkynetServer {
       if (!result.removed) {
         return reply.status(404).send({ error: result.reason });
       }
+      this.store.deleteRoom(req.params.roomId);
       return { ok: true };
     });
 
@@ -125,6 +134,7 @@ export class SkynetServer {
 
   private handleJoin(socket: WebSocket, req: JoinRequest): void {
     const room = this.rooms.getOrCreate(req.roomId);
+    this.store.saveRoom(req.roomId);
     room.join(req.agent, socket);
     this.socketAgentMap.set(socket, { agentId: req.agent.agentId, roomId: req.roomId });
 

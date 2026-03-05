@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetServer } from '../server.js';
+import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet/sdk';
 import { AgentType, type SkynetMessage } from '@skynet/protocol';
 import { randomUUID } from 'node:crypto';
@@ -29,7 +30,7 @@ describe('Server integration', () => {
   let server: SkynetServer;
 
   beforeAll(async () => {
-    server = new SkynetServer({ port: PORT });
+    server = new SkynetServer({ port: PORT, store: new SqliteStore(':memory:') });
     await server.start();
   });
 
