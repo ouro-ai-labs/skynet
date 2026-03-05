@@ -20,6 +20,9 @@ export abstract class AgentAdapter {
   /** Execute a standalone task */
   abstract executeTask(task: TaskPayload): Promise<TaskResult>;
 
+  /** Associate adapter with a room for session persistence. No-op by default. */
+  setRoomId(_roomId: string): void {}
+
   /** Clean up resources (kill child processes, etc.) */
   abstract dispose(): Promise<void>;
 }
