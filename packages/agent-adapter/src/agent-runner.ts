@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   type AgentCard,
+  type AgentJoinPayload,
+  type AgentLeavePayload,
   type SkynetMessage,
   type TaskPayload,
   AgentType,
@@ -24,6 +26,7 @@ export class AgentRunner {
   private adapter: AgentAdapter;
   private processing = false;
   private messageQueue: SkynetMessage[] = [];
+  private memberNames = new Map<string, string>();
 
   constructor(private options: AgentRunnerOptions) {
     const agentCard: AgentCard = {
@@ -48,6 +51,20 @@ export class AgentRunner {
 
   async start(): Promise<RoomState> {
     const state = await this.client.connect();
+
+    // Build initial member name map from room state
+    for (const member of state.members) {
+      this.memberNames.set(member.agentId, member.name);
+    }
+
+    this.client.on('agent-join', (msg: SkynetMessage) => {
+      const payload = msg.payload as AgentJoinPayload;
+      this.memberNames.set(payload.agent.agentId, payload.agent.name);
+    });
+    this.client.on('agent-leave', (msg: SkynetMessage) => {
+      const payload = msg.payload as AgentLeavePayload;
+      this.memberNames.delete(payload.agentId);
+    });
 
     this.client.on('chat', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
@@ -87,7 +104,8 @@ export class AgentRunner {
         if (msg.type === MessageType.TASK_ASSIGN) {
           await this.handleTask(msg);
         } else {
-          const response = await this.adapter.handleMessage(msg);
+          const senderName = this.memberNames.get(msg.from) ?? msg.from;
+          const response = await this.adapter.handleMessage(msg, senderName);
           if (response) {
             this.client.chat(response, msg.from);
           }

@@ -34,7 +34,7 @@ export class GenericAdapter extends AgentAdapter {
     }
   }
 
-  async handleMessage(msg: SkynetMessage): Promise<string> {
+  async handleMessage(msg: SkynetMessage, _senderName?: string): Promise<string> {
     const prompt = this.messageToPrompt(msg);
     return this.run(prompt);
   }

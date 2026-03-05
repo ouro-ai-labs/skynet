@@ -153,6 +153,52 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     expect(result).toBe('mock response');
   });
 
+  it('uses senderName instead of agentId in prompt when provided', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    const msg = {
+      id: 'msg-1',
+      type: MessageType.CHAT as const,
+      from: '6242e06d-f2e8-4d16-ac87-85ad62d37635',
+      to: null,
+      roomId: 'room-1',
+      timestamp: Date.now(),
+      payload: { text: '你是谁' },
+    };
+
+    await adapter.handleMessage(msg, 'Alice');
+
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      ['-p', 'Message from Alice: 你是谁', '--output-format', 'text'],
+      expect.any(Object),
+    );
+  });
+
+  it('falls back to agentId when senderName is not provided', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    const msg = {
+      id: 'msg-1',
+      type: MessageType.CHAT as const,
+      from: 'agent-xyz',
+      to: null,
+      roomId: 'room-1',
+      timestamp: Date.now(),
+      payload: { text: 'hello' },
+    };
+
+    await adapter.handleMessage(msg);
+
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      ['-p', 'Message from agent-xyz: hello', '--output-format', 'text'],
+      expect.any(Object),
+    );
+  });
+
   it('includes --resume flag when session exists', async () => {
     const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
