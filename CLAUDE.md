@@ -71,16 +71,21 @@ All code, comments, commit messages, PR descriptions, and documentation must be 
 - All cross-package types live in `packages/protocol`; other packages import from there.
 - Use named exports; avoid default exports.
 
-## Branching Workflow
+## Branching Workflow (Mandatory — No Exceptions)
 
-**IMPORTANT**: Every change must be developed on a new branch using a git worktree, then merged into `main` via pull request.
+**CRITICAL**: You MUST NOT commit or push directly to `main`. Every code change — no matter how small — must go through a git worktree + pull request workflow:
 
-1. Create a worktree with a new branch: `git worktree add ../skynet-<branch-name> -b <branch-name>`
-2. Work in the worktree directory, commit changes there.
-3. Push the branch and open a PR to merge into `main`.
+1. **Create a worktree** with a new branch: `git worktree add ../skynet-<branch-name> -b <branch-name>`
+2. **Switch to the worktree directory** (`cd ../skynet-<branch-name>`) and do ALL development there.
+3. Commit and push the branch, then **open a PR** to merge into `main`.
 4. After the PR is merged, clean up: `git worktree remove ../skynet-<branch-name>`
 
-Never commit directly to `main`. All changes go through PR review.
+**Prohibited actions on `main`**:
+- `git commit` directly on `main`
+- `git push` to `main` (including `git push origin main`)
+- `git merge` into local `main`
+
+If you find yourself on `main`, **stop and create a worktree first**.
 
 ## Testing Requirements
 
