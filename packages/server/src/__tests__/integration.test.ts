@@ -166,6 +166,97 @@ describe('Server integration', () => {
     await alice.close();
   });
 
+  it('POST /api/rooms creates a room', async () => {
+    const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: 'created-room' }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string; memberCount: number };
+    expect(body.id).toBe('created-room');
+    expect(body.memberCount).toBe(0);
+
+    // Verify room appears in list
+    const listRes = await fetch(`http://localhost:${PORT}/api/rooms`);
+    const rooms = (await listRes.json()) as Array<{ id: string }>;
+    expect(rooms.some((r) => r.id === 'created-room')).toBe(true);
+  });
+
+  it('POST /api/rooms returns 409 for duplicate room', async () => {
+    await fetch(`http://localhost:${PORT}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: 'dup-room' }),
+    });
+
+    const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: 'dup-room' }),
+    });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('POST /api/rooms returns 400 when roomId missing', async () => {
+    const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('DELETE /api/rooms/:roomId destroys a room', async () => {
+    // Create room first
+    await fetch(`http://localhost:${PORT}/api/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: 'doomed-room' }),
+    });
+
+    const res = await fetch(`http://localhost:${PORT}/api/rooms/doomed-room`, {
+      method: 'DELETE',
+    });
+
+    expect(res.ok).toBe(true);
+
+    // Verify room is gone
+    const listRes = await fetch(`http://localhost:${PORT}/api/rooms`);
+    const rooms = (await listRes.json()) as Array<{ id: string }>;
+    expect(rooms.some((r) => r.id === 'doomed-room')).toBe(false);
+  });
+
+  it('DELETE /api/rooms/:roomId returns 404 for non-existent room', async () => {
+    const res = await fetch(`http://localhost:${PORT}/api/rooms/ghost-room`, {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE /api/rooms/:roomId disconnects members', async () => {
+    const roomId = `destroy-members-${randomUUID().slice(0, 8)}`;
+    const client = makeClient('alice', roomId);
+    await client.connect();
+
+    let disconnected = false;
+    client.on('disconnected', () => {
+      disconnected = true;
+    });
+
+    const res = await fetch(`http://localhost:${PORT}/api/rooms/${roomId}`, {
+      method: 'DELETE',
+    });
+    expect(res.ok).toBe(true);
+
+    await sleep(300);
+    expect(disconnected).toBe(true);
+  });
+
   it('agent-join event is received by existing members', async () => {
     const alice = makeClient('alice', 'join-room');
     await alice.connect();

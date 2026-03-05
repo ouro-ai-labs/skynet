@@ -90,4 +90,29 @@ export class RoomManager {
       this.rooms.delete(roomId);
     }
   }
+
+  create(roomId: string): Room | null {
+    if (this.rooms.has(roomId)) {
+      return null;
+    }
+    const room = new Room(roomId);
+    this.rooms.set(roomId, room);
+    return room;
+  }
+
+  remove(roomId: string): { removed: boolean; reason?: string } {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return { removed: false, reason: 'Room not found' };
+    }
+    // Close all member sockets before removing
+    for (const member of room.getMembers()) {
+      const rm = room.getMember(member.agentId);
+      if (rm && rm.socket.readyState === rm.socket.OPEN) {
+        rm.socket.close(1000, 'Room destroyed');
+      }
+    }
+    this.rooms.delete(roomId);
+    return { removed: true };
+  }
 }

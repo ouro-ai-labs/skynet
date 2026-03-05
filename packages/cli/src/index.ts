@@ -5,6 +5,7 @@ import { registerServerCommand } from './commands/server.js';
 import { registerAgentCommand } from './commands/agent.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerRoomCommand } from './commands/room.js';
 
 const program = new Command();
 
@@ -17,5 +18,6 @@ registerServerCommand(program);
 registerAgentCommand(program);
 registerChatCommand(program);
 registerStatusCommand(program);
+registerRoomCommand(program);
 
 program.parse();

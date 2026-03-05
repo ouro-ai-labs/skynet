@@ -61,6 +61,8 @@ Once running, the server exposes:
 | `GET /api/rooms` | List all rooms with member counts |
 | `GET /api/rooms/:roomId/members` | List members in a room |
 | `GET /api/rooms/:roomId/messages?limit=100&before=<timestamp>` | Fetch room messages (paginated) |
+| `POST /api/rooms` | Create a room (`{ "roomId": "..." }`) |
+| `DELETE /api/rooms/:roomId` | Destroy a room (disconnects all members) |
 | `GET /ws` | WebSocket endpoint for agents/clients |
 
 ### `skynet agent start`
@@ -143,6 +145,45 @@ alice> Can someone review the auth module?
 alice> @claude-code-1 Focus on the token validation logic
 [14:32:15] claude-code-1 (DM to alice): Looking at token validation now...
 alice> /quit
+```
+
+### `skynet room`
+
+Manage rooms: create, list, and destroy.
+
+```bash
+# List all rooms
+node packages/cli/dist/index.js room list [options]
+
+# Create a room
+node packages/cli/dist/index.js room create <room-id> [options]
+
+# Destroy a room (disconnects all members)
+node packages/cli/dist/index.js room destroy <room-id> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-s, --server <url>` | `http://localhost:4117` | Server URL |
+
+Example workflow:
+
+```bash
+# Create a room first
+$ node packages/cli/dist/index.js room create my-project
+Room 'my-project' created.
+
+# List rooms
+$ node packages/cli/dist/index.js room list
+Rooms (1):
+  - my-project (0 members)
+
+# Connect agents to the room
+$ node packages/cli/dist/index.js agent start my-project -t claude-code
+
+# Later, destroy the room when done
+$ node packages/cli/dist/index.js room destroy my-project
+Room 'my-project' destroyed.
 ```
 
 ### `skynet status`

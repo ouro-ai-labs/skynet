@@ -165,4 +165,45 @@ describe('RoomManager', () => {
 
     expect(mgr.get('room-1')).toBeDefined();
   });
+
+  it('creates a new room explicitly', () => {
+    const mgr = new RoomManager();
+    const room = mgr.create('new-room');
+
+    expect(room).not.toBeNull();
+    expect(room!.id).toBe('new-room');
+    expect(mgr.get('new-room')).toBe(room);
+  });
+
+  it('returns null when creating a room that already exists', () => {
+    const mgr = new RoomManager();
+    mgr.create('dup-room');
+    const second = mgr.create('dup-room');
+
+    expect(second).toBeNull();
+  });
+
+  it('removes a room and closes member sockets', () => {
+    const mgr = new RoomManager();
+    const room = mgr.getOrCreate('rm-room');
+    const socket = mockSocket(true);
+    (socket as unknown as { close: ReturnType<typeof vi.fn> }).close = vi.fn();
+    room.join(mockAgent('a1', 'alice'), socket);
+
+    const result = mgr.remove('rm-room');
+
+    expect(result.removed).toBe(true);
+    expect(mgr.get('rm-room')).toBeUndefined();
+    expect(
+      (socket as unknown as { close: ReturnType<typeof vi.fn> }).close,
+    ).toHaveBeenCalledWith(1000, 'Room destroyed');
+  });
+
+  it('returns not found when removing non-existent room', () => {
+    const mgr = new RoomManager();
+    const result = mgr.remove('ghost');
+
+    expect(result.removed).toBe(false);
+    expect(result.reason).toBe('Room not found');
+  });
 });
