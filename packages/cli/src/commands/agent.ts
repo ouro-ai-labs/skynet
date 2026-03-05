@@ -69,7 +69,7 @@ export function registerAgentCommand(program: Command): void {
 
       const state = await runner.start();
       console.log(`Agent "${runner.agentName}" connected to room "${roomId}"`);
-      console.log(`Members in room: ${state.members.map((m) => m.name).join(', ')}`);
+      console.log(`Members in room: ${state.members.map((m: { name: string }) => m.name).join(', ')}`);
       console.log('Listening for messages... (Ctrl+C to quit)');
     });
 }

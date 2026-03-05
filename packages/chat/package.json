@@ -1,5 +1,5 @@
 {
-  "name": "@skynet/human-agent",
+  "name": "@skynet/chat",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -7,14 +7,18 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@skynet/protocol": "workspace:*",
-    "@skynet/sdk": "workspace:*"
+    "@skynet/sdk": "workspace:*",
+    "blessed": "^0.1.81"
   },
   "devDependencies": {
+    "@types/blessed": "^0.1.27",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }

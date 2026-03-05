@@ -70,7 +70,7 @@ skynet/
 │   ├── monitor/           # Web monitoring dashboard
 │   │   ├── server/
 │   │   └── ui/
-│   ├── human-agent/       # Human participation entry point (TUI)
+│   ├── chat/              # Chat TUI for human participation
 │   └── cli/               # skynet CLI entry point
 ├── examples/
 ├── docs/

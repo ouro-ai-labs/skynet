@@ -54,7 +54,7 @@ Agents connect to a central server via WebSocket. The server handles message rou
 | `@skynet/coordinator` | Task queue, file locks, git worktree management |
 | `@skynet/cli` | `skynet` CLI entry point |
 | `@skynet/monitor` | Web monitoring dashboard (Phase 2) |
-| `@skynet/human-agent` | Human TUI agent (Phase 2) |
+| `@skynet/chat` | Chat TUI for human participation |
 
 ## CLI Commands
 
