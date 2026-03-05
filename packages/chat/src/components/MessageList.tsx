@@ -84,8 +84,8 @@ export function MessageList({
       flexDirection="column"
       flexGrow={1}
       height={height}
-      borderStyle="single"
-      borderColor="gray"
+      borderStyle="round"
+      borderColor="#555555"
       paddingX={1}
       overflow="hidden"
     >
@@ -98,7 +98,7 @@ export function MessageList({
       )}
       {/* Scroll indicator */}
       {!atBottom && lines.length > viewportHeight && (
-        <Text dimColor>  ↓ more messages below (Shift+G to jump)</Text>
+        <Text color="cyan">  ↓ more messages below (Shift+G to jump)</Text>
       )}
     </Box>
   );

@@ -9,18 +9,21 @@ interface HeaderProps {
 
 export function Header({ roomId, connected, memberCount }: HeaderProps): React.ReactElement {
   return (
-    <Box width="100%" height={1}>
-      <Text bold> skynet</Text>
-      <Text dimColor> | </Text>
-      <Text>{roomId}</Text>
-      <Text dimColor> | </Text>
-      {connected ? (
-        <Text color="green">connected</Text>
-      ) : (
-        <Text color="red">disconnected</Text>
-      )}
-      <Text dimColor> | </Text>
-      <Text>{memberCount} members</Text>
+    <Box width="100%" height={3} borderStyle="round" borderColor="cyan" justifyContent="space-between" paddingX={1}>
+      <Box>
+        <Text bold color="cyan">skynet</Text>
+        <Text dimColor> · </Text>
+        <Text dimColor>#</Text><Text>{roomId}</Text>
+        <Text dimColor> · </Text>
+        <Text>{memberCount} members</Text>
+      </Box>
+      <Box>
+        {connected ? (
+          <Text color="green">● connected</Text>
+        ) : (
+          <Text color="red">● disconnected</Text>
+        )}
+      </Box>
     </Box>
   );
 }

@@ -104,51 +104,51 @@ export function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): st
   const to = p.assignee
     ? ` ${chalk.white('->')} ${agentNameColored(resolve(p.assignee).name, resolve(p.assignee).type)}`
     : '';
-  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('[task]')} ${agentNameColored(s.name, s.type)} assigned ${chalk.bold(p.title)}${to}`;
+  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('◆')} ${chalk.yellow('task')} ${agentNameColored(s.name, s.type)} assigned ${chalk.bold(p.title)}${to}`;
 }
 
 export function formatTaskUpdate(msg: SkynetMessage, resolve: AgentResolver): string {
   const s = resolve(msg.from);
   const p = msg.payload as { taskId: string; status: string };
-  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('[task]')} ${agentNameColored(s.name, s.type)} ${dimText(p.taskId.slice(0, 8))} -> ${chalk.bold(p.status)}`;
+  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('◆')} ${chalk.yellow('task')} ${agentNameColored(s.name, s.type)} ${dimText(p.taskId.slice(0, 8))} -> ${chalk.bold(p.status)}`;
 }
 
 export function formatTaskResult(msg: SkynetMessage, resolve: AgentResolver): string {
   const s = resolve(msg.from);
   const p = msg.payload as TaskResultPayload;
   const icon = p.success ? chalk.green('OK') : chalk.red('FAIL');
-  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('[result]')} ${agentNameColored(s.name, s.type)} [${icon}] ${p.summary}`;
+  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('◆')} ${chalk.yellow('result')} ${agentNameColored(s.name, s.type)} [${icon}] ${p.summary}`;
 }
 
 export function formatContextShare(msg: SkynetMessage, resolve: AgentResolver): string {
   const s = resolve(msg.from);
   const p = msg.payload as ContextSharePayload;
-  return `${formatTimestamp(msg.timestamp)} ${chalk.cyan('[context]')} ${agentNameColored(s.name, s.type)} shared ${p.files?.length ?? 0} file(s)`;
+  return `${formatTimestamp(msg.timestamp)} ${chalk.cyan('◇')} ${chalk.cyan('context')} ${agentNameColored(s.name, s.type)} shared ${p.files?.length ?? 0} file(s)`;
 }
 
 export function formatFileChange(msg: SkynetMessage, resolve: AgentResolver): string {
   const p = msg.payload as FileChangePayload;
   const a = resolve(p.agentId);
-  const colors: Record<string, (s: string) => string> = {
-    created: chalk.green,
-    modified: chalk.yellow,
-    deleted: chalk.red,
+  const icons: Record<string, string> = {
+    created: chalk.green('+ created'),
+    modified: chalk.yellow('~ modified'),
+    deleted: chalk.red('- deleted'),
   };
-  const colorFn = colors[p.changeType] ?? chalk.white;
-  return `${formatTimestamp(msg.timestamp)} ${colorFn(`[${p.changeType}]`)} ${agentNameColored(a.name, a.type)} ${p.path}`;
+  const icon = icons[p.changeType] ?? chalk.white(p.changeType);
+  return `${formatTimestamp(msg.timestamp)} ${icon} ${agentNameColored(a.name, a.type)} ${p.path}`;
 }
 
 export function formatJoin(msg: SkynetMessage): string {
   const p = msg.payload as AgentJoinPayload;
-  return `  ${dimText('--')} ${agentNameColored(p.agent.name, p.agent.type)} ${agentTag(p.agent.type)} joined`;
+  return `  ${chalk.green('→')} ${agentNameColored(p.agent.name, p.agent.type)} ${agentTag(p.agent.type)} joined`;
 }
 
 export function formatLeave(msg: SkynetMessage, resolve: AgentResolver): string {
   const p = msg.payload as AgentLeavePayload;
   const a = resolve(p.agentId);
-  return `  ${dimText('--')} ${agentNameColored(a.name, a.type)} left`;
+  return `  ${chalk.red('←')} ${agentNameColored(a.name, a.type)} left`;
 }
 
 export function formatSystemMessage(text: string): string {
-  return `  ${dimText('--')} ${dimText(text)}`;
+  return `  ${chalk.hex('#555555')('·')} ${dimText(text)}`;
 }
