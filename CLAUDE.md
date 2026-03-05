@@ -59,6 +59,10 @@ If you modify code under these paths, also read the matching `CLAUDE.md` first:
 - `packages/sdk/CLAUDE.md` (client reconnection + error handling)
 - `packages/agent-adapter/CLAUDE.md` (adapter contracts + CLI process management)
 
+## Language
+
+All code, comments, commit messages, PR descriptions, and documentation must be written in **English**. No exceptions.
+
 ## TypeScript Conventions
 
 - Strict mode enabled (`"strict": true` in tsconfig).

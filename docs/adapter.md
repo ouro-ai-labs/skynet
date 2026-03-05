@@ -1,32 +1,32 @@
 # Agent Adapter
 
-`packages/agent-adapter` 负责将 Skynet 网络消息转换为各 CLI agent 的调用，并将结果返回网络。本质上是一个 **CLI 进程管理层**。
+`packages/agent-adapter` translates Skynet network messages into CLI agent calls and returns the results back to the network. It is essentially a **CLI process management layer**.
 
-## 架构
+## Architecture
 
 ```
-AgentAdapter (抽象基类)
+AgentAdapter (abstract base class)
 ├── ClaudeCodeAdapter   — claude CLI
 ├── GeminiCliAdapter    — gemini CLI
 ├── CodexCliAdapter     — codex CLI
-└── GenericAdapter      — 可配置的通用适配器
+└── GenericAdapter      — configurable generic adapter
         ↓
-   AgentRunner — 将适配器接入 Skynet 网络（WebSocket）
+   AgentRunner — connects adapters to the Skynet network (WebSocket)
 ```
 
-## 抽象基类 `AgentAdapter`
+## Abstract Base Class `AgentAdapter`
 
-定义于 `src/base-adapter.ts`，所有适配器必须实现以下方法：
+Defined in `src/base-adapter.ts`. All adapters must implement the following methods:
 
-| 方法 | 说明 |
-|------|------|
-| `isAvailable()` | 检测本地是否安装对应 CLI 工具 |
-| `handleMessage(msg)` | 将 `SkynetMessage` 转为 prompt，调用 CLI，返回文本响应 |
-| `executeTask(task)` | 执行独立任务，返回 `TaskResult` |
-| `setRoomId(roomId)` | 关联 room（用于 session 持久化），默认空实现 |
-| `dispose()` | 清理资源（杀子进程等） |
+| Method | Description |
+|--------|-------------|
+| `isAvailable()` | Check if the corresponding CLI tool is installed locally |
+| `handleMessage(msg)` | Convert a `SkynetMessage` to a prompt, call the CLI, return the text response |
+| `executeTask(task)` | Execute a standalone task, return a `TaskResult` |
+| `setRoomId(roomId)` | Associate with a room (used for session persistence). No-op by default |
+| `dispose()` | Clean up resources (kill child processes, etc.) |
 
-`TaskResult` 结构：
+`TaskResult` structure:
 
 ```ts
 interface TaskResult {
@@ -37,22 +37,22 @@ interface TaskResult {
 }
 ```
 
-## 具体适配器
+## Concrete Adapters
 
 ### ClaudeCodeAdapter
 
-调用 `claude -p <prompt> --output-format text`。
+Invokes `claude -p <prompt> --output-format text`.
 
-**选项（`ClaudeCodeOptions`）：**
+**Options (`ClaudeCodeOptions`):**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `projectRoot` | `string` | 工作目录（必填） |
-| `allowedTools` | `string[]` | 传递 `--allowedTools` 参数 |
-| `model` | `string` | 指定模型 `--model` |
-| `sessionStorePath` | `string` | session 存储路径，默认 `<projectRoot>/.skynet/sessions.json` |
+| Field | Type | Description |
+|-------|------|-------------|
+| `projectRoot` | `string` | Working directory (required) |
+| `allowedTools` | `string[]` | Passed as `--allowedTools` argument |
+| `model` | `string` | Specify model via `--model` |
+| `sessionStorePath` | `string` | Session storage path, defaults to `<projectRoot>/.skynet/sessions.json` |
 
-**Session 持久化**：按 roomId 将 session ID 存储到本地 JSON 文件，同一个 room 的后续调用自动带 `--resume <sessionId>`，实现跨进程重启的上下文连续。存储格式：
+**Session Persistence**: Stores session IDs in a local JSON file keyed by roomId. Subsequent calls for the same room automatically include `--resume <sessionId>`, enabling context continuity across process restarts. Storage format:
 
 ```json
 {
@@ -61,55 +61,55 @@ interface TaskResult {
 }
 ```
 
-Session ID 从 Claude CLI 的 stderr 中通过正则提取（`/session[:\s]+([a-f0-9-]+)/i`）。
+The session ID is extracted from Claude CLI's stderr via regex (`/session[:\s]+([a-f0-9-]+)/i`).
 
 ### GeminiCliAdapter
 
-通过管道调用 `echo <prompt> | gemini`。
+Invokes via pipe: `echo <prompt> | gemini`.
 
-**选项**：仅 `projectRoot`。无 session 复用。
+**Options**: `projectRoot` only. No session reuse.
 
 ### CodexCliAdapter
 
-调用 `codex -q <prompt>`。
+Invokes `codex -q <prompt>`.
 
-**选项**：`projectRoot` + 可选的 `fullAuto`（传 `--full-auto`）。无 session 复用。
+**Options**: `projectRoot` + optional `fullAuto` (passes `--full-auto`). No session reuse.
 
 ### GenericAdapter
 
-可配置的通用适配器，支持任意 CLI 工具。
+A configurable generic adapter that supports any CLI tool.
 
-**配置（`GenericAdapterConfig`）：**
+**Configuration (`GenericAdapterConfig`):**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `name` | `string` | 适配器名称 |
-| `command` | `string` | CLI 命令 |
-| `args` | `string[]` | 额外参数 |
-| `promptFlag` | `string` | prompt 参数标志（如 `-p`），不设则使用管道输入 |
-| `versionCommand` | `string` | 可用性检测命令 |
-| `projectRoot` | `string` | 工作目录 |
-| `shell` | `boolean` | 是否 shell 模式（默认 `true`） |
-| `timeout` | `number` | 超时毫秒数（默认 300000） |
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Adapter name |
+| `command` | `string` | CLI command |
+| `args` | `string[]` | Additional arguments |
+| `promptFlag` | `string` | Prompt argument flag (e.g., `-p`). If unset, uses pipe input |
+| `versionCommand` | `string` | Command for availability detection |
+| `projectRoot` | `string` | Working directory |
+| `shell` | `boolean` | Whether to use shell mode (default `true`) |
+| `timeout` | `number` | Timeout in milliseconds (default 300000) |
 
-## 共同特性
+## Common Characteristics
 
-- 使用 `execa` 启动子进程，`cwd` 设为 `projectRoot`
-- 统一 5 分钟超时
-- `messageToPrompt()` 按消息类型（`chat` / `task-assign`）将 `SkynetMessage` 转为纯文本 prompt
-- 每次调用都是独立子进程（无持久进程）
+- Uses `execa` to spawn child processes with `cwd` set to `projectRoot`
+- Uniform 5-minute timeout
+- `messageToPrompt()` converts `SkynetMessage` to plain text prompt based on message type (`chat` / `task-assign`)
+- Each invocation is an independent child process (no persistent process)
 
 ## AgentRunner
 
-定义于 `src/agent-runner.ts`，将适配器接入 Skynet 网络的胶水层。
+Defined in `src/agent-runner.ts`. The glue layer that connects adapters to the Skynet network.
 
-**职责：**
-1. 创建 `SkynetClient` 并注册 `AgentCard`（包含 agentId、名称、能力列表等）
-2. 调用 `adapter.setRoomId(roomId)` 关联 room
-3. 监听 `chat` 和 `task-assign` 事件，放入消息队列
-4. **串行处理队列**（`processing` 锁避免并发）
-5. 处理时状态设为 `busy`，空闲时设为 `idle`
-6. 对 task 类型消息，先发 `in-progress` 状态更新，执行完后上报 `TaskResult`
+**Responsibilities:**
+1. Creates a `SkynetClient` and registers an `AgentCard` (containing agentId, name, capabilities, etc.)
+2. Calls `adapter.setRoomId(roomId)` to associate the room
+3. Listens for `chat` and `task-assign` events, queuing them for processing
+4. **Processes the queue serially** (`processing` lock prevents concurrency)
+5. Sets status to `busy` during processing, `idle` when done
+6. For task-type messages, sends an `in-progress` status update first, then reports `TaskResult` on completion
 
 ```ts
 const runner = new AgentRunner({
@@ -125,9 +125,9 @@ const state = await runner.start();
 await runner.stop();
 ```
 
-## 自动发现
+## Auto-Discovery
 
-`detect.ts` 提供两个工具函数：
+`detect.ts` provides two utility functions:
 
-- **`detectAvailableAgents(projectRoot)`** — 并发检测所有已知 CLI agent（Claude Code、Gemini CLI、Codex CLI）是否可用，返回按可用性排序的列表
-- **`createAdapter(type, projectRoot)`** — 工厂方法，按 `AgentType` 枚举创建对应适配器实例
+- **`detectAvailableAgents(projectRoot)`** — Concurrently checks all known CLI agents (Claude Code, Gemini CLI, Codex CLI) for availability, returns a list sorted by availability
+- **`createAdapter(type, projectRoot)`** — Factory method that creates the corresponding adapter instance based on the `AgentType` enum
