@@ -1,0 +1,146 @@
+# Skynet — Agent Instructions
+
+This file defines the **operational workflow** for making changes in this repo (how to set up, run, test, build). Keep it short, specific, and executable; link to `docs/` for long explanations.
+
+Note: `AGENTS.md` is a symlink to this file (`CLAUDE.md`) for compatibility with multiple agent/rules systems.
+
+Prerequisites: Node.js 20+ and `pnpm` (https://pnpm.io/).
+
+## Project Overview
+
+Skynet is a multi-agent collaboration network where heterogeneous coding agents (Claude Code, Gemini CLI, Codex CLI, etc.) and humans communicate freely via an IM-style architecture. See `docs/architecture.md` for full design.
+
+## Command Discovery (No Guessing)
+
+**IMPORTANT**: Never assume a CLI flag or dev command exists.
+
+- For skynet CLI flags: run `pnpm skynet --help`.
+- For workspace commands: run `pnpm turbo --help` or check `turbo.json`.
+
+## Core Workflow (Verify -> Explore -> Plan -> Implement -> Ship)
+
+- **Verify**: always define how correctness will be checked (tests, expected output, smoke command).
+- **Explore**: read/grep before editing; confirm where the behavior lives.
+- **Plan**: for multi-file or unfamiliar areas, write a short step plan + test plan before changing code.
+- **Implement**: make the smallest change that satisfies acceptance criteria; keep diffs reviewable.
+- **Ship**: run checks + update PR summary/checklist.
+
+Skip the explicit plan only when the change is truly tiny and local (e.g., typo, small refactor in one file).
+
+## Quickstart (Local Dev)
+
+```bash
+pnpm install
+pnpm build
+pnpm test
+```
+
+## Monorepo Structure
+
+This is a pnpm workspaces + turborepo monorepo. Packages live under `packages/`:
+
+- `packages/protocol` — Message type definitions and serialization
+- `packages/server` — WebSocket server, room management, message routing
+- `packages/sdk` — Client SDK for connecting to the server
+- `packages/agent-adapter` — Agent adapters (Claude Code, Gemini CLI, Codex CLI, generic)
+- `packages/coordinator` — Task assignment, file locks, git worktree management
+- `packages/monitor` — Web monitoring dashboard (React + Vite)
+- `packages/human-agent` — Human participation TUI
+- `packages/cli` — `skynet` CLI entry point
+
+See `docs/architecture.md` for the full architecture and `docs/phases.md` for the implementation roadmap.
+
+## Scoped Instructions (Read When Touching These Areas)
+
+If you modify code under these paths, also read the matching `CLAUDE.md` first:
+
+- `packages/protocol/CLAUDE.md` (message types + backward compatibility)
+- `packages/server/CLAUDE.md` (WebSocket safety + room invariants)
+- `packages/sdk/CLAUDE.md` (client reconnection + error handling)
+- `packages/agent-adapter/CLAUDE.md` (adapter contracts + CLI process management)
+
+## TypeScript Conventions
+
+- Strict mode enabled (`"strict": true` in tsconfig).
+- Prefer `interface` over `type` for object shapes.
+- No `any` — use `unknown` and narrow, or define proper types in `packages/protocol`.
+- All cross-package types live in `packages/protocol`; other packages import from there.
+- Use named exports; avoid default exports.
+
+## Branching Workflow
+
+**IMPORTANT**: Every change must be developed on a new branch using a git worktree, then merged into `main` via pull request.
+
+1. Create a worktree with a new branch: `git worktree add ../skynet-<branch-name> -b <branch-name>`
+2. Work in the worktree directory, commit changes there.
+3. Push the branch and open a PR to merge into `main`.
+4. After the PR is merged, clean up: `git worktree remove ../skynet-<branch-name>`
+
+Never commit directly to `main`. All changes go through PR review.
+
+## Checkpoint Commits
+
+Prefer small, reviewable commits:
+- Before committing, run `pnpm build && pnpm test`.
+- Keep mechanical changes (formatting, renames) in their own commit when possible.
+- **Human-in-the-loop**: at key checkpoints, the agent should *ask* whether to `git commit` and/or `git push` (do not do it automatically).
+- Before asking to commit, show a short change summary (e.g. `git diff --stat`) and test results.
+
+## Permissions / Approval Boundaries
+
+Allowed without prompting:
+- Read files, list directories, search.
+- Run targeted unit tests or lint.
+
+Require explicit confirmation first:
+- Publishing or release actions.
+- Git operations that change remote history (`git push`, opening PRs).
+- Deleting large amounts of files or doing broad refactors/renames.
+- Running commands that spawn external CLI agents (cost implications).
+
+## Ship Checklist
+
+- [ ] `pnpm build` passes
+- [ ] `pnpm test` passes
+- [ ] `pnpm lint` passes (when configured)
+- [ ] PR description follows template
+
+## PR Description Template (Required)
+
+## Summary
+
+What changed and why (user-facing when applicable).
+
+## Scope
+
+- Goals:
+- Non-goals:
+
+## Acceptance Criteria
+
+- [ ] Concrete, testable outcomes
+
+## Test Plan
+
+- [ ] Targeted tests:
+- [ ] `pnpm test`
+- [ ] `pnpm build`
+
+## Docs Pointers
+
+- Architecture: `docs/architecture.md`
+- Protocol design: `docs/protocol.md`
+- Implementation phases: `docs/phases.md`
+
+## Safety & Secrets
+
+- Never commit API keys or tokens.
+- Never commit `node_modules/`, `dist/`, or `.env` files.
+- Avoid running destructive shell commands; keep file edits scoped and reversible.
+
+## Gotchas (Common Rework Sources)
+
+- **Cross-package imports**: always import types from `@skynet/protocol`, not from another package's internal files.
+- **WebSocket state**: handle reconnection and message ordering carefully; never assume the connection is stable.
+- **Process management**: agent adapters spawn child processes; always handle cleanup on exit/crash (SIGINT, SIGTERM).
+- **SQLite concurrency**: better-sqlite3 is synchronous; keep DB operations off the hot path or use worker threads.
