@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import { SkynetServer } from '@skynet/server';
+import { SkynetServer, SqliteStore } from '@skynet/server';
+import { loadConfig, ensureSkynetDir } from '../config.js';
 
 export function registerServerCommand(program: Command): void {
   const server = program.command('server').description('Manage the Skynet server');
@@ -7,15 +8,19 @@ export function registerServerCommand(program: Command): void {
   server
     .command('start')
     .description('Start the Skynet server')
-    .option('-p, --port <port>', 'Port to listen on', '4117')
-    .option('-h, --host <host>', 'Host to bind to', '0.0.0.0')
-    .option('--db <path>', 'SQLite database path (default: in-memory)')
+    .option('-p, --port <port>', 'Port to listen on')
+    .option('-h, --host <host>', 'Host to bind to')
+    .option('--db <path>', 'SQLite database path')
     .action(async (opts) => {
-      const srv = new SkynetServer({
-        port: parseInt(opts.port, 10),
-        host: opts.host,
-        dbPath: opts.db,
-      });
+      const config = loadConfig();
+      ensureSkynetDir();
+
+      const port = opts.port ? parseInt(opts.port, 10) : config.server.port;
+      const host = opts.host ?? config.server.host;
+      const dbPath = opts.db ?? config.server.dbPath;
+
+      const store = new SqliteStore(dbPath);
+      const srv = new SkynetServer({ port, host, store });
 
       process.on('SIGINT', async () => {
         console.log('\nShutting down...');
@@ -24,6 +29,7 @@ export function registerServerCommand(program: Command): void {
       });
 
       await srv.start();
-      console.log(`Skynet server running on ${opts.host}:${opts.port}`);
+      console.log(`Skynet server running on ${host}:${port}`);
+      console.log(`Database: ${dbPath}`);
     });
 }

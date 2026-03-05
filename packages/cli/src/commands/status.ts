@@ -1,11 +1,14 @@
 import { Command } from 'commander';
+import { loadConfig } from '../config.js';
 
 export function registerStatusCommand(program: Command): void {
+  const config = loadConfig();
+
   program
     .command('status')
     .description('Show Skynet server and room status')
     .argument('[room-id]', 'Optional room ID for details')
-    .option('-s, --server <url>', 'Server URL', 'http://localhost:4117')
+    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
     .action(async (roomId, opts) => {
       try {
         if (roomId) {

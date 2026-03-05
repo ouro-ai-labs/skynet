@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MessageStore } from '../store.js';
+import { SqliteStore } from '../sqlite-store.js';
 import { createChatMessage, createMessage, MessageType } from '@skynet/protocol';
+import type { Store } from '../store.js';
 
-describe('MessageStore', () => {
-  let store: MessageStore;
+describe('SqliteStore', () => {
+  let store: Store;
 
   beforeEach(() => {
-    store = new MessageStore(':memory:');
+    store = new SqliteStore(':memory:');
   });
 
   afterEach(() => {
@@ -92,5 +93,54 @@ describe('MessageStore', () => {
 
     const retrieved = store.getById(dm.id);
     expect(retrieved!.to).toBe('bob');
+  });
+});
+
+describe('SqliteStore room persistence', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    store = new SqliteStore(':memory:');
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it('saves and lists rooms', () => {
+    store.saveRoom('room-a');
+    store.saveRoom('room-b');
+
+    const rooms = store.listRooms();
+    expect(rooms).toHaveLength(2);
+    expect(rooms.map((r) => r.id)).toEqual(['room-a', 'room-b']);
+    expect(rooms[0].createdAt).toBeGreaterThan(0);
+  });
+
+  it('ignores duplicate room saves', () => {
+    store.saveRoom('room-a');
+    store.saveRoom('room-a');
+
+    const rooms = store.listRooms();
+    expect(rooms).toHaveLength(1);
+  });
+
+  it('deletes a room', () => {
+    store.saveRoom('room-a');
+    store.saveRoom('room-b');
+    store.deleteRoom('room-a');
+
+    const rooms = store.listRooms();
+    expect(rooms).toHaveLength(1);
+    expect(rooms[0].id).toBe('room-b');
+  });
+
+  it('returns empty list when no rooms', () => {
+    expect(store.listRooms()).toEqual([]);
+  });
+
+  it('delete non-existent room is a no-op', () => {
+    store.deleteRoom('ghost');
+    expect(store.listRooms()).toEqual([]);
   });
 });

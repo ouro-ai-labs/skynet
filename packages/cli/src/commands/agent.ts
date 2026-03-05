@@ -2,15 +2,18 @@ import { Command } from 'commander';
 import { randomUUID } from 'node:crypto';
 import { AgentType } from '@skynet/protocol';
 import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet/agent-adapter';
+import { loadConfig } from '../config.js';
 
 export function registerAgentCommand(program: Command): void {
   const agent = program.command('agent').description('Manage agents');
+
+  const config = loadConfig();
 
   agent
     .command('start')
     .description('Connect an agent to a Skynet room')
     .argument('<room-id>', 'Room ID to join')
-    .option('-s, --server <url>', 'Server URL', 'http://localhost:4117')
+    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
     .option('-t, --type <type>', 'Agent type (claude-code, gemini-cli, codex-cli)')
     .option('-n, --name <name>', 'Agent display name')
     .option('--persona <file>', 'Path to persona markdown file')

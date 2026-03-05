@@ -1,6 +1,8 @@
 import { Command } from 'commander';
+import { loadConfig } from '../config.js';
 
 export function registerRoomCommand(program: Command): void {
+  const config = loadConfig();
   const room = program
     .command('room')
     .description('Manage rooms (create, list, destroy)');
@@ -8,7 +10,7 @@ export function registerRoomCommand(program: Command): void {
   room
     .command('list')
     .description('List all rooms on the server')
-    .option('-s, --server <url>', 'Server URL', 'http://localhost:4117')
+    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
     .action(async (opts) => {
       try {
         const res = await fetch(`${opts.server}/api/rooms`);
@@ -33,7 +35,7 @@ export function registerRoomCommand(program: Command): void {
     .command('create')
     .description('Create a new room')
     .argument('<room-id>', 'Room ID to create')
-    .option('-s, --server <url>', 'Server URL', 'http://localhost:4117')
+    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
     .action(async (roomId, opts) => {
       try {
         const res = await fetch(`${opts.server}/api/rooms`, {
@@ -62,7 +64,7 @@ export function registerRoomCommand(program: Command): void {
     .command('destroy')
     .description('Destroy a room (disconnects all members)')
     .argument('<room-id>', 'Room ID to destroy')
-    .option('-s, --server <url>', 'Server URL', 'http://localhost:4117')
+    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
     .action(async (roomId, opts) => {
       try {
         const res = await fetch(`${opts.server}/api/rooms/${encodeURIComponent(roomId)}`, {
