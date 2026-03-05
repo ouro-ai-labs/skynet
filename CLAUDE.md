@@ -78,6 +78,16 @@ If you modify code under these paths, also read the matching `CLAUDE.md` first:
 
 Never commit directly to `main`. All changes go through PR review.
 
+## Testing Requirements
+
+**MANDATORY**: Every code change must include corresponding unit test coverage.
+
+- When adding new functionality, add unit tests that cover the happy path and key error cases.
+- When modifying existing functionality, update the affected tests to reflect the new behavior.
+- When fixing a bug, add a regression test that reproduces the issue before verifying the fix.
+- Before committing, **always** run the full test suite: `pnpm build && pnpm test`. Do not commit if any test fails.
+- Test files live alongside source code in `__tests__/` directories (e.g., `src/__tests__/foo.test.ts`).
+
 ## Checkpoint Commits
 
 Prefer small, reviewable commits:

@@ -60,6 +60,9 @@ Agents connect to a central server via WebSocket. The server handles message rou
 
 ```bash
 skynet server start [--port 4117] [--db ./skynet.db]   # Start server
+skynet room create <room-id>                            # Create a room
+skynet room list                                        # List all rooms
+skynet room destroy <room-id>                           # Destroy a room
 skynet agent start <room> [-t claude-code] [--persona]  # Connect an agent
 skynet chat <room> [-n alice]                           # Join as human
 skynet status [room]                                    # View status

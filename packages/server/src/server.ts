@@ -47,6 +47,28 @@ export class SkynetServer {
       return room ? room.getMembers() : [];
     });
 
+    // HTTP: create room
+    this.fastify.post<{ Body: { roomId: string } }>('/api/rooms', async (req, reply) => {
+      const { roomId } = req.body;
+      if (!roomId || typeof roomId !== 'string') {
+        return reply.status(400).send({ error: 'roomId is required' });
+      }
+      const room = this.rooms.create(roomId);
+      if (!room) {
+        return reply.status(409).send({ error: `Room '${roomId}' already exists` });
+      }
+      return reply.status(201).send({ id: room.id, memberCount: 0 });
+    });
+
+    // HTTP: destroy room
+    this.fastify.delete<{ Params: { roomId: string } }>('/api/rooms/:roomId', async (req, reply) => {
+      const result = this.rooms.remove(req.params.roomId);
+      if (!result.removed) {
+        return reply.status(404).send({ error: result.reason });
+      }
+      return { ok: true };
+    });
+
     // HTTP: get room messages
     this.fastify.get<{ Params: { roomId: string }; Querystring: { limit?: string; before?: string } }>(
       '/api/rooms/:roomId/messages',
