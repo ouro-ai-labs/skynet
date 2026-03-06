@@ -103,7 +103,7 @@ export function MessageList({
       overflow="hidden"
     >
       {visible.map((line) => (
-        <Text key={line.key} wrap="truncate">{line.text}</Text>
+        <Text key={line.key} wrap="wrap">{line.text}</Text>
       ))}
       {/* Fill remaining space */}
       {visible.length < viewportHeight && (
