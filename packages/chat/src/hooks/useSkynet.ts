@@ -101,16 +101,19 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
 
     client.on('disconnected', () => {
       setConnected(false);
-      addSystemMessage('Disconnected from server');
+      addSystemMessage('Disconnected from server. Will attempt to reconnect...');
     });
 
-    client.on('reconnecting', () => {
-      addSystemMessage('Reconnecting...');
+    client.on('reconnecting', (info: { attempt: number; delay: number }) => {
+      const delaySec = Math.round(info.delay / 1000);
+      addSystemMessage(`Reconnecting (attempt ${info.attempt}, next retry in ${delaySec}s)...`);
     });
 
     client.on('error', (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      addSystemMessage(`Error: ${msg}`);
+      if (msg) {
+        addSystemMessage(`Error: ${msg}`);
+      }
     });
 
     return () => {
