@@ -7,7 +7,6 @@ import { Header } from './Header.js';
 import { Sidebar } from './Sidebar.js';
 import { MessageList } from './MessageList.js';
 import { InputBar } from './InputBar.js';
-import { agentNameColored, agentTag } from '../format.js';
 
 interface AppProps {
   options: UseSkynetOptions;
@@ -123,6 +122,7 @@ export function App({ options }: AppProps): React.ReactElement {
         onSubmit={handleSubmit}
         isFocused={inputFocused}
         onFocusChange={setInputFocused}
+        members={state.members}
       />
 
       {/* Help overlay */}
@@ -145,6 +145,8 @@ export function App({ options }: AppProps): React.ReactElement {
           <Text>  @name message   Direct message</Text>
           <Text />
           <Text bold> Navigation</Text>
+          <Text>  Up/Down         Input history</Text>
+          <Text>  @name           Autocomplete member</Text>
           <Text>  PageUp/Down     Scroll messages</Text>
           <Text>  Shift+G         Jump to bottom</Text>
           <Text>  Escape          Toggle input focus</Text>

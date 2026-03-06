@@ -57,20 +57,33 @@ export function MessageList({
 
   // Keyboard scrolling (only when input is not focused)
   useInput((input, key) => {
-    if (key.pageUp || (key.upArrow && key.shift)) {
+    if (key.upArrow) {
+      setScrollOffset((prev) => {
+        const step = key.shift ? viewportHeight : 1;
+        const next = Math.max(0, prev - step);
+        setUserScrolled(true);
+        return next;
+      });
+    } else if (key.downArrow) {
+      setScrollOffset((prev) => {
+        const step = key.shift ? viewportHeight : 1;
+        const next = Math.min(maxOffset, prev + step);
+        if (next >= maxOffset) setUserScrolled(false);
+        return next;
+      });
+    } else if (key.pageUp) {
       setScrollOffset((prev) => {
         const next = Math.max(0, prev - viewportHeight);
         setUserScrolled(true);
         return next;
       });
-    } else if (key.pageDown || (key.downArrow && key.shift)) {
+    } else if (key.pageDown) {
       setScrollOffset((prev) => {
         const next = Math.min(maxOffset, prev + viewportHeight);
         if (next >= maxOffset) setUserScrolled(false);
         return next;
       });
     } else if (input === 'g' && key.shift) {
-      // Shift+G: go to bottom
       setScrollOffset(maxOffset);
       setUserScrolled(false);
     }
