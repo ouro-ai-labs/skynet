@@ -12,25 +12,20 @@ export enum AgentType {
 export type AgentStatus = 'idle' | 'busy' | 'offline';
 
 export interface AgentCard {
-  agentId: string;
-  name: string;
-  type: AgentType;
-  capabilities: string[];
-  projectRoot?: string;
-  status: AgentStatus;
-  /** Free-form markdown profile: personality, strengths, work style, etc. */
-  persona?: string;
-}
-
-// ── Entity Profiles ──
-
-export interface AgentProfile {
   id: string;
   name: string;
   type: AgentType;
+
+  // Persistent profile fields (stored in DB)
   role?: string;
+  /** Free-form markdown profile: personality, strengths, work style, etc. */
   persona?: string;
-  createdAt: number;
+  createdAt?: number;
+
+  // Runtime fields (set when connected)
+  capabilities?: string[];
+  projectRoot?: string;
+  status?: AgentStatus;
 }
 
 export interface HumanProfile {

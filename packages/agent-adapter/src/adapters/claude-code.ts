@@ -121,6 +121,10 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       args.push('--model', this.model);
     }
 
+    if (this.persona) {
+      args.push('--append-system-prompt', this.persona);
+    }
+
     if (this.sessionStarted) {
       // Continue existing session
       args.push('--resume', this.sessionId);

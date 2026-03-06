@@ -26,7 +26,7 @@ function createTestClient(p: number, overrides: Record<string, unknown> = {}): S
   return new SkynetClient({
     serverUrl: `http://localhost:${p}`,
     agent: {
-      agentId: 'test-agent',
+      id: 'test-agent',
       name: 'Test',
       type: AgentType.HUMAN,
       capabilities: ['chat'],

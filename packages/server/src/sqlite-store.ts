@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import type { SkynetMessage, AgentProfile, HumanProfile, RoomMembership, MemberType } from '@skynet/protocol';
+import type { SkynetMessage, AgentCard, HumanProfile, RoomMembership, MemberType } from '@skynet/protocol';
 import type { Store, PersistedRoom } from './store.js';
 
 export class SqliteStore implements Store {
@@ -122,18 +122,18 @@ export class SqliteStore implements Store {
 
   // ── Agents ──
 
-  saveAgent(agent: AgentProfile): void {
+  saveAgent(agent: AgentCard): void {
     this.db.prepare(
       'INSERT INTO agents (id, name, type, role, persona, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     ).run(agent.id, agent.name, agent.type, agent.role ?? null, agent.persona ?? null, agent.createdAt);
   }
 
-  listAgents(): AgentProfile[] {
+  listAgents(): AgentCard[] {
     const rows = this.db.prepare('SELECT * FROM agents ORDER BY created_at').all();
     return (rows as Array<Record<string, unknown>>).map(this.rowToAgent);
   }
 
-  getAgent(idOrName: string): AgentProfile | undefined {
+  getAgent(idOrName: string): AgentCard | undefined {
     const row = this.db.prepare('SELECT * FROM agents WHERE id = ? OR name = ?').get(idOrName, idOrName) as
       | Record<string, unknown>
       | undefined;
@@ -211,11 +211,11 @@ export class SqliteStore implements Store {
     };
   }
 
-  private rowToAgent(row: Record<string, unknown>): AgentProfile {
+  private rowToAgent(row: Record<string, unknown>): AgentCard {
     return {
       id: row.id as string,
       name: row.name as string,
-      type: row.type as AgentProfile['type'],
+      type: row.type as AgentCard['type'],
       role: (row.role as string) || undefined,
       persona: (row.persona as string) || undefined,
       createdAt: row.created_at as number,

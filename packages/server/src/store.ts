@@ -1,4 +1,4 @@
-import type { SkynetMessage, AgentProfile, HumanProfile, RoomMembership, MemberType } from '@skynet/protocol';
+import type { SkynetMessage, AgentCard, HumanProfile, RoomMembership, MemberType } from '@skynet/protocol';
 
 export interface PersistedRoom {
   id: string;
@@ -19,9 +19,9 @@ export interface Store {
   getRoomByName(name: string): PersistedRoom | undefined;
 
   // Agents
-  saveAgent(agent: AgentProfile): void;
-  listAgents(): AgentProfile[];
-  getAgent(idOrName: string): AgentProfile | undefined;
+  saveAgent(agent: AgentCard): void;
+  listAgents(): AgentCard[];
+  getAgent(idOrName: string): AgentCard | undefined;
 
   // Humans
   saveHuman(human: HumanProfile): void;

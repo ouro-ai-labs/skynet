@@ -4,7 +4,7 @@ import { AgentType, type AgentCard } from '@skynet/protocol';
 
 function makeAgent(id: string, status: 'idle' | 'busy' = 'idle'): AgentCard {
   return {
-    agentId: id,
+    id,
     name: id,
     type: AgentType.CLAUDE_CODE,
     capabilities: ['code-edit'],
@@ -84,7 +84,7 @@ describe('TaskQueue', () => {
 
     const picked = queue.pickAgent(task, agents);
     expect(picked).toBeDefined();
-    expect(picked!.agentId).toBe('idle-1');
+    expect(picked!.id).toBe('idle-1');
   });
 
   it('returns undefined when no idle agents', () => {

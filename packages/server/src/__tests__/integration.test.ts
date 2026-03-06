@@ -11,11 +11,9 @@ function makeClient(name: string, roomId: string, type = AgentType.HUMAN) {
   return new SkynetClient({
     serverUrl: `http://localhost:${PORT}`,
     agent: {
-      agentId: randomUUID(),
+      id: randomUUID(),
       name,
       type,
-      capabilities: ['chat'],
-      status: 'idle',
     },
     roomId,
     reconnect: false,
@@ -88,7 +86,7 @@ describe('Server integration', () => {
     });
 
     await sleep(50);
-    alice.chat('Secret for Bob', bob.agent.agentId);
+    alice.chat('Secret for Bob', bob.agent.id);
     await sleep(200);
 
     // Bob should NOT receive DMs through broadcast since sendTo sends only to target
@@ -287,7 +285,7 @@ describe('Server integration', () => {
 
     await sleep(50);
     // Alice sends a DM to Bob, with Charlie mentioned
-    alice.chat('Hey discuss this', bob.agent.agentId, [charlie.agent.agentId]);
+    alice.chat('Hey discuss this', bob.agent.id, [charlie.agent.id]);
     await sleep(200);
 
     expect(bobReceived).toContain('Hey discuss this');

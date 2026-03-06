@@ -247,7 +247,7 @@ export function formatMemberList(members: Map<string, AgentCard>, selfId?: strin
   for (const m of sorted) {
     const isBusy = m.status === 'busy';
     const statusIcon = isBusy ? chalk.yellow('\u25D0') : chalk.green('\u25CF');
-    const self = selfId === m.agentId ? dimText(' (you)') : '';
+    const self = selfId === m.id ? dimText(' (you)') : '';
     lines.push(`${BODY_PREFIX}${contColored(m.type)}  ${statusIcon} ${agentNameColored(m.name, m.type)} ${agentTag(m.type)}${self}`);
   }
 

@@ -182,7 +182,7 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
           marginLeft={2}
         >
           {mentionCandidates.map((m, i) => (
-            <Text key={m.agentId}>
+            <Text key={m.id}>
               {i === mentionSelectedIndex ? (
                 <Text color="cyan" bold>{`> ${m.name}`}</Text>
               ) : (

@@ -14,11 +14,9 @@ function mockSocket(open = true): WebSocket {
 
 function mockAgent(id: string, name: string): AgentCard {
   return {
-    agentId: id,
+    id,
     name,
     type: AgentType.HUMAN,
-    capabilities: ['chat'],
-    status: 'idle',
   };
 }
 
@@ -115,7 +113,7 @@ describe('Room', () => {
 
   it('updates agent status', () => {
     room.join(mockAgent('a1', 'alice'), mockSocket());
-    expect(room.getMember('a1')!.agent.status).toBe('idle');
+    expect(room.getMember('a1')!.agent.status).toBeUndefined();
 
     room.updateStatus('a1', 'busy');
     expect(room.getMember('a1')!.agent.status).toBe('busy');

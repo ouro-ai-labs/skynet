@@ -66,7 +66,8 @@ export class GeminiCliAdapter extends AgentAdapter {
   }
 
   private async runGemini(prompt: string): Promise<string> {
-    const result = await execaCommand(`echo ${JSON.stringify(prompt)} | gemini`, {
+    const fullPrompt = this.persona ? `${this.persona}\n\n${prompt}` : prompt;
+    const result = await execaCommand(`echo ${JSON.stringify(fullPrompt)} | gemini`, {
       cwd: this.projectRoot,
       shell: true,
       timeout: 300_000,

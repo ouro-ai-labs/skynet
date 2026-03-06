@@ -71,6 +71,7 @@ export class GenericAdapter extends AgentAdapter {
   }
 
   private async run(prompt: string): Promise<string> {
+    if (this.persona) prompt = `${this.persona}\n\n${prompt}`;
     const { command, args = [], promptFlag, shell } = this.config;
 
     let cmd: string;
