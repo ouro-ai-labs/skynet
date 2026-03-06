@@ -23,6 +23,16 @@ export abstract class AgentAdapter {
   /** Associate adapter with a room for session persistence. No-op by default. */
   setRoomId(_roomId: string): void {}
 
+  /** Whether this adapter supports forked quick replies while busy. */
+  supportsQuickReply(): boolean {
+    return false;
+  }
+
+  /** Quick reply using a forked context. Only called when supportsQuickReply() is true. */
+  async quickReply(_prompt: string): Promise<string> {
+    throw new Error('quickReply not implemented');
+  }
+
   /** Clean up resources (kill child processes, etc.) */
   abstract dispose(): Promise<void>;
 }

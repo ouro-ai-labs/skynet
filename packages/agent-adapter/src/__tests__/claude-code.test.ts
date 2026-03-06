@@ -155,3 +155,83 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     );
   });
 });
+
+describe('ClaudeCodeAdapter quickReply (session fork)', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('supportsQuickReply returns false before session is started', () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    expect(adapter.supportsQuickReply()).toBe(false);
+  });
+
+  it('supportsQuickReply returns true after session is started', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    await adapter.handleMessage(makeMsg());
+    expect(adapter.supportsQuickReply()).toBe(true);
+  });
+
+  it('supportsQuickReply resets to false after setRoomId', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    await adapter.handleMessage(makeMsg());
+    expect(adapter.supportsQuickReply()).toBe(true);
+
+    adapter.setRoomId('new-room');
+    expect(adapter.supportsQuickReply()).toBe(false);
+  });
+
+  it('quickReply uses --resume and --fork-session with correct session ID', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Start session first
+    await adapter.handleMessage(makeMsg());
+    const firstArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    const sessionId = firstArgs[firstArgs.indexOf('--session-id') + 1];
+
+    vi.clearAllMocks();
+
+    await adapter.quickReply('How is progress?');
+
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      expect.arrayContaining([
+        '-p', 'How is progress?',
+        '--output-format', 'text',
+        '--resume', sessionId,
+        '--fork-session',
+      ]),
+      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 60_000 }),
+    );
+  });
+
+  it('quickReply includes --model when configured', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, model: 'haiku' });
+
+    await adapter.handleMessage(makeMsg());
+    vi.clearAllMocks();
+
+    await adapter.quickReply('status?');
+
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    expect(args).toContain('--model');
+    expect(args).toContain('haiku');
+  });
+
+  it('quickReply returns stdout from forked session', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    await adapter.handleMessage(makeMsg());
+
+    const result = await adapter.quickReply('what are you doing?');
+    expect(result).toBe('mock response');
+  });
+});

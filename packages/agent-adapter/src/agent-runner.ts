@@ -3,6 +3,7 @@ import {
   type AgentCard,
   type AgentJoinPayload,
   type AgentLeavePayload,
+  type ChatPayload,
   type SkynetMessage,
   type TaskPayload,
   AgentType,
@@ -90,8 +91,36 @@ export class AgentRunner {
     // Skip messages from self
     if (msg.from === this.client.agent.agentId) return;
 
+    // When busy and adapter supports fork: handle chat via forked session
+    if (
+      this.processing &&
+      msg.type === MessageType.CHAT &&
+      this.adapter.supportsQuickReply()
+    ) {
+      this.handleForkedReply(msg);
+      return;
+    }
+
     this.messageQueue.push(msg);
     this.processQueue();
+  }
+
+  private async handleForkedReply(msg: SkynetMessage): Promise<void> {
+    const senderName = this.memberNames.get(msg.from) ?? msg.from;
+    const text = (msg.payload as ChatPayload).text;
+    try {
+      const response = await this.adapter.quickReply(
+        `Message from ${senderName}: ${text}`,
+      );
+      if (response) {
+        const mentions = this.resolveMentions(response);
+        this.client.chat(response, msg.from, mentions.length > 0 ? mentions : undefined);
+      }
+    } catch (err) {
+      // Fork failed — fall back to normal queue so the message is not lost
+      console.error('[AgentRunner] Fork reply failed, queueing message:', err);
+      this.messageQueue.push(msg);
+    }
   }
 
   private async processQueue(): Promise<void> {
