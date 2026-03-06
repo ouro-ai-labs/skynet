@@ -179,14 +179,30 @@ export class SkynetServer {
     const room = this.rooms.get(info.roomId);
     if (!room) return;
 
+    const delivered = new Set<string>();
+
     if (fullMsg.to) {
       // Point-to-point
       room.sendTo(fullMsg.to, fullMsg);
+      delivered.add(fullMsg.to);
       // Also send back to sender as confirmation
       socket.send(serialize(fullMsg));
+      delivered.add(info.agentId);
     } else {
       // Broadcast (including back to sender)
       room.broadcast(fullMsg);
+      // Everyone already received it, no need to send to mentions individually
+      return;
+    }
+
+    // Deliver to additionally mentioned agents who haven't received the message yet
+    if (fullMsg.mentions && fullMsg.mentions.length > 0) {
+      for (const mentionedId of fullMsg.mentions) {
+        if (!delivered.has(mentionedId)) {
+          room.sendTo(mentionedId, fullMsg);
+          delivered.add(mentionedId);
+        }
+      }
     }
   }
 

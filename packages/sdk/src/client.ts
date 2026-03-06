@@ -160,11 +160,12 @@ export class SkynetClient extends EventEmitter {
     this.send({ action: ClientAction.SEND, data: fullMsg });
   }
 
-  chat(text: string, to: string | null = null): void {
+  chat(text: string, to: string | null = null, mentions?: string[]): void {
     this.sendMessage({
       type: MessageType.CHAT,
       to,
       payload: { text },
+      ...(mentions && mentions.length > 0 ? { mentions } : {}),
     });
   }
 

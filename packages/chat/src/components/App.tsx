@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import type { SkynetMessage } from '@skynet/protocol';
+import { type SkynetMessage, extractMentionNames } from '@skynet/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -49,24 +49,28 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Direct message: @name message
-    const dmMatch = text.match(/^@(\S+)\s+(.*)/s);
-    if (dmMatch) {
-      const targetName = dmMatch[1];
-      let targetId: string | null = null;
+    // Resolve @name tokens to agent IDs
+    const mentionedNames = extractMentionNames(text);
+    const resolvedIds: string[] = [];
+    for (const name of mentionedNames) {
       for (const [id, card] of state.members) {
-        if (card.name.toLowerCase() === targetName.toLowerCase()) {
-          targetId = id;
+        if (card.name.toLowerCase() === name) {
+          resolvedIds.push(id);
           break;
         }
       }
-      if (targetId) {
-        sendChat(dmMatch[2], targetId);
-      }
-      return;
     }
 
-    sendChat(text);
+    if (resolvedIds.length > 0) {
+      // Strip leading @name tokens to extract the message body
+      const body = text.replace(/^(?:@\S+\s*)+/, '').trim();
+      const messageText = body || text;
+      // Primary recipient is the first mentioned agent; others go in mentions
+      const [primaryTo, ...additionalMentions] = resolvedIds;
+      sendChat(messageText, primaryTo, additionalMentions.length > 0 ? additionalMentions : undefined);
+    } else {
+      sendChat(text);
+    }
   }, [state.members, sendChat, close, exit]);
 
   // Ctrl+C to exit

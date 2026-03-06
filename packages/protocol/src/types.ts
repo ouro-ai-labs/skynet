@@ -50,6 +50,8 @@ export interface SkynetMessage {
   timestamp: number;
   payload: unknown;
   replyTo?: string;
+  /** Agent IDs additionally mentioned via @name — they receive the message even if not the primary `to` target. */
+  mentions?: string[];
 }
 
 // ── Payload Types ──

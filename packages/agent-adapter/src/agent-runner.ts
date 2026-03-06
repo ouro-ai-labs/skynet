@@ -7,6 +7,7 @@ import {
   type TaskPayload,
   AgentType,
   MessageType,
+  extractMentionNames,
 } from '@skynet/protocol';
 import { SkynetClient, type RoomState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
@@ -107,7 +108,8 @@ export class AgentRunner {
           const senderName = this.memberNames.get(msg.from) ?? msg.from;
           const response = await this.adapter.handleMessage(msg, senderName);
           if (response) {
-            this.client.chat(response, msg.from);
+            const mentions = this.resolveMentions(response);
+            this.client.chat(response, msg.from, mentions.length > 0 ? mentions : undefined);
           }
         }
       } catch (err) {
@@ -119,6 +121,23 @@ export class AgentRunner {
 
     this.client.agent.status = 'idle';
     this.processing = false;
+  }
+
+  /** Resolve @name mentions in text to agent IDs (excluding self). */
+  private resolveMentions(text: string): string[] {
+    const names = extractMentionNames(text);
+    if (names.length === 0) return [];
+    const selfId = this.client.agent.agentId;
+    const ids: string[] = [];
+    for (const name of names) {
+      for (const [agentId, agentName] of this.memberNames) {
+        if (agentName.toLowerCase() === name && agentId !== selfId) {
+          ids.push(agentId);
+          break;
+        }
+      }
+    }
+    return ids;
   }
 
   private async handleTask(msg: SkynetMessage): Promise<void> {

@@ -28,7 +28,7 @@ export interface SkynetState {
 
 export interface UseSkynetReturn {
   state: SkynetState;
-  sendChat: (text: string, to?: string | null) => void;
+  sendChat: (text: string, to?: string | null, mentions?: string[]) => void;
   close: () => Promise<void>;
   agentId: string;
 }
@@ -121,8 +121,8 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
     };
   }, [opts.serverUrl, opts.roomId, opts.name, addSystemMessage]);
 
-  const sendChat = useCallback((text: string, to?: string | null) => {
-    clientRef.current?.chat(text, to ?? null);
+  const sendChat = useCallback((text: string, to?: string | null, mentions?: string[]) => {
+    clientRef.current?.chat(text, to ?? null, mentions);
   }, []);
 
   const close = useCallback(async () => {
