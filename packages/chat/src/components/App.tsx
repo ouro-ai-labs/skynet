@@ -7,6 +7,7 @@ import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { MessageBlock, SystemMessageBlock } from './MessageBlock.js';
 import { InputBar } from './InputBar.js';
 import { formatMemberList } from '../format.js';
+import { executeCommand } from '../commands.js';
 
 interface AppProps {
   options: UseSkynetOptions;
@@ -14,10 +15,12 @@ interface AppProps {
 
 interface StaticItem {
   key: string;
-  type: 'message' | 'system' | 'members';
+  type: 'message' | 'system' | 'members' | 'command-output';
   message?: SkynetMessage;
   text?: string;
   memberLines?: string[];
+  commandLines?: string[];
+  commandError?: boolean;
 }
 
 export function App({ options }: AppProps): React.ReactElement {
@@ -26,6 +29,7 @@ export function App({ options }: AppProps): React.ReactElement {
   const { columns } = useTerminalSize();
   const [showHelp, setShowHelp] = useState(false);
   const [memberListCounter, setMemberListCounter] = useState(0);
+  const [commandOutputs, setCommandOutputs] = useState<Array<{ lines: string[]; error?: boolean }>>([]);
 
   const handleSubmit = useCallback((text: string) => {
     const cmd = text.toLowerCase().trim();
@@ -46,6 +50,16 @@ export function App({ options }: AppProps): React.ReactElement {
     }
 
     if (cmd === '/clear' || cmd === '/c') {
+      return;
+    }
+
+    // Management commands: /room, /agent, /human
+    if (cmd.startsWith('/room') || cmd.startsWith('/agent') || cmd.startsWith('/human')) {
+      executeCommand(options.serverUrl, text.trim()).then((result) => {
+        if (result) {
+          setCommandOutputs((prev) => [...prev, { lines: result.lines, error: result.error }]);
+        }
+      });
       return;
     }
 
@@ -97,8 +111,17 @@ export function App({ options }: AppProps): React.ReactElement {
       items.push({ key: `members-${memberListCounter}`, type: 'members', memberLines: lines });
     }
 
+    for (let i = 0; i < commandOutputs.length; i++) {
+      items.push({
+        key: `cmd-${i}`,
+        type: 'command-output',
+        commandLines: commandOutputs[i].lines,
+        commandError: commandOutputs[i].error,
+      });
+    }
+
     return items;
-  }, [state.messages, state.systemMessages, state.members, agentId, memberListCounter]);
+  }, [state.messages, state.systemMessages, state.members, agentId, memberListCounter, commandOutputs]);
 
   // Loading state
   if (state.connecting) {
@@ -152,6 +175,15 @@ export function App({ options }: AppProps): React.ReactElement {
               </Box>
             );
           }
+          if (item.type === 'command-output' && item.commandLines) {
+            return (
+              <Box key={item.key} flexDirection="column">
+                {item.commandLines.map((line, i) => (
+                  <Text key={i} color={item.commandError ? 'red' : 'yellow'} wrap="wrap">{line}</Text>
+                ))}
+              </Box>
+            );
+          }
           return <Box key={item.key} />;
         }}
       </Static>
@@ -183,6 +215,14 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text>  /members, /m    Show members</Text>
             <Text>  /quit, /q       Leave and exit</Text>
             <Text>  @name message   Direct message</Text>
+            <Text />
+            <Text bold> Management</Text>
+            <Text>  /room list               List rooms</Text>
+            <Text>  /room new {'<name>'}        Create room</Text>
+            <Text>  /agent list              List agents</Text>
+            <Text>  /agent {'<name>'} join {'<room>'} Add agent to room</Text>
+            <Text>  /human list              List humans</Text>
+            <Text>  /human {'<name>'} join {'<room>'} Add human to room</Text>
             <Text />
             <Text bold> Input</Text>
             <Text>  Up/Down         Input history</Text>

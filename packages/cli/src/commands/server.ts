@@ -1,35 +1,154 @@
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Command } from 'commander';
 import { SkynetServer, SqliteStore } from '@skynet/server';
-import { loadConfig, ensureSkynetDir } from '../config.js';
+import {
+  ensureSkynetDir,
+  listWorkspaces,
+  addWorkspace,
+  getWorkspace,
+  getWorkspaceDir,
+  type WorkspaceEntry,
+} from '../config.js';
+
+async function startServer(workspace: WorkspaceEntry): Promise<void> {
+  const wsDir = getWorkspaceDir(workspace.id);
+  const dbPath = join(wsDir, 'data.db');
+
+  const store = new SqliteStore(dbPath);
+  const srv = new SkynetServer({ port: workspace.port, host: workspace.host, store });
+
+  process.on('SIGINT', async () => {
+    console.log('\nShutting down...');
+    await srv.stop();
+    process.exit(0);
+  });
+
+  await srv.start();
+  console.log(`Skynet server "${workspace.name}" running on ${workspace.host}:${workspace.port}`);
+  console.log(`Database: ${dbPath}`);
+}
 
 export function registerServerCommand(program: Command): void {
-  const server = program.command('server').description('Manage the Skynet server');
+  const server = program
+    .command('server')
+    .description('Manage Skynet servers')
+    .action(async () => {
+      // Bare `skynet server`: interactive select and start
+      const workspaces = listWorkspaces();
+      if (workspaces.length === 0) {
+        console.error('No servers configured. Run \'skynet server new\' to create one.');
+        process.exit(1);
+      }
+
+      let workspace: WorkspaceEntry;
+      if (workspaces.length === 1) {
+        workspace = workspaces[0];
+      } else {
+        const { default: inquirer } = await import('inquirer');
+        const { selected } = await inquirer.prompt([{
+          type: 'list',
+          name: 'selected',
+          message: 'Select server to start:',
+          choices: workspaces.map((w) => ({
+            name: `${w.name} (${w.host}:${w.port})`,
+            value: w,
+          })),
+        }]);
+        workspace = selected;
+      }
+
+      await startServer(workspace);
+    });
+
+  server
+    .command('new')
+    .description('Create a new server workspace')
+    .action(async () => {
+      ensureSkynetDir();
+
+      const { default: inquirer } = await import('inquirer');
+      const answers = await inquirer.prompt([
+        { type: 'input', name: 'name', message: 'Server name:', validate: (v: string) => v.trim() ? true : 'Name is required' },
+        { type: 'input', name: 'host', message: 'Host:', default: '0.0.0.0' },
+        { type: 'input', name: 'port', message: 'Port:', default: '4117', validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
+      ]);
+
+      const existing = getWorkspace(answers.name);
+      if (existing) {
+        console.error(`Server '${answers.name}' already exists.`);
+        process.exit(1);
+      }
+
+      const entry: WorkspaceEntry = {
+        id: randomUUID(),
+        name: answers.name.trim(),
+        host: answers.host,
+        port: parseInt(answers.port, 10),
+      };
+
+      addWorkspace(entry);
+      console.log(`Server '${entry.name}' created.`);
+      console.log(`  ID:   ${entry.id}`);
+      console.log(`  Host: ${entry.host}:${entry.port}`);
+      console.log(`  Dir:  ${getWorkspaceDir(entry.id)}`);
+      console.log('\nStart it with: skynet server');
+    });
+
+  server
+    .command('list')
+    .description('List all server workspaces')
+    .action(() => {
+      const workspaces = listWorkspaces();
+      if (workspaces.length === 0) {
+        console.log('No servers configured. Run \'skynet server new\' to create one.');
+        return;
+      }
+
+      console.log(`Servers (${workspaces.length}):`);
+      for (const w of workspaces) {
+        console.log(`  - ${w.name} (${w.host}:${w.port}) [${w.id}]`);
+      }
+    });
 
   server
     .command('start')
-    .description('Start the Skynet server')
-    .option('-p, --port <port>', 'Port to listen on')
-    .option('-h, --host <host>', 'Host to bind to')
-    .option('--db <path>', 'SQLite database path')
-    .action(async (opts) => {
-      const config = loadConfig();
-      ensureSkynetDir();
+    .description('Start a server by name or UUID')
+    .argument('[name-or-id]', 'Server name or UUID')
+    .option('--server <id>', 'Server UUID or name')
+    .action(async (nameOrId?: string, opts?: { server?: string }) => {
+      const identifier = nameOrId ?? opts?.server;
+      let workspace: WorkspaceEntry | undefined;
 
-      const port = opts.port ? parseInt(opts.port, 10) : config.server.port;
-      const host = opts.host ?? config.server.host;
-      const dbPath = opts.db ?? config.server.dbPath;
+      if (identifier) {
+        workspace = getWorkspace(identifier);
+        if (!workspace) {
+          console.error(`Server '${identifier}' not found. Run 'skynet server list' to see available servers.`);
+          process.exit(1);
+        }
+      } else {
+        const workspaces = listWorkspaces();
+        if (workspaces.length === 0) {
+          console.error('No servers configured. Run \'skynet server new\' to create one.');
+          process.exit(1);
+        }
+        if (workspaces.length === 1) {
+          workspace = workspaces[0];
+        } else {
+          const { default: inquirer } = await import('inquirer');
+          const { selected } = await inquirer.prompt([{
+            type: 'list',
+            name: 'selected',
+            message: 'Select server to start:',
+            choices: workspaces.map((w) => ({
+              name: `${w.name} (${w.host}:${w.port})`,
+              value: w,
+            })),
+          }]);
+          workspace = selected;
+        }
+      }
 
-      const store = new SqliteStore(dbPath);
-      const srv = new SkynetServer({ port, host, store });
-
-      process.on('SIGINT', async () => {
-        console.log('\nShutting down...');
-        await srv.stop();
-        process.exit(0);
-      });
-
-      await srv.start();
-      console.log(`Skynet server running on ${host}:${port}`);
-      console.log(`Database: ${dbPath}`);
+      await startServer(workspace!);
     });
 }

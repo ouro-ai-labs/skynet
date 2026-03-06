@@ -167,41 +167,42 @@ describe('Server integration', () => {
     await alice.close();
   });
 
-  it('POST /api/rooms creates a room', async () => {
+  it('POST /api/rooms creates a room with name', async () => {
     const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId: 'created-room' }),
+      body: JSON.stringify({ name: 'created-room' }),
     });
 
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; memberCount: number };
-    expect(body.id).toBe('created-room');
+    const body = (await res.json()) as { id: string; name: string; memberCount: number };
+    expect(body.name).toBe('created-room');
+    expect(body.id).toBeTruthy();
     expect(body.memberCount).toBe(0);
 
     // Verify room appears in list
     const listRes = await fetch(`http://localhost:${PORT}/api/rooms`);
-    const rooms = (await listRes.json()) as Array<{ id: string }>;
-    expect(rooms.some((r) => r.id === 'created-room')).toBe(true);
+    const rooms = (await listRes.json()) as Array<{ id: string; name: string }>;
+    expect(rooms.some((r) => r.name === 'created-room')).toBe(true);
   });
 
-  it('POST /api/rooms returns 409 for duplicate room', async () => {
+  it('POST /api/rooms returns 409 for duplicate name', async () => {
     await fetch(`http://localhost:${PORT}/api/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId: 'dup-room' }),
+      body: JSON.stringify({ name: 'dup-room' }),
     });
 
     const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId: 'dup-room' }),
+      body: JSON.stringify({ name: 'dup-room' }),
     });
 
     expect(res.status).toBe(409);
   });
 
-  it('POST /api/rooms returns 400 when roomId missing', async () => {
+  it('POST /api/rooms returns 400 when name missing', async () => {
     const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -213,13 +214,14 @@ describe('Server integration', () => {
 
   it('DELETE /api/rooms/:roomId destroys a room', async () => {
     // Create room first
-    await fetch(`http://localhost:${PORT}/api/rooms`, {
+    const createRes = await fetch(`http://localhost:${PORT}/api/rooms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId: 'doomed-room' }),
+      body: JSON.stringify({ name: 'doomed-room' }),
     });
+    const created = (await createRes.json()) as { id: string };
 
-    const res = await fetch(`http://localhost:${PORT}/api/rooms/doomed-room`, {
+    const res = await fetch(`http://localhost:${PORT}/api/rooms/${created.id}`, {
       method: 'DELETE',
     });
 
@@ -228,7 +230,7 @@ describe('Server integration', () => {
     // Verify room is gone
     const listRes = await fetch(`http://localhost:${PORT}/api/rooms`);
     const rooms = (await listRes.json()) as Array<{ id: string }>;
-    expect(rooms.some((r) => r.id === 'doomed-room')).toBe(false);
+    expect(rooms.some((r) => r.id === created.id)).toBe(false);
   });
 
   it('DELETE /api/rooms/:roomId returns 404 for non-existent room', async () => {
