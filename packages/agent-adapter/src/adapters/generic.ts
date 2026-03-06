@@ -56,17 +56,18 @@ export class GenericAdapter extends AgentAdapter {
   async dispose(): Promise<void> {}
 
   private messageToPrompt(msg: SkynetMessage): string {
+    const room = this.roomName ? `[${this.roomName}] ` : '';
     switch (msg.type) {
       case MessageType.CHAT: {
         const payload = msg.payload as { text: string };
-        return payload.text;
+        return `${room}${payload.text}`;
       }
       case MessageType.TASK_ASSIGN: {
         const payload = msg.payload as TaskPayload;
-        return `${payload.title}: ${payload.description}`;
+        return `${room}${payload.title}: ${payload.description}`;
       }
       default:
-        return JSON.stringify(msg.payload);
+        return `${room}${JSON.stringify(msg.payload)}`;
     }
   }
 

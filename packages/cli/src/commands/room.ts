@@ -10,17 +10,24 @@ export function registerRoomCommand(program: Command): void {
     .command('new')
     .description('Create a new room')
     .option('--server <id>', 'Server UUID or name')
+    .option('--name <name>', 'Room name (skip interactive prompt)')
     .action(async (opts) => {
       const workspace = await selectServer(opts);
       const url = getServerUrl(workspace);
 
-      const { default: inquirer } = await import('inquirer');
-      const { name } = await inquirer.prompt([{
-        type: 'input',
-        name: 'name',
-        message: 'Room name:',
-        validate: (v: string) => v.trim() ? true : 'Name is required',
-      }]);
+      let name: string;
+      if (opts.name) {
+        name = opts.name;
+      } else {
+        const { default: inquirer } = await import('inquirer');
+        const answers = await inquirer.prompt([{
+          type: 'input',
+          name: 'name',
+          message: 'Room name:',
+          validate: (v: string) => v.trim() ? true : 'Name is required',
+        }]);
+        name = answers.name;
+      }
 
       try {
         const res = await fetch(`${url}/api/rooms`, {

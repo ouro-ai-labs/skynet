@@ -73,6 +73,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     const args = [
       '-p', prompt,
       '--output-format', 'text',
+      '--dangerously-skip-permissions',
       '--resume', this.sessionId,
       '--fork-session',
     ];
@@ -96,22 +97,23 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
   private messageToPrompt(msg: SkynetMessage, senderName?: string): string {
     const sender = senderName ?? msg.from;
+    const room = this.roomName ? `[${this.roomName}] ` : '';
     switch (msg.type) {
       case MessageType.CHAT: {
         const payload = msg.payload as { text: string };
-        return `Message from ${sender}: ${payload.text}`;
+        return `${room}Message from ${sender}: ${payload.text}`;
       }
       case MessageType.TASK_ASSIGN: {
         const payload = msg.payload as TaskPayload;
-        return `Task assigned: ${payload.title}\n\n${payload.description}`;
+        return `${room}Task assigned: ${payload.title}\n\n${payload.description}`;
       }
       default:
-        return `Received ${msg.type} from ${sender}: ${JSON.stringify(msg.payload)}`;
+        return `${room}Received ${msg.type} from ${sender}: ${JSON.stringify(msg.payload)}`;
     }
   }
 
   private async runClaude(prompt: string): Promise<string> {
-    const args = ['-p', prompt, '--output-format', 'text'];
+    const args = ['-p', prompt, '--output-format', 'text', '--dangerously-skip-permissions'];
 
     if (this.allowedTools?.length) {
       args.push('--allowedTools', this.allowedTools.join(','));

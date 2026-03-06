@@ -23,6 +23,7 @@ export interface SkynetClientOptions {
 
 export interface RoomState {
   roomId: string;
+  roomName: string;
   members: AgentCard[];
   recentMessages: SkynetMessage[];
 }

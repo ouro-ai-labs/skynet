@@ -332,10 +332,12 @@ export class SkynetServer {
     this.socketAgentMap.set(socket, { agentId: req.agent.id, roomId: req.roomId });
 
     // Notify the joining agent of current members
+    const roomRecord = this.store.listRooms().find((r) => r.id === req.roomId);
     socket.send(JSON.stringify({
       event: 'room.state',
       data: {
         roomId: req.roomId,
+        roomName: roomRecord?.name ?? req.roomId,
         members: room.getMembers(),
         recentMessages: this.store.getByRoom(req.roomId, 50),
       },

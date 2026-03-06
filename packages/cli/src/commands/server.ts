@@ -64,27 +64,55 @@ export function registerServerCommand(program: Command): void {
   server
     .command('new')
     .description('Create a new server workspace')
-    .action(async () => {
+    .option('--name <name>', 'Server name (skip interactive prompt)')
+    .option('--host <host>', 'Host (default: 0.0.0.0)')
+    .option('--port <port>', 'Port (default: 4117)')
+    .action(async (opts) => {
       ensureSkynetDir();
 
-      const { default: inquirer } = await import('inquirer');
-      const answers = await inquirer.prompt([
-        { type: 'input', name: 'name', message: 'Server name:', validate: (v: string) => v.trim() ? true : 'Name is required' },
-        { type: 'input', name: 'host', message: 'Host:', default: '0.0.0.0' },
-        { type: 'input', name: 'port', message: 'Port:', default: '4117', validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
-      ]);
+      let name: string;
+      let host: string;
+      let port: string;
 
-      const existing = getWorkspace(answers.name);
+      if (opts.name) {
+        name = opts.name;
+        host = opts.host ?? '0.0.0.0';
+        port = opts.port ?? '4117';
+      } else {
+        const { default: inquirer } = await import('inquirer');
+        const { name: inputName } = await inquirer.prompt([
+          { type: 'input', name: 'name', message: 'Server name:', validate: (v: string) => v.trim() ? true : 'Name is required' },
+        ]);
+        name = inputName;
+        if (!opts.host) {
+          const { host: inputHost } = await inquirer.prompt([
+            { type: 'input', name: 'host', message: 'Host:', default: '0.0.0.0' },
+          ]);
+          host = inputHost;
+        } else {
+          host = opts.host;
+        }
+        if (!opts.port) {
+          const { port: inputPort } = await inquirer.prompt([
+            { type: 'input', name: 'port', message: 'Port:', default: '4117', validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
+          ]);
+          port = inputPort;
+        } else {
+          port = opts.port;
+        }
+      }
+
+      const existing = getWorkspace(name);
       if (existing) {
-        console.error(`Server '${answers.name}' already exists.`);
+        console.error(`Server '${name}' already exists.`);
         process.exit(1);
       }
 
       const entry: WorkspaceEntry = {
         id: randomUUID(),
-        name: answers.name.trim(),
-        host: answers.host,
-        port: parseInt(answers.port, 10),
+        name: name.trim(),
+        host,
+        port: parseInt(port, 10),
       };
 
       addWorkspace(entry);
