@@ -1,15 +1,16 @@
 # Server Implementation
 
-`packages/server` — WebSocket messaging server handling room management, message routing, and persistence.
+`packages/server` — WebSocket messaging server handling room management, entity management, message routing, and persistence.
 
 ## File Structure
 
 ```
 packages/server/src/
-  server.ts    # SkynetServer — Fastify + WebSocket main server
-  room.ts      # Room / RoomManager — In-memory room and member management
-  store.ts     # MessageStore — SQLite message persistence
-  index.ts     # Module exports
+  server.ts        # SkynetServer — Fastify + WebSocket main server
+  room.ts          # Room / RoomManager — In-memory room and member management
+  store.ts         # MessageStore interface
+  sqlite-store.ts  # SqliteStore — SQLite message + entity persistence
+  index.ts         # Module exports
 ```
 
 ## Core Classes
@@ -24,12 +25,12 @@ Main server entry point, built on Fastify + `@fastify/websocket`.
 |-------|---------|-------------|
 | `port` | `4117` | Listen port |
 | `host` | `0.0.0.0` | Listen address |
-| `dbPath` | `:memory:` | SQLite database path, defaults to in-memory |
+| `store` | — | `SqliteStore` instance for persistence |
 
 **Internal State**:
 
 - `rooms: RoomManager` — Room registry
-- `store: MessageStore` — Message persistence
+- `store: SqliteStore` — Message + entity persistence
 - `socketAgentMap: WeakMap<WebSocket, {agentId, roomId}>` — Socket-to-agent mapping; WeakMap prevents memory leaks
 
 **Lifecycle**: `start()` boots the server, `stop()` shuts down server + database.
@@ -55,13 +56,14 @@ Checks `socket.readyState === OPEN` before sending to avoid writing to closed so
 - `removeIfEmpty(roomId)` — Auto-cleanup after agent leaves
 - `listRooms()` — Returns `{id, memberCount}[]`
 
-### MessageStore (`store.ts`)
+### SqliteStore (`sqlite-store.ts`)
 
-Synchronous SQLite storage using `better-sqlite3`.
+Synchronous SQLite storage using `better-sqlite3`. Handles both message persistence and entity management.
 
 **Schema**:
 
 ```sql
+-- Messages
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -72,16 +74,58 @@ CREATE TABLE messages (
   payload TEXT NOT NULL,    -- JSON serialized
   reply_to TEXT
 );
--- Indexes
 CREATE INDEX idx_messages_room ON messages(room_id, timestamp);
 CREATE INDEX idx_messages_from ON messages("from");
+
+-- Rooms
+CREATE TABLE rooms (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+-- Agents
+CREATE TABLE agents (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  type TEXT NOT NULL,
+  role TEXT,
+  persona TEXT,
+  created_at INTEGER NOT NULL
+);
+
+-- Humans
+CREATE TABLE humans (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+-- Room memberships
+CREATE TABLE room_members (
+  room_id TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  member_type TEXT NOT NULL,  -- 'agent' or 'human'
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (room_id, member_id),
+  FOREIGN KEY (room_id) REFERENCES rooms(id)
+);
 ```
 
-**Methods**:
+**Message Methods**:
 
 - `save(msg)` — INSERT OR REPLACE, idempotent writes
 - `getByRoom(roomId, limit, before?)` — Paginated query by room, fetched DESC then reversed to chronological order
 - `getById(id)` — Direct lookup by message ID
+
+**Entity Methods**:
+
+- `createRoom(id, name)` / `listRooms()` / `deleteRoom(id)`
+- `createAgent(agent)` / `listAgents()` / `getAgent(idOrName)`
+- `createHuman(human)` / `listHumans()` / `getHuman(idOrName)`
+- `addRoomMember(roomId, memberId, memberType)` / `removeRoomMember(roomId, memberId)`
+- `getRoomMembers(roomId)` — Returns registered room memberships
+- `checkNameUnique(name)` — Cross-entity name uniqueness check
 
 ## WebSocket Protocol
 
@@ -134,14 +178,45 @@ Updates the agent's status in the room (idle / busy / offline).
 
 ## HTTP API
 
+### Messages & Rooms (WebSocket)
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check, returns room list |
 | GET | `/api/rooms` | List all rooms |
-| GET | `/api/rooms/:roomId/members` | Get room members |
+| GET | `/api/rooms/:roomId/members` | Get connected WebSocket members |
 | GET | `/api/rooms/:roomId/messages` | Query messages (`?limit=100&before=timestamp`) |
-| POST | `/api/rooms` | Create room (body: `{roomId}`, 409 if exists) |
+| GET | `/api/rooms/:roomId/registered-members` | Get DB-registered room members |
+| POST | `/api/rooms` | Create room (body: `{name}`, 409 if name taken) |
 | DELETE | `/api/rooms/:roomId` | Destroy room (closes all sockets first, 404 if not found) |
+
+### Agents
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/agents` | Create agent (body: `{name, type, role?, persona?}`) |
+| GET | `/api/agents` | List all agents |
+| GET | `/api/agents/:id` | Get agent by UUID or name |
+| POST | `/api/agents/:id/join/:roomId` | Agent joins room |
+| POST | `/api/agents/:id/leave/:roomId` | Agent leaves room |
+
+### Humans
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/humans` | Create human (body: `{name}`) |
+| GET | `/api/humans` | List all humans |
+| GET | `/api/humans/:id` | Get human by UUID or name |
+| POST | `/api/humans/:id/join/:roomId` | Human joins room |
+| POST | `/api/humans/:id/leave/:roomId` | Human leaves room |
+
+### Names
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/names/check?name=x` | Check name availability across all entity types |
+
+Room IDs in join/leave endpoints accept either UUID or name.
 
 ## Message Flow
 
@@ -170,6 +245,7 @@ Client A                  Server                    Client B
 3. **INSERT OR REPLACE** — Idempotent message writes, no errors on duplicates
 4. **Broadcast includes sender** — Sender receives echo of their own message as delivery confirmation
 5. **Synchronous SQLite** — better-sqlite3 is synchronous; simple and direct, blocks the event loop but acceptable at current message volumes
+6. **Cross-entity name uniqueness** — Room, agent, and human names must be unique within a workspace to avoid ambiguity in @-mentions and CLI commands
 
 ## Not Yet Implemented
 

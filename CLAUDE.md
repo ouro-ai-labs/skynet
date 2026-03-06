@@ -50,14 +50,15 @@ This is a pnpm workspaces + turborepo monorepo. Packages live under `packages/`:
 
 See `docs/architecture.md` for the full architecture and `docs/phases.md` for the implementation roadmap.
 
-## Scoped Instructions (Read When Touching These Areas)
+## Scoped Documentation (Read When Touching These Areas)
 
-If you modify code under these paths, also read the matching `CLAUDE.md` first:
+If you modify code under these paths, also read the matching docs first:
 
-- `packages/protocol/CLAUDE.md` (message types + backward compatibility)
-- `packages/server/CLAUDE.md` (WebSocket safety + room invariants)
-- `packages/sdk/CLAUDE.md` (client reconnection + error handling)
-- `packages/agent-adapter/CLAUDE.md` (adapter contracts + CLI process management)
+- `packages/protocol` → `docs/protocol.md` (message types, entity types, backward compatibility)
+- `packages/server` → `docs/server.md` (WebSocket protocol, HTTP API, entity management)
+- `packages/sdk` → `docs/usage.md` (client SDK usage, reconnection, error handling)
+- `packages/agent-adapter` → `docs/adapter.md` (adapter contracts, CLI process management)
+- Entity model → `docs/entities.md` (workspace, room, agent, human lifecycle)
 
 ## Language
 
@@ -149,6 +150,10 @@ What changed and why (user-facing when applicable).
 
 - Architecture: `docs/architecture.md`
 - Protocol design: `docs/protocol.md`
+- Entity model: `docs/entities.md`
+- Server implementation: `docs/server.md`
+- Agent adapter: `docs/adapter.md`
+- Usage guide: `docs/usage.md`
 - Implementation phases: `docs/phases.md`
 
 ## Safety & Secrets
