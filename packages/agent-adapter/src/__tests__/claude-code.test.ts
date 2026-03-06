@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MessageType } from '@skynet/protocol';
 import { ClaudeCodeAdapter } from '../adapters/claude-code.js';
 
@@ -10,110 +10,79 @@ vi.mock('execa', () => ({
   execaCommand: vi.fn().mockResolvedValue({ stdout: 'claude 1.0.0', stderr: '' }),
 }));
 
-describe('ClaudeCodeAdapter session persistence', () => {
+function makeMsg(overrides: Partial<{ text: string; from: string }> = {}) {
+  return {
+    id: 'msg-1',
+    type: MessageType.CHAT as const,
+    from: overrides.from ?? 'human-123',
+    to: null,
+    roomId: 'room-1',
+    timestamp: Date.now(),
+    payload: { text: overrides.text ?? 'hello' },
+  };
+}
+
+describe('ClaudeCodeAdapter session continuity', () => {
   let tempDir: string;
-  let sessionStorePath: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
-    sessionStorePath = join(tempDir, '.skynet', 'sessions.json');
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('loadSessionId returns null when no room is set', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    // Access private method via prototype for testing
-    const loadSessionId = (adapter as unknown as { loadSessionId(): string | null }).loadSessionId.bind(adapter);
-    expect(loadSessionId()).toBeNull();
-  });
-
-  it('loadSessionId returns null when session file does not exist', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    adapter.setRoomId('room-1');
-    const loadSessionId = (adapter as unknown as { loadSessionId(): string | null }).loadSessionId.bind(adapter);
-    expect(loadSessionId()).toBeNull();
-  });
-
-  it('loadSessionId returns session ID from existing file', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    adapter.setRoomId('room-1');
-
-    mkdirSync(join(tempDir, '.skynet'), { recursive: true });
-    writeFileSync(sessionStorePath, JSON.stringify({ 'room-1': 'session-abc' }));
-
-    const loadSessionId = (adapter as unknown as { loadSessionId(): string | null }).loadSessionId.bind(adapter);
-    expect(loadSessionId()).toBe('session-abc');
-  });
-
-  it('loadSessionId returns null for unknown room', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    adapter.setRoomId('room-2');
-
-    mkdirSync(join(tempDir, '.skynet'), { recursive: true });
-    writeFileSync(sessionStorePath, JSON.stringify({ 'room-1': 'session-abc' }));
-
-    const loadSessionId = (adapter as unknown as { loadSessionId(): string | null }).loadSessionId.bind(adapter);
-    expect(loadSessionId()).toBeNull();
-  });
-
-  it('saveSessionId creates file and directory', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    adapter.setRoomId('room-1');
-
-    const saveSessionId = (adapter as unknown as { saveSessionId(id: string): void }).saveSessionId.bind(adapter);
-    saveSessionId('session-xyz');
-
-    const data = JSON.parse(readFileSync(sessionStorePath, 'utf-8'));
-    expect(data).toEqual({ 'room-1': 'session-xyz' });
-  });
-
-  it('saveSessionId preserves other rooms', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    adapter.setRoomId('room-2');
-
-    mkdirSync(join(tempDir, '.skynet'), { recursive: true });
-    writeFileSync(sessionStorePath, JSON.stringify({ 'room-1': 'session-abc' }));
-
-    const saveSessionId = (adapter as unknown as { saveSessionId(id: string): void }).saveSessionId.bind(adapter);
-    saveSessionId('session-def');
-
-    const data = JSON.parse(readFileSync(sessionStorePath, 'utf-8'));
-    expect(data).toEqual({ 'room-1': 'session-abc', 'room-2': 'session-def' });
-  });
-
-  it('saveSessionId is a no-op when no room is set', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    const saveSessionId = (adapter as unknown as { saveSessionId(id: string): void }).saveSessionId.bind(adapter);
-    saveSessionId('session-xyz');
-
-    // File should not be created
-    expect(() => readFileSync(sessionStorePath)).toThrow();
-  });
-
-  it('setRoomId sets the room ID', () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir, sessionStorePath });
-    adapter.setRoomId('my-room');
-
-    mkdirSync(join(tempDir, '.skynet'), { recursive: true });
-    writeFileSync(sessionStorePath, JSON.stringify({ 'my-room': 'sess-123' }));
-
-    const loadSessionId = (adapter as unknown as { loadSessionId(): string | null }).loadSessionId.bind(adapter);
-    expect(loadSessionId()).toBe('sess-123');
-  });
-
-  it('uses default sessionStorePath based on projectRoot', () => {
+  it('first call uses --session-id to create a new session', async () => {
+    const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
-    adapter.setRoomId('room-1');
 
-    const defaultPath = join(tempDir, '.skynet', 'sessions.json');
-    const saveSessionId = (adapter as unknown as { saveSessionId(id: string): void }).saveSessionId.bind(adapter);
-    saveSessionId('session-default');
+    await adapter.handleMessage(makeMsg());
 
-    const data = JSON.parse(readFileSync(defaultPath, 'utf-8'));
-    expect(data).toEqual({ 'room-1': 'session-default' });
+    expect(execa).toHaveBeenCalledWith(
+      'claude',
+      expect.arrayContaining(['--session-id']),
+      expect.any(Object),
+    );
+    // Should NOT have --resume on first call
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    expect(args).not.toContain('--resume');
+  });
+
+  it('subsequent calls use --resume with same session ID', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsg({ text: 'first' }));
+    const firstArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    const sessionIdIdx = firstArgs.indexOf('--session-id');
+    const sessionId = firstArgs[sessionIdIdx + 1];
+
+    await adapter.handleMessage(makeMsg({ text: 'second' }));
+    const secondArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1] as string[];
+    expect(secondArgs).toContain('--resume');
+    expect(secondArgs).toContain(sessionId);
+    expect(secondArgs).not.toContain('--session-id');
+  });
+
+  it('setRoomId resets session so next call uses --session-id again', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsg({ text: 'first' }));
+    const firstArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    const firstSessionId = firstArgs[firstArgs.indexOf('--session-id') + 1];
+
+    adapter.setRoomId('new-room');
+
+    await adapter.handleMessage(makeMsg({ text: 'after room change' }));
+    const secondArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1] as string[];
+    expect(secondArgs).toContain('--session-id');
+    expect(secondArgs).not.toContain('--resume');
+    // New session ID should differ
+    const newSessionId = secondArgs[secondArgs.indexOf('--session-id') + 1];
+    expect(newSessionId).not.toBe(firstSessionId);
   });
 });
 
@@ -129,26 +98,16 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('calls execa with separate args instead of shell string', async () => {
+  it('calls execa with correct args and returns stdout', async () => {
     const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
 
-    const msg = {
-      id: 'msg-1',
-      type: MessageType.CHAT as const,
-      from: 'human-123',
-      to: null,
-      roomId: 'room-1',
-      timestamp: Date.now(),
-      payload: { text: 'hello "world" $HOME' },
-    };
-
-    const result = await adapter.handleMessage(msg);
+    const result = await adapter.handleMessage(makeMsg({ text: 'hello "world" $HOME' }));
 
     expect(execa).toHaveBeenCalledWith(
       'claude',
-      ['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'text'],
-      expect.objectContaining({ cwd: tempDir, timeout: 300_000 }),
+      expect.arrayContaining(['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'text']),
+      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 300_000 }),
     );
     expect(result).toBe('mock response');
   });
@@ -157,21 +116,11 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
 
-    const msg = {
-      id: 'msg-1',
-      type: MessageType.CHAT as const,
-      from: '6242e06d-f2e8-4d16-ac87-85ad62d37635',
-      to: null,
-      roomId: 'room-1',
-      timestamp: Date.now(),
-      payload: { text: '你是谁' },
-    };
-
-    await adapter.handleMessage(msg, 'Alice');
+    await adapter.handleMessage(makeMsg({ text: '你是谁', from: 'uuid-123' }), 'Alice');
 
     expect(execa).toHaveBeenCalledWith(
       'claude',
-      ['-p', 'Message from Alice: 你是谁', '--output-format', 'text'],
+      expect.arrayContaining(['-p', 'Message from Alice: 你是谁']),
       expect.any(Object),
     );
   });
@@ -180,48 +129,11 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
 
-    const msg = {
-      id: 'msg-1',
-      type: MessageType.CHAT as const,
-      from: 'agent-xyz',
-      to: null,
-      roomId: 'room-1',
-      timestamp: Date.now(),
-      payload: { text: 'hello' },
-    };
-
-    await adapter.handleMessage(msg);
+    await adapter.handleMessage(makeMsg({ from: 'agent-xyz' }));
 
     expect(execa).toHaveBeenCalledWith(
       'claude',
-      ['-p', 'Message from agent-xyz: hello', '--output-format', 'text'],
-      expect.any(Object),
-    );
-  });
-
-  it('includes --resume flag when session exists', async () => {
-    const { execa } = await import('execa');
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
-    adapter.setRoomId('room-1');
-
-    mkdirSync(join(tempDir, '.skynet'), { recursive: true });
-    writeFileSync(join(tempDir, '.skynet', 'sessions.json'), JSON.stringify({ 'room-1': 'sess-abc' }));
-
-    const msg = {
-      id: 'msg-1',
-      type: MessageType.CHAT as const,
-      from: 'human-123',
-      to: null,
-      roomId: 'room-1',
-      timestamp: Date.now(),
-      payload: { text: 'test' },
-    };
-
-    await adapter.handleMessage(msg);
-
-    expect(execa).toHaveBeenCalledWith(
-      'claude',
-      expect.arrayContaining(['--resume', 'sess-abc']),
+      expect.arrayContaining(['-p', 'Message from agent-xyz: hello']),
       expect.any(Object),
     );
   });
@@ -234,17 +146,7 @@ describe('ClaudeCodeAdapter handleMessage', () => {
       allowedTools: ['Read', 'Write'],
     });
 
-    const msg = {
-      id: 'msg-1',
-      type: MessageType.CHAT as const,
-      from: 'human-123',
-      to: null,
-      roomId: 'room-1',
-      timestamp: Date.now(),
-      payload: { text: 'test' },
-    };
-
-    await adapter.handleMessage(msg);
+    await adapter.handleMessage(makeMsg());
 
     expect(execa).toHaveBeenCalledWith(
       'claude',
