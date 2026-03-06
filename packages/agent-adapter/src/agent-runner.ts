@@ -12,6 +12,7 @@ import {
 } from '@skynet/protocol';
 import { SkynetClient, type RoomState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
+import { SKYNET_SKILL } from './skynet-skill.js';
 
 export interface AgentRunnerOptions {
   serverUrl: string;
@@ -51,17 +52,21 @@ export class AgentRunner {
 
     this.adapter = options.adapter;
 
-    // Build persona prompt for injection
+    // Build system prompt for injection (persona + skynet skill)
     const parts: string[] = [];
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
-    if (parts.length > 0) this.adapter.persona = parts.join(' ');
+    parts.push(SKYNET_SKILL);
+    this.adapter.persona = parts.join('\n\n');
 
     this.adapter.setRoomId(options.roomId);
   }
 
   async start(): Promise<RoomState> {
     const state = await this.client.connect();
+
+    // Pass room name to adapter for message context
+    this.adapter.roomName = state.roomName;
 
     // Build initial member name map from room state
     for (const member of state.members) {

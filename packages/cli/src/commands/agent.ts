@@ -75,41 +75,67 @@ export function registerAgentCommand(program: Command): void {
     .command('new')
     .description('Create a new agent')
     .option('--server <id>', 'Server UUID or name')
+    .option('--name <name>', 'Agent name (skip interactive prompt)')
+    .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, generic')
+    .option('--role <role>', 'Agent role')
+    .option('--persona <persona>', 'Persona description')
     .action(async (opts) => {
       const workspace = await selectServer(opts);
       const url = getServerUrl(workspace);
 
-      const { default: inquirer } = await import('inquirer');
+      let name: string;
+      let type: string;
+      let role: string | undefined;
+      let persona: string | undefined;
 
-      console.log('Detecting available agent types...');
-      const detected = await detectAvailableAgents(process.cwd());
-      const available = detected.filter((d) => d.available);
+      if (opts.name && opts.type) {
+        name = opts.name;
+        type = opts.type;
+        role = opts.role;
+        persona = opts.persona;
+      } else {
+        const { default: inquirer } = await import('inquirer');
 
-      const typeChoices = available.length > 0
-        ? available.map((d) => ({ name: d.name, value: d.type }))
-        : [
-            { name: 'Claude Code', value: AgentType.CLAUDE_CODE },
-            { name: 'Gemini CLI', value: AgentType.GEMINI_CLI },
-            { name: 'Codex CLI', value: AgentType.CODEX_CLI },
-            { name: 'Generic', value: AgentType.GENERIC },
-          ];
+        console.log('Detecting available agent types...');
+        const detected = await detectAvailableAgents(process.cwd());
+        const available = detected.filter((d) => d.available);
 
-      const answers = await inquirer.prompt([
-        { type: 'input', name: 'name', message: 'Agent name:', validate: (v: string) => v.trim() ? true : 'Name is required' },
-        { type: 'list', name: 'type', message: 'Agent type:', choices: typeChoices },
-        { type: 'input', name: 'role', message: 'Role (optional):' },
-        { type: 'input', name: 'persona', message: 'Persona description (optional):' },
-      ]);
+        const typeChoices = available.length > 0
+          ? available.map((d) => ({ name: d.name, value: d.type }))
+          : [
+              { name: 'Claude Code', value: AgentType.CLAUDE_CODE },
+              { name: 'Gemini CLI', value: AgentType.GEMINI_CLI },
+              { name: 'Codex CLI', value: AgentType.CODEX_CLI },
+              { name: 'Generic', value: AgentType.GENERIC },
+            ];
+
+        const questions = [];
+        if (!opts.name) {
+          questions.push({ type: 'input' as const, name: 'name', message: 'Agent name:', validate: (v: string) => v.trim() ? true : 'Name is required' as const });
+        }
+        if (!opts.type) {
+          questions.push({ type: 'list' as const, name: 'type', message: 'Agent type:', choices: typeChoices });
+        }
+        questions.push({ type: 'input' as const, name: 'role', message: 'Role (optional):' });
+        questions.push({ type: 'input' as const, name: 'persona', message: 'Persona description (optional):' });
+
+        const answers = await inquirer.prompt(questions);
+
+        name = opts.name ?? answers.name;
+        type = opts.type ?? answers.type;
+        role = opts.role ?? answers.role;
+        persona = opts.persona ?? answers.persona;
+      }
 
       try {
         const res = await fetch(`${url}/api/agents`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: answers.name.trim(),
-            type: answers.type,
-            role: answers.role || undefined,
-            persona: answers.persona || undefined,
+            name: name.trim(),
+            type,
+            role: role || undefined,
+            persona: persona || undefined,
           }),
         });
 
