@@ -9,18 +9,15 @@ import {
 
 interface InputBarProps {
   onSubmit: (text: string) => void;
-  isFocused: boolean;
-  onFocusChange: (focused: boolean) => void;
   members: Map<string, AgentCard>;
 }
 
-export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputBarProps): React.ReactElement {
+export function InputBar({ onSubmit, members }: InputBarProps): React.ReactElement {
   const [state, dispatch] = useReducer(inputReducer, initialInputState);
   const historyRef = useRef<string[]>([]);
 
   const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex } = state;
 
-  // Compute mention candidates
   const mentionCandidates = mentionFilter !== null
     ? Array.from(members.values())
         .filter((m) => m.name.toLowerCase().startsWith(mentionFilter))
@@ -59,27 +56,13 @@ export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputB
   }, [mentionCandidates, mentionSelectedIndex, value, mentionStart, cursorPos, setValueAndMention]);
 
   useInput((input, key) => {
-    if (!isFocused) {
-      if (key.return || (input && !key.ctrl && !key.meta)) {
-        onFocusChange(true);
-        if (input && !key.return) {
-          setValueAndMention(input, input.length);
-        }
-        return;
-      }
-      return;
-    }
-
     if (key.escape) {
       if (mentionFilter !== null) {
         dispatch({ type: 'SET_MENTION', filter: null, start: 0, selectedIndex: 0 });
-        return;
       }
-      onFocusChange(false);
       return;
     }
 
-    // Tab: accept mention completion
     if (key.tab && mentionFilter !== null && mentionCandidates.length > 0) {
       acceptMention();
       return;
@@ -98,7 +81,6 @@ export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputB
       return;
     }
 
-    // Up/Down arrow: mention selection or history
     if (key.upArrow) {
       if (mentionFilter !== null && mentionCandidates.length > 0) {
         dispatch({
@@ -155,25 +137,21 @@ export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputB
       return;
     }
 
-    // Ctrl+A: move to start
     if (key.ctrl && input === 'a') {
       setCursorAndMention(0);
       return;
     }
 
-    // Ctrl+E: move to end
     if (key.ctrl && input === 'e') {
       setCursorAndMention(value.length);
       return;
     }
 
-    // Ctrl+U: clear line
     if (key.ctrl && input === 'u') {
       dispatch({ type: 'RESET' });
       return;
     }
 
-    // Ctrl+W: delete word backward
     if (key.ctrl && input === 'w') {
       const before = value.slice(0, cursorPos);
       const after = value.slice(cursorPos);
@@ -182,7 +160,6 @@ export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputB
       return;
     }
 
-    // Regular character input
     if (input && !key.ctrl && !key.meta && !key.tab) {
       const newValue = value.slice(0, cursorPos) + input + value.slice(cursorPos);
       const newCursor = cursorPos + input.length;
@@ -190,15 +167,13 @@ export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputB
     }
   });
 
-  // Render the input with a visible cursor
   const before = value.slice(0, cursorPos);
   const cursor = value[cursorPos] ?? ' ';
   const after = value.slice(cursorPos + 1);
 
   return (
     <Box flexDirection="column">
-      {/* Mention autocomplete popup */}
-      {isFocused && mentionFilter !== null && mentionCandidates.length > 0 && (
+      {mentionFilter !== null && mentionCandidates.length > 0 && (
         <Box
           flexDirection="column"
           borderStyle="round"
@@ -218,26 +193,13 @@ export function InputBar({ onSubmit, isFocused, onFocusChange, members }: InputB
           <Text dimColor>Tab/Enter to select, Esc to dismiss</Text>
         </Box>
       )}
-      {/* Input box */}
-      <Box
-        width="100%"
-        height={3}
-        borderStyle="round"
-        borderColor={isFocused ? 'cyan' : '#444444'}
-        paddingX={1}
-      >
-        {isFocused ? (
-          <>
-            <Text color="cyan">{'\u276F'} </Text>
-            <Text>
-              {before}
-              <Text inverse color="cyan">{cursor}</Text>
-              {after}
-            </Text>
-          </>
-        ) : (
-          <Text dimColor>Type a message...  {'\u00B7'}  /help for commands</Text>
-        )}
+      <Box paddingX={1}>
+        <Text color="cyan">{'\u276F'} </Text>
+        <Text>
+          {before}
+          <Text inverse color="cyan">{cursor}</Text>
+          {after}
+        </Text>
       </Box>
     </Box>
   );

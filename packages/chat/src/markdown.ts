@@ -1,19 +1,19 @@
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 
-marked.use(markedTerminal({
-  reflowText: true,
-  width: 80,
-  tab: 2,
-}));
+const DEFAULT_WIDTH = 80;
 
-/**
- * Render markdown text to chalk-styled terminal string.
- * Returns trimmed output with trailing newlines removed.
- */
-export function renderMarkdown(text: string): string {
-  const rendered = marked.parse(text);
+export function renderMarkdown(text: string, width?: number): string {
+  const effectiveWidth = width ?? DEFAULT_WIDTH;
+
+  const instance = new Marked();
+  instance.use(markedTerminal({
+    reflowText: true,
+    width: effectiveWidth,
+    tab: 2,
+  }));
+
+  const rendered = instance.parse(text);
   if (typeof rendered !== 'string') return text;
-  // marked-terminal adds trailing newlines; trim them
   return rendered.replace(/\n+$/, '');
 }

@@ -1,29 +1,33 @@
-import React, { useState, useCallback } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Box, Static, Text, useApp, useInput } from 'ink';
+import type { SkynetMessage } from '@skynet/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { Header } from './Header.js';
-import { Sidebar } from './Sidebar.js';
-import { MessageList } from './MessageList.js';
+import { MessageBlock, SystemMessageBlock } from './MessageBlock.js';
 import { InputBar } from './InputBar.js';
+import { formatMemberList } from '../format.js';
 
 interface AppProps {
   options: UseSkynetOptions;
 }
 
+interface StaticItem {
+  key: string;
+  type: 'message' | 'system' | 'members';
+  message?: SkynetMessage;
+  text?: string;
+  memberLines?: string[];
+}
+
 export function App({ options }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const { state, sendChat, close, agentId } = useSkynet(options);
-  const { rows } = useTerminalSize();
-  const [inputFocused, setInputFocused] = useState(true);
+  const { columns } = useTerminalSize();
   const [showHelp, setShowHelp] = useState(false);
-
-  // Reserve space: header=3 (with border), input=3, remaining for messages+sidebar
-  const contentHeight = Math.max(5, rows - 7);
+  const [memberListCounter, setMemberListCounter] = useState(0);
 
   const handleSubmit = useCallback((text: string) => {
-    // Handle commands
     const cmd = text.toLowerCase().trim();
 
     if (cmd === '/quit' || cmd === '/exit' || cmd === '/q') {
@@ -37,13 +41,11 @@ export function App({ options }: AppProps): React.ReactElement {
     }
 
     if (cmd === '/members' || cmd === '/m') {
-      // Members are visible in the sidebar
+      setMemberListCounter((prev) => prev + 1);
       return;
     }
 
     if (cmd === '/clear' || cmd === '/c') {
-      // Cannot clear messages in the current state model.
-      // System messages could be cleared but messages come from the hook.
       return;
     }
 
@@ -61,7 +63,6 @@ export function App({ options }: AppProps): React.ReactElement {
       if (targetId) {
         sendChat(dmMatch[2], targetId);
       }
-      // If not found, silently ignore (user can check sidebar)
       return;
     }
 
@@ -75,10 +76,30 @@ export function App({ options }: AppProps): React.ReactElement {
     }
   });
 
+  // Build static items list
+  const staticItems = useMemo((): StaticItem[] => {
+    const items: StaticItem[] = [];
+
+    for (const msg of state.messages) {
+      items.push({ key: msg.id, type: 'message', message: msg });
+    }
+
+    for (let i = 0; i < state.systemMessages.length; i++) {
+      items.push({ key: `sys-${i}`, type: 'system', text: state.systemMessages[i] });
+    }
+
+    if (memberListCounter > 0) {
+      const lines = formatMemberList(state.members, agentId);
+      items.push({ key: `members-${memberListCounter}`, type: 'members', memberLines: lines });
+    }
+
+    return items;
+  }, [state.messages, state.systemMessages, state.members, agentId, memberListCounter]);
+
   // Loading state
   if (state.connecting) {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={1}>
+      <Box flexDirection="column" paddingX={1} paddingY={1}>
         <Text>Connecting to <Text bold color="cyan">{options.roomId}</Text> at {options.serverUrl}...</Text>
       </Box>
     );
@@ -87,74 +108,87 @@ export function App({ options }: AppProps): React.ReactElement {
   // Error state
   if (state.error && !state.connected) {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="red" paddingX={2} paddingY={1}>
+      <Box flexDirection="column" paddingX={1} paddingY={1}>
         <Text color="red">Failed to connect: {state.error}</Text>
         <Text dimColor>Press Ctrl+C to exit</Text>
       </Box>
     );
   }
 
+  const statusLine = `${state.connected ? '\u25CF' : '\u25CB'} #${options.roomId} \u00B7 ${state.members.size} members`;
+
   return (
-    <Box flexDirection="column" width="100%" height={rows}>
-      {/* Header */}
-      <Header
-        roomId={options.roomId}
-        connected={state.connected}
-        memberCount={state.members.size}
-      />
+    <>
+      <Static items={staticItems}>
+        {(item) => {
+          if (item.type === 'message' && item.message) {
+            return (
+              <Box key={item.key}>
+                <MessageBlock
+                  message={item.message}
+                  members={state.members}
+                  width={columns}
+                />
+              </Box>
+            );
+          }
+          if (item.type === 'system' && item.text) {
+            return (
+              <Box key={item.key}>
+                <SystemMessageBlock text={item.text} />
+              </Box>
+            );
+          }
+          if (item.type === 'members' && item.memberLines) {
+            return (
+              <Box key={item.key} flexDirection="column">
+                {item.memberLines.map((line, i) => (
+                  <Text key={i} wrap="wrap">{line}</Text>
+                ))}
+              </Box>
+            );
+          }
+          return <Box key={item.key} />;
+        }}
+      </Static>
 
-      {/* Main content area */}
-      <Box flexDirection="row" height={contentHeight}>
-        {/* Messages */}
-        <MessageList
-          messages={state.messages}
-          systemMessages={state.systemMessages}
-          members={state.members}
-          height={contentHeight}
-          isInputFocused={inputFocused}
-        />
-        {/* Sidebar */}
-        <Sidebar members={state.members} height={contentHeight} selfId={agentId} />
-      </Box>
-
-      {/* Input */}
-      <InputBar
-        onSubmit={handleSubmit}
-        isFocused={inputFocused}
-        onFocusChange={setInputFocused}
-        members={state.members}
-      />
-
-      {/* Help overlay */}
-      {showHelp && (
-        <Box
-          flexDirection="column"
-          position="absolute"
-          marginTop={2}
-          marginLeft={2}
-          borderStyle="round"
-          borderColor="cyan"
-          paddingX={2}
-          paddingY={1}
-        >
-          <Text bold> Commands</Text>
-          <Text>  /help, /h       Toggle this help</Text>
-          <Text>  /members, /m    (see sidebar)</Text>
-          <Text>  /clear, /c      Clear messages</Text>
-          <Text>  /quit, /q       Leave and exit</Text>
-          <Text>  @name message   Direct message</Text>
-          <Text />
-          <Text bold> Navigation</Text>
-          <Text>  Up/Down         Input history</Text>
-          <Text>  @name           Autocomplete member</Text>
-          <Text>  PageUp/Down     Scroll messages</Text>
-          <Text>  Shift+G         Jump to bottom</Text>
-          <Text>  Escape          Toggle input focus</Text>
-          <Text>  Ctrl+C          Exit</Text>
-          <Text />
-          <Text dimColor>Press /help again to close</Text>
+      {/* Dynamic bottom area */}
+      <Box flexDirection="column">
+        {/* Status line */}
+        <Box paddingX={1}>
+          <Text dimColor>{statusLine}</Text>
         </Box>
-      )}
-    </Box>
+
+        {/* Input */}
+        <InputBar
+          onSubmit={handleSubmit}
+          members={state.members}
+        />
+
+        {/* Help overlay */}
+        {showHelp && (
+          <Box
+            flexDirection="column"
+            paddingX={2}
+            paddingY={1}
+            borderStyle="round"
+            borderColor="cyan"
+          >
+            <Text bold> Commands</Text>
+            <Text>  /help, /h       Toggle this help</Text>
+            <Text>  /members, /m    Show members</Text>
+            <Text>  /quit, /q       Leave and exit</Text>
+            <Text>  @name message   Direct message</Text>
+            <Text />
+            <Text bold> Input</Text>
+            <Text>  Up/Down         Input history</Text>
+            <Text>  @name           Autocomplete member</Text>
+            <Text>  Ctrl+C          Exit</Text>
+            <Text />
+            <Text dimColor>Press /help again to close</Text>
+          </Box>
+        )}
+      </Box>
+    </>
   );
 }
