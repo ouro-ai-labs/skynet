@@ -127,6 +127,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
     const result = await execa('claude', args, {
       cwd: this.projectRoot,
+      stdin: 'ignore',
       timeout: 300_000, // 5 min timeout
     });
 
