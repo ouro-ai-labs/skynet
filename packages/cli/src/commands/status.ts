@@ -1,21 +1,21 @@
 import { Command } from 'commander';
-import { loadConfig } from '../config.js';
+import { selectServer, getServerUrl } from '../utils/server-select.js';
 
 export function registerStatusCommand(program: Command): void {
-  const config = loadConfig();
-
   program
     .command('status')
     .description('Show Skynet server and room status')
     .argument('[room-id]', 'Optional room ID for details')
-    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
+    .option('--server <id>', 'Server UUID or name')
     .action(async (roomId, opts) => {
+      const workspace = await selectServer(opts);
+      const url = getServerUrl(workspace);
+
       try {
         if (roomId) {
-          // Show room details
           const [membersRes, messagesRes] = await Promise.all([
-            fetch(`${opts.server}/api/rooms/${roomId}/members`),
-            fetch(`${opts.server}/api/rooms/${roomId}/messages?limit=10`),
+            fetch(`${url}/api/rooms/${roomId}/members`),
+            fetch(`${url}/api/rooms/${roomId}/messages?limit=10`),
           ]);
 
           const members = await membersRes.json();
@@ -32,20 +32,19 @@ export function registerStatusCommand(program: Command): void {
             console.log(`  [${time}] ${msg.from}: ${msg.type}`);
           }
         } else {
-          // Show all rooms
-          const res = await fetch(`${opts.server}/api/rooms`);
+          const res = await fetch(`${url}/api/rooms`);
           const rooms = await res.json();
 
-          console.log('Skynet Server Status');
-          console.log(`Server: ${opts.server}`);
+          console.log(`Skynet Server Status: ${workspace.name}`);
+          console.log(`Server: ${url}`);
           console.log(`\nRooms (${(rooms as unknown[]).length}):`);
-          for (const r of rooms as Array<{ id: string; memberCount: number }>) {
-            console.log(`  - ${r.id} (${r.memberCount} members)`);
+          for (const r of rooms as Array<{ id: string; name: string; memberCount: number }>) {
+            console.log(`  - ${r.name} (${r.memberCount} members) [${r.id}]`);
           }
         }
-      } catch (err) {
-        console.error(`Failed to connect to server at ${opts.server}`);
-        console.error('Is the server running? Start it with: skynet server start');
+      } catch {
+        console.error(`Failed to connect to server at ${url}`);
+        console.error('Is the server running? Start it with: skynet server');
         process.exit(1);
       }
     });

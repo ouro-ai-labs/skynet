@@ -1,12 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import type { WebSocket, RawData } from 'ws';
 import {
   type SkynetMessage,
   type AgentCard,
+  type AgentProfile,
+  type HumanProfile,
   type JoinRequest,
   type AgentJoinPayload,
   type AgentLeavePayload,
+  type MemberType,
+  AgentType,
   MessageType,
   ClientAction,
   createMessage,
@@ -42,33 +47,54 @@ export class SkynetServer {
   async start(): Promise<void> {
     await this.fastify.register(websocket);
 
-    // HTTP health check
+    this.registerHealthRoutes();
+    this.registerRoomRoutes();
+    this.registerAgentRoutes();
+    this.registerHumanRoutes();
+    this.registerNameRoutes();
+    this.registerWebSocket();
+
+    const port = this.options.port ?? 4117;
+    const host = this.options.host ?? '0.0.0.0';
+    await this.fastify.listen({ port, host });
+  }
+
+  private registerHealthRoutes(): void {
     this.fastify.get('/health', async () => ({ status: 'ok', rooms: this.rooms.listRooms() }));
+  }
 
-    // HTTP: list rooms
-    this.fastify.get('/api/rooms', async () => this.rooms.listRooms());
+  private registerRoomRoutes(): void {
+    // List rooms
+    this.fastify.get('/api/rooms', async () => {
+      const persisted = this.store.listRooms();
+      return persisted.map((r) => {
+        const room = this.rooms.get(r.id);
+        return { id: r.id, name: r.name, memberCount: room?.size ?? 0 };
+      });
+    });
 
-    // HTTP: get room members
+    // Get room members (connected WebSocket members)
     this.fastify.get<{ Params: { roomId: string } }>('/api/rooms/:roomId/members', async (req) => {
       const room = this.rooms.get(req.params.roomId);
       return room ? room.getMembers() : [];
     });
 
-    // HTTP: create room
-    this.fastify.post<{ Body: { roomId: string } }>('/api/rooms', async (req, reply) => {
-      const { roomId } = req.body;
-      if (!roomId || typeof roomId !== 'string') {
-        return reply.status(400).send({ error: 'roomId is required' });
+    // Create room (now takes { name } and auto-generates UUID)
+    this.fastify.post<{ Body: { name: string } }>('/api/rooms', async (req, reply) => {
+      const { name } = req.body;
+      if (!name || typeof name !== 'string') {
+        return reply.status(400).send({ error: 'name is required' });
       }
-      const room = this.rooms.create(roomId);
-      if (!room) {
-        return reply.status(409).send({ error: `Room '${roomId}' already exists` });
+      if (!this.store.checkNameUnique(name)) {
+        return reply.status(409).send({ error: `Name '${name}' is already taken` });
       }
-      this.store.saveRoom(roomId);
-      return reply.status(201).send({ id: room.id, memberCount: 0 });
+      const id = randomUUID();
+      this.store.saveRoom({ id, name });
+      this.rooms.getOrCreate(id);
+      return reply.status(201).send({ id, name, memberCount: 0 });
     });
 
-    // HTTP: destroy room
+    // Destroy room
     this.fastify.delete<{ Params: { roomId: string } }>('/api/rooms/:roomId', async (req, reply) => {
       const result = this.rooms.remove(req.params.roomId);
       if (!result.removed) {
@@ -78,7 +104,7 @@ export class SkynetServer {
       return { ok: true };
     });
 
-    // HTTP: get room messages
+    // Get room messages
     this.fastify.get<{ Params: { roomId: string }; Querystring: { limit?: string; before?: string } }>(
       '/api/rooms/:roomId/messages',
       async (req) => {
@@ -88,14 +114,177 @@ export class SkynetServer {
       },
     );
 
-    // WebSocket endpoint
+    // Get room registered members (from DB, not WebSocket connections)
+    this.fastify.get<{ Params: { roomId: string } }>('/api/rooms/:roomId/registered-members', async (req) => {
+      return this.store.getRoomMembers(req.params.roomId);
+    });
+  }
+
+  private registerAgentRoutes(): void {
+    // Create agent
+    this.fastify.post<{ Body: { name: string; type: string; role?: string; persona?: string } }>(
+      '/api/agents',
+      async (req, reply) => {
+        const { name, type, role, persona } = req.body;
+        if (!name || typeof name !== 'string') {
+          return reply.status(400).send({ error: 'name is required' });
+        }
+        if (!type || typeof type !== 'string') {
+          return reply.status(400).send({ error: 'type is required' });
+        }
+        if (!this.store.checkNameUnique(name)) {
+          return reply.status(409).send({ error: `Name '${name}' is already taken` });
+        }
+        const agent: AgentProfile = {
+          id: randomUUID(),
+          name,
+          type: type as AgentType,
+          role,
+          persona,
+          createdAt: Date.now(),
+        };
+        this.store.saveAgent(agent);
+        return reply.status(201).send(agent);
+      },
+    );
+
+    // List agents
+    this.fastify.get('/api/agents', async () => this.store.listAgents());
+
+    // Get agent by ID or name
+    this.fastify.get<{ Params: { id: string } }>('/api/agents/:id', async (req, reply) => {
+      const agent = this.store.getAgent(req.params.id);
+      if (!agent) {
+        return reply.status(404).send({ error: 'Agent not found' });
+      }
+      return agent;
+    });
+
+    // Agent joins room
+    this.fastify.post<{ Params: { id: string; roomId: string } }>(
+      '/api/agents/:id/join/:roomId',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const roomId = this.resolveRoomId(req.params.roomId);
+        if (!roomId) {
+          return reply.status(404).send({ error: 'Room not found' });
+        }
+        this.store.addRoomMember(roomId, agent.id, 'agent');
+        return { ok: true, roomId, agentId: agent.id };
+      },
+    );
+
+    // Agent leaves room
+    this.fastify.post<{ Params: { id: string; roomId: string } }>(
+      '/api/agents/:id/leave/:roomId',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const roomId = this.resolveRoomId(req.params.roomId);
+        if (!roomId) {
+          return reply.status(404).send({ error: 'Room not found' });
+        }
+        this.store.removeRoomMember(roomId, agent.id);
+        return { ok: true };
+      },
+    );
+  }
+
+  private registerHumanRoutes(): void {
+    // Create human
+    this.fastify.post<{ Body: { name: string } }>('/api/humans', async (req, reply) => {
+      const { name } = req.body;
+      if (!name || typeof name !== 'string') {
+        return reply.status(400).send({ error: 'name is required' });
+      }
+      if (!this.store.checkNameUnique(name)) {
+        return reply.status(409).send({ error: `Name '${name}' is already taken` });
+      }
+      const human: HumanProfile = {
+        id: randomUUID(),
+        name,
+        createdAt: Date.now(),
+      };
+      this.store.saveHuman(human);
+      return reply.status(201).send(human);
+    });
+
+    // List humans
+    this.fastify.get('/api/humans', async () => this.store.listHumans());
+
+    // Get human by ID or name
+    this.fastify.get<{ Params: { id: string } }>('/api/humans/:id', async (req, reply) => {
+      const human = this.store.getHuman(req.params.id);
+      if (!human) {
+        return reply.status(404).send({ error: 'Human not found' });
+      }
+      return human;
+    });
+
+    // Human joins room
+    this.fastify.post<{ Params: { id: string; roomId: string } }>(
+      '/api/humans/:id/join/:roomId',
+      async (req, reply) => {
+        const human = this.store.getHuman(req.params.id);
+        if (!human) {
+          return reply.status(404).send({ error: 'Human not found' });
+        }
+        const roomId = this.resolveRoomId(req.params.roomId);
+        if (!roomId) {
+          return reply.status(404).send({ error: 'Room not found' });
+        }
+        this.store.addRoomMember(roomId, human.id, 'human');
+        return { ok: true, roomId, humanId: human.id };
+      },
+    );
+
+    // Human leaves room
+    this.fastify.post<{ Params: { id: string; roomId: string } }>(
+      '/api/humans/:id/leave/:roomId',
+      async (req, reply) => {
+        const human = this.store.getHuman(req.params.id);
+        if (!human) {
+          return reply.status(404).send({ error: 'Human not found' });
+        }
+        const roomId = this.resolveRoomId(req.params.roomId);
+        if (!roomId) {
+          return reply.status(404).send({ error: 'Room not found' });
+        }
+        this.store.removeRoomMember(roomId, human.id);
+        return { ok: true };
+      },
+    );
+  }
+
+  private registerNameRoutes(): void {
+    this.fastify.get<{ Querystring: { name: string } }>('/api/names/check', async (req, reply) => {
+      const { name } = req.query;
+      if (!name) {
+        return reply.status(400).send({ error: 'name query parameter is required' });
+      }
+      return { available: this.store.checkNameUnique(name) };
+    });
+  }
+
+  private registerWebSocket(): void {
     this.fastify.get('/ws', { websocket: true }, (socket) => {
       this.handleConnection(socket);
     });
+  }
 
-    const port = this.options.port ?? 4117;
-    const host = this.options.host ?? '0.0.0.0';
-    await this.fastify.listen({ port, host });
+  private resolveRoomId(idOrName: string): string | undefined {
+    // Try direct ID lookup first
+    const rooms = this.store.listRooms();
+    const byId = rooms.find((r) => r.id === idOrName);
+    if (byId) return byId.id;
+    // Try name lookup
+    const byName = this.store.getRoomByName(idOrName);
+    return byName?.id;
   }
 
   private handleConnection(socket: WebSocket): void {
@@ -134,7 +323,11 @@ export class SkynetServer {
 
   private handleJoin(socket: WebSocket, req: JoinRequest): void {
     const room = this.rooms.getOrCreate(req.roomId);
-    this.store.saveRoom(req.roomId);
+    // Ensure the room exists in the store (for WebSocket-created rooms, use roomId as name fallback)
+    const existing = this.store.listRooms().find((r) => r.id === req.roomId);
+    if (!existing) {
+      this.store.saveRoom({ id: req.roomId, name: req.roomId });
+    }
     room.join(req.agent, socket);
     this.socketAgentMap.set(socket, { agentId: req.agent.agentId, roomId: req.roomId });
 
@@ -191,7 +384,6 @@ export class SkynetServer {
     } else {
       // Broadcast (including back to sender)
       room.broadcast(fullMsg);
-      // Everyone already received it, no need to send to mentions individually
       return;
     }
 

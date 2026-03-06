@@ -1,67 +1,59 @@
+import { join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { Command } from 'commander';
-import { randomUUID } from 'node:crypto';
 import { AgentType } from '@skynet/protocol';
+import type { AgentProfile } from '@skynet/protocol';
 import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet/agent-adapter';
-import { loadConfig } from '../config.js';
+import { getWorkspaceDir } from '../config.js';
+import { selectServer, getServerUrl } from '../utils/server-select.js';
 
 export function registerAgentCommand(program: Command): void {
-  const agent = program.command('agent').description('Manage agents');
+  const agent = program
+    .command('agent')
+    .description('Manage agents')
+    .option('--server <id>', 'Server UUID or name')
+    .action(async (opts) => {
+      // Bare `skynet agent`: select server → select agent → start idle
+      const workspace = await selectServer(opts);
+      const url = getServerUrl(workspace);
 
-  const config = loadConfig();
-
-  agent
-    .command('start')
-    .description('Connect an agent to a Skynet room')
-    .argument('<room-id>', 'Room ID to join')
-    .option('-s, --server <url>', 'Server URL', config.client.serverUrl)
-    .option('-t, --type <type>', 'Agent type (claude-code, gemini-cli, codex-cli)')
-    .option('-n, --name <name>', 'Agent display name')
-    .option('--persona <file>', 'Path to persona markdown file')
-    .option('--project-root <path>', 'Project root directory', process.cwd())
-    .action(async (roomId, opts) => {
-      let agentType: AgentType;
-
-      if (opts.type) {
-        agentType = opts.type as AgentType;
-      } else {
-        // Auto-detect and let user choose
-        console.log('Detecting available agents...');
-        const detected = await detectAvailableAgents(opts.projectRoot);
-        const available = detected.filter((d) => d.available);
-
-        if (available.length === 0) {
-          console.error('No supported agents detected. Install claude, gemini, or codex CLI.');
-          process.exit(1);
-        }
-
-        console.log('Available agents:');
-        available.forEach((d, i) => console.log(`  [${i + 1}] ${d.name}`));
-
-        // Use inquirer for interactive selection
-        const { default: inquirer } = await import('inquirer');
-        const { choice } = await inquirer.prompt([{
-          type: 'list',
-          name: 'choice',
-          message: 'Select agent:',
-          choices: available.map((d) => ({ name: d.name, value: d.type })),
-        }]);
-        agentType = choice;
+      let agents: AgentProfile[];
+      try {
+        const res = await fetch(`${url}/api/agents`);
+        agents = await res.json() as AgentProfile[];
+      } catch {
+        console.error(`Failed to connect to server at ${url}`);
+        process.exit(1);
       }
 
-      let persona: string | undefined;
-      if (opts.persona) {
-        const { readFile } = await import('node:fs/promises');
-        persona = await readFile(opts.persona, 'utf-8');
+      if (agents.length === 0) {
+        console.error('No agents registered. Run \'skynet agent new\' to create one.');
+        process.exit(1);
       }
 
-      const adapter = createAdapter(agentType, opts.projectRoot);
+      const { default: inquirer } = await import('inquirer');
+      const { selected } = await inquirer.prompt([{
+        type: 'list',
+        name: 'selected',
+        message: 'Select agent:',
+        choices: agents.map((a) => ({
+          name: `${a.name} (${a.type})${a.role ? ` - ${a.role}` : ''}`,
+          value: a,
+        })),
+      }]);
+
+      const agentProfile = selected as AgentProfile;
+      const wsDir = getWorkspaceDir(workspace.id);
+      const workDir = join(wsDir, agentProfile.id, 'work');
+
+      const adapter = createAdapter(agentProfile.type as AgentType, workDir);
       const runner = new AgentRunner({
-        serverUrl: opts.server,
-        roomId,
+        serverUrl: url,
+        roomId: '__idle__',
         adapter,
-        agentName: opts.name,
-        persona,
-        projectRoot: opts.projectRoot,
+        agentName: agentProfile.name,
+        persona: agentProfile.persona,
+        projectRoot: workDir,
       });
 
       process.on('SIGINT', async () => {
@@ -70,9 +62,164 @@ export function registerAgentCommand(program: Command): void {
         process.exit(0);
       });
 
-      const state = await runner.start();
-      console.log(`Agent "${runner.agentName}" connected to room "${roomId}"`);
-      console.log(`Members in room: ${state.members.map((m: { name: string }) => m.name).join(', ')}`);
-      console.log('Listening for messages... (Ctrl+C to quit)');
+      console.log(`Agent "${agentProfile.name}" started in idle state.`);
+      console.log('Use join commands to add to rooms.');
+      console.log('Press Ctrl+C to stop.');
+
+      // Keep process alive
+      await new Promise(() => {});
+    });
+
+  agent
+    .command('new')
+    .description('Create a new agent')
+    .option('--server <id>', 'Server UUID or name')
+    .action(async (opts) => {
+      const workspace = await selectServer(opts);
+      const url = getServerUrl(workspace);
+
+      const { default: inquirer } = await import('inquirer');
+
+      console.log('Detecting available agent types...');
+      const detected = await detectAvailableAgents(process.cwd());
+      const available = detected.filter((d) => d.available);
+
+      const typeChoices = available.length > 0
+        ? available.map((d) => ({ name: d.name, value: d.type }))
+        : [
+            { name: 'Claude Code', value: AgentType.CLAUDE_CODE },
+            { name: 'Gemini CLI', value: AgentType.GEMINI_CLI },
+            { name: 'Codex CLI', value: AgentType.CODEX_CLI },
+            { name: 'Generic', value: AgentType.GENERIC },
+          ];
+
+      const answers = await inquirer.prompt([
+        { type: 'input', name: 'name', message: 'Agent name:', validate: (v: string) => v.trim() ? true : 'Name is required' },
+        { type: 'list', name: 'type', message: 'Agent type:', choices: typeChoices },
+        { type: 'input', name: 'role', message: 'Role (optional):' },
+        { type: 'input', name: 'persona', message: 'Persona description (optional):' },
+      ]);
+
+      try {
+        const res = await fetch(`${url}/api/agents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: answers.name.trim(),
+            type: answers.type,
+            role: answers.role || undefined,
+            persona: answers.persona || undefined,
+          }),
+        });
+
+        if (res.status === 201) {
+          const body = await res.json() as AgentProfile;
+          console.log(`Agent '${body.name}' created. (ID: ${body.id})`);
+
+          // Create local agent directory and profile
+          const agentDir = join(getWorkspaceDir(workspace.id), body.id);
+          mkdirSync(join(agentDir, 'work'), { recursive: true });
+
+          const profile = [
+            `# ${body.name}`,
+            '',
+            `- Type: ${body.type}`,
+            body.role ? `- Role: ${body.role}` : null,
+            body.persona ? `- Persona: ${body.persona}` : null,
+          ].filter(Boolean).join('\n') + '\n';
+          writeFileSync(join(agentDir, 'profile.md'), profile, 'utf-8');
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed to create agent: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to server at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  agent
+    .command('list')
+    .description('List all agents')
+    .option('--server <id>', 'Server UUID or name')
+    .action(async (opts) => {
+      const workspace = await selectServer(opts);
+      const url = getServerUrl(workspace);
+
+      try {
+        const res = await fetch(`${url}/api/agents`);
+        const agents = await res.json() as AgentProfile[];
+
+        if (agents.length === 0) {
+          console.log('No agents.');
+          return;
+        }
+
+        console.log(`Agents (${agents.length}):`);
+        for (const a of agents) {
+          console.log(`  - ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id}]`);
+        }
+      } catch {
+        console.error(`Failed to connect to server at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  agent
+    .command('join')
+    .description('Add an agent to a room')
+    .argument('<agent>', 'Agent name or UUID')
+    .argument('<room>', 'Room name or UUID')
+    .option('--server <id>', 'Server UUID or name')
+    .action(async (agentId: string, roomId: string, opts) => {
+      const workspace = await selectServer(opts);
+      const url = getServerUrl(workspace);
+
+      try {
+        const res = await fetch(`${url}/api/agents/${encodeURIComponent(agentId)}/join/${encodeURIComponent(roomId)}`, {
+          method: 'POST',
+        });
+
+        if (res.ok) {
+          const body = await res.json() as { roomId: string; agentId: string };
+          console.log(`Agent joined room. (agent: ${body.agentId}, room: ${body.roomId})`);
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to server at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  agent
+    .command('leave')
+    .description('Remove an agent from a room')
+    .argument('<agent>', 'Agent name or UUID')
+    .argument('<room>', 'Room name or UUID')
+    .option('--server <id>', 'Server UUID or name')
+    .action(async (agentId: string, roomId: string, opts) => {
+      const workspace = await selectServer(opts);
+      const url = getServerUrl(workspace);
+
+      try {
+        const res = await fetch(`${url}/api/agents/${encodeURIComponent(agentId)}/leave/${encodeURIComponent(roomId)}`, {
+          method: 'POST',
+        });
+
+        if (res.ok) {
+          console.log('Agent left room.');
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to server at ${url}`);
+        process.exit(1);
+      }
     });
 }

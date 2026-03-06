@@ -22,6 +22,32 @@ export interface AgentCard {
   persona?: string;
 }
 
+// ── Entity Profiles ──
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  type: AgentType;
+  role?: string;
+  persona?: string;
+  createdAt: number;
+}
+
+export interface HumanProfile {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+export type MemberType = 'agent' | 'human';
+
+export interface RoomMembership {
+  roomId: string;
+  memberId: string;
+  memberType: MemberType;
+  joinedAt: number;
+}
+
 // ── Message Types ──
 
 export enum MessageType {
