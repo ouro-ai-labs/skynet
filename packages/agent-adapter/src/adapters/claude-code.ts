@@ -1,5 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { execa, execaCommand } from 'execa';
 import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
@@ -8,28 +7,28 @@ export interface ClaudeCodeOptions {
   projectRoot: string;
   allowedTools?: string[];
   model?: string;
-  sessionStorePath?: string;
 }
 
 export class ClaudeCodeAdapter extends AgentAdapter {
   readonly type = AgentType.CLAUDE_CODE;
   readonly name = 'claude-code';
-  private roomId: string | null = null;
   private projectRoot: string;
   private allowedTools?: string[];
   private model?: string;
-  private sessionStorePath: string;
+  private sessionId: string = randomUUID();
+  private sessionStarted = false;
 
   constructor(options: ClaudeCodeOptions) {
     super();
     this.projectRoot = options.projectRoot;
     this.allowedTools = options.allowedTools;
     this.model = options.model;
-    this.sessionStorePath = options.sessionStorePath ?? join(options.projectRoot, '.skynet', 'sessions.json');
   }
 
-  override setRoomId(roomId: string): void {
-    this.roomId = roomId;
+  override setRoomId(_roomId: string): void {
+    // Reset session for new room
+    this.sessionId = randomUUID();
+    this.sessionStarted = false;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -86,29 +85,6 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
-  private loadSessionId(): string | null {
-    if (!this.roomId) return null;
-    try {
-      const data = JSON.parse(readFileSync(this.sessionStorePath, 'utf-8')) as Record<string, string>;
-      return data[this.roomId] ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  private saveSessionId(sessionId: string): void {
-    if (!this.roomId) return;
-    let data: Record<string, string> = {};
-    try {
-      data = JSON.parse(readFileSync(this.sessionStorePath, 'utf-8')) as Record<string, string>;
-    } catch {
-      // File doesn't exist yet
-    }
-    data[this.roomId] = sessionId;
-    mkdirSync(join(this.sessionStorePath, '..'), { recursive: true });
-    writeFileSync(this.sessionStorePath, JSON.stringify(data, null, 2));
-  }
-
   private async runClaude(prompt: string): Promise<string> {
     const args = ['-p', prompt, '--output-format', 'text'];
 
@@ -120,9 +96,12 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       args.push('--model', this.model);
     }
 
-    const sessionId = this.loadSessionId();
-    if (sessionId) {
-      args.push('--resume', sessionId);
+    if (this.sessionStarted) {
+      // Continue existing session
+      args.push('--resume', this.sessionId);
+    } else {
+      // First call: create session with pre-assigned ID
+      args.push('--session-id', this.sessionId);
     }
 
     const result = await execa('claude', args, {
@@ -131,11 +110,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       timeout: 300_000, // 5 min timeout
     });
 
-    // Try to capture session ID from output for context continuity
-    const sessionMatch = result.stderr?.match(/session[:\s]+([a-f0-9-]+)/i);
-    if (sessionMatch) {
-      this.saveSessionId(sessionMatch[1]);
-    }
+    this.sessionStarted = true;
 
     return result.stdout;
   }
