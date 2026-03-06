@@ -17,6 +17,7 @@ export interface SkynetClientOptions {
   roomId: string;
   reconnect?: boolean;
   reconnectInterval?: number;
+  maxReconnectInterval?: number;
   heartbeatInterval?: number;
 }
 
@@ -32,12 +33,15 @@ export class SkynetClient extends EventEmitter {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _connected = false;
   private _closed = false;
+  private _reconnecting = false;
+  private _reconnectAttempt = 0;
 
   readonly agent: AgentCard;
   readonly roomId: string;
   private serverUrl: string;
   private reconnect: boolean;
   private reconnectInterval: number;
+  private maxReconnectInterval: number;
   private heartbeatInterval: number;
 
   constructor(options: SkynetClientOptions) {
@@ -46,7 +50,8 @@ export class SkynetClient extends EventEmitter {
     this.agent = options.agent;
     this.roomId = options.roomId;
     this.reconnect = options.reconnect ?? true;
-    this.reconnectInterval = options.reconnectInterval ?? 3000;
+    this.reconnectInterval = options.reconnectInterval ?? 1000;
+    this.maxReconnectInterval = options.maxReconnectInterval ?? 30000;
     this.heartbeatInterval = options.heartbeatInterval ?? 30000;
   }
 
@@ -61,6 +66,8 @@ export class SkynetClient extends EventEmitter {
 
       this.ws.on('open', () => {
         this._connected = true;
+        this._reconnecting = false;
+        this._reconnectAttempt = 0;
         this.send({ action: ClientAction.JOIN, data: { roomId: this.roomId, agent: this.agent } satisfies JoinRequest });
         this.startHeartbeat();
       });
@@ -119,13 +126,15 @@ export class SkynetClient extends EventEmitter {
       this.ws.on('close', () => {
         this._connected = false;
         this.stopHeartbeat();
-        this.emit('disconnected');
 
-        if (this.reconnect && !this._closed) {
-          this.reconnectTimer = setTimeout(() => {
-            this.emit('reconnecting');
-            this.connect().catch((err) => this.emit('error', err));
-          }, this.reconnectInterval);
+        if (this._reconnecting) {
+          // During reconnection, don't emit 'disconnected' again — just schedule next attempt
+          this.scheduleReconnect();
+        } else {
+          this.emit('disconnected');
+          if (this.reconnect && !this._closed) {
+            this.scheduleReconnect();
+          }
         }
       });
 
@@ -134,7 +143,10 @@ export class SkynetClient extends EventEmitter {
           resolved = true;
           reject(err);
         }
-        this.emit('error', err);
+        // Suppress error events during reconnection to avoid spam
+        if (!this._reconnecting) {
+          this.emit('error', err);
+        }
       });
     });
   }
@@ -197,9 +209,26 @@ export class SkynetClient extends EventEmitter {
     }
     if (this.ws) {
       this.send({ action: ClientAction.LEAVE, data: {} });
-      this.ws.close();
+      this.ws.removeAllListeners();
+      this.ws.terminate();
       this.ws = null;
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this._closed) return;
+    this._reconnecting = true;
+    this._reconnectAttempt++;
+    const delay = Math.min(
+      this.reconnectInterval * Math.pow(2, this._reconnectAttempt - 1),
+      this.maxReconnectInterval,
+    );
+    this.emit('reconnecting', { attempt: this._reconnectAttempt, delay });
+    this.reconnectTimer = setTimeout(() => {
+      this.connect().catch(() => {
+        // Error is handled by the 'close' event which will schedule another attempt
+      });
+    }, delay);
   }
 
   private send(envelope: { action: string; data: unknown }): void {
