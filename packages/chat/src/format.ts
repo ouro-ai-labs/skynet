@@ -67,106 +67,190 @@ export function createAgentResolver(members: Map<string, AgentCard>): AgentResol
   };
 }
 
-// Indent padding for message body lines (aligns under sender name)
-const BODY_INDENT = '       ';
+// ── Claude Code style markers ──
 
-export function formatMessage(msg: SkynetMessage, resolve: AgentResolver): string[] {
+const MARKER = '\u23FA'; // ⏺
+const CONT = '\u23BF';   // ⎿
+
+function markerColored(type: AgentType): string {
+  const color = AGENT_COLORS[type] ?? '#888888';
+  return chalk.hex(color)(MARKER);
+}
+
+function contColored(type: AgentType): string {
+  const color = AGENT_COLORS[type] ?? '#888888';
+  return chalk.hex(color)(CONT);
+}
+
+const BODY_PREFIX = '  ';
+const BODY_CONTINUATION = '     ';
+
+function formatTimestampDim(ms: number): string {
+  const d = new Date(ms);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return dimText(`(${h}:${m})`);
+}
+
+export function formatMessage(msg: SkynetMessage, resolve: AgentResolver, width?: number): string[] {
   switch (msg.type) {
     case MessageType.CHAT:
-      return formatChat(msg, resolve);
+      return formatChat(msg, resolve, width);
     case MessageType.TASK_ASSIGN:
-      return [formatTaskAssign(msg, resolve), ''];
+      return formatTaskAssign(msg, resolve);
     case MessageType.TASK_UPDATE:
-      return [formatTaskUpdate(msg, resolve), ''];
+      return formatTaskUpdate(msg, resolve);
     case MessageType.TASK_RESULT:
-      return [formatTaskResult(msg, resolve), ''];
+      return formatTaskResult(msg, resolve);
     case MessageType.CONTEXT_SHARE:
-      return [formatContextShare(msg, resolve), ''];
+      return formatContextShare(msg, resolve);
     case MessageType.FILE_CHANGE:
-      return [formatFileChange(msg, resolve), ''];
+      return formatFileChange(msg, resolve);
     case MessageType.AGENT_JOIN:
-      return [formatJoin(msg)];
+      return formatJoin(msg);
     case MessageType.AGENT_LEAVE:
-      return [formatLeave(msg, resolve)];
+      return formatLeave(msg, resolve);
     default:
-      return [`${formatTimestamp(msg.timestamp)} ${dimText(`[${msg.type}]`)} ${JSON.stringify(msg.payload)}`, ''];
+      return [
+        `${markerColored(AgentType.GENERIC)} ${dimText(`[${msg.type}]`)} ${formatTimestampDim(msg.timestamp)}`,
+        `${BODY_PREFIX}${contColored(AgentType.GENERIC)}  ${JSON.stringify(msg.payload)}`,
+        '',
+      ];
   }
 }
 
-export function formatChat(msg: SkynetMessage, resolve: AgentResolver): string[] {
+export function formatChat(msg: SkynetMessage, resolve: AgentResolver, width?: number): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as ChatPayload;
   const dm = msg.to
     ? ` ${dimText('->')} ${agentNameColored(resolve(msg.to).name, resolve(msg.to).type)}`
     : '';
-  const color = AGENT_COLORS[s.type] ?? '#888888';
-  const bar = chalk.hex(color)('│');
 
-  // Header: timestamp + sender name
-  const header = `${formatTimestamp(msg.timestamp)} ${agentNameColored(s.name, s.type)}${dm}`;
+  const header = `${markerColored(s.type)} ${agentNameColored(s.name, s.type)}${dm} ${formatTimestampDim(msg.timestamp)}`;
 
-  // Render body with markdown
-  const rendered = renderMarkdown(p.text);
+  const rendered = renderMarkdown(p.text, width);
   const bodyLines = rendered.split('\n');
   const lines: string[] = [header];
-  for (const line of bodyLines) {
-    lines.push(`${BODY_INDENT}${bar} ${line}`);
+
+  for (let i = 0; i < bodyLines.length; i++) {
+    if (i === 0) {
+      lines.push(`${BODY_PREFIX}${contColored(s.type)}  ${bodyLines[i]}`);
+    } else {
+      lines.push(`${BODY_CONTINUATION}${bodyLines[i]}`);
+    }
   }
-  lines.push(''); // blank separator after message
+  lines.push('');
   return lines;
 }
 
-export function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as TaskPayload;
   const to = p.assignee
-    ? ` ${chalk.white('->')} ${agentNameColored(resolve(p.assignee).name, resolve(p.assignee).type)}`
+    ? ` -> ${agentNameColored(resolve(p.assignee).name, resolve(p.assignee).type)}`
     : '';
-  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('◆')} ${chalk.yellow('task')} ${agentNameColored(s.name, s.type)} assigned ${chalk.bold(p.title)}${to}`;
+
+  return [
+    `${markerColored(s.type)} ${agentNameColored(s.name, s.type)} ${formatTimestampDim(msg.timestamp)}`,
+    `${BODY_PREFIX}${contColored(s.type)}  ${chalk.yellow('\u25C6')} task: ${chalk.bold(p.title)}${to}`,
+    '',
+  ];
 }
 
-export function formatTaskUpdate(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatTaskUpdate(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as { taskId: string; status: string };
-  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('◆')} ${chalk.yellow('task')} ${agentNameColored(s.name, s.type)} ${dimText(p.taskId.slice(0, 8))} -> ${chalk.bold(p.status)}`;
+
+  return [
+    `${markerColored(s.type)} ${agentNameColored(s.name, s.type)} ${formatTimestampDim(msg.timestamp)}`,
+    `${BODY_PREFIX}${contColored(s.type)}  ${chalk.yellow('\u25C6')} task ${dimText(p.taskId.slice(0, 8))} -> ${chalk.bold(p.status)}`,
+    '',
+  ];
 }
 
-export function formatTaskResult(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatTaskResult(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as TaskResultPayload;
   const icon = p.success ? chalk.green('OK') : chalk.red('FAIL');
-  return `${formatTimestamp(msg.timestamp)} ${chalk.yellow('◆')} ${chalk.yellow('result')} ${agentNameColored(s.name, s.type)} [${icon}] ${p.summary}`;
+
+  return [
+    `${markerColored(s.type)} ${agentNameColored(s.name, s.type)} ${formatTimestampDim(msg.timestamp)}`,
+    `${BODY_PREFIX}${contColored(s.type)}  ${chalk.yellow('\u25C6')} result [${icon}] ${p.summary}`,
+    '',
+  ];
 }
 
-export function formatContextShare(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatContextShare(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as ContextSharePayload;
-  return `${formatTimestamp(msg.timestamp)} ${chalk.cyan('◇')} ${chalk.cyan('context')} ${agentNameColored(s.name, s.type)} shared ${p.files?.length ?? 0} file(s)`;
+
+  return [
+    `${markerColored(s.type)} ${agentNameColored(s.name, s.type)} ${formatTimestampDim(msg.timestamp)}`,
+    `${BODY_PREFIX}${contColored(s.type)}  ${chalk.cyan('\u25C7')} shared ${p.files?.length ?? 0} file(s)`,
+    '',
+  ];
 }
 
-export function formatFileChange(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatFileChange(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const p = msg.payload as FileChangePayload;
   const a = resolve(p.agentId);
   const icons: Record<string, string> = {
-    created: chalk.green('+ created'),
-    modified: chalk.yellow('~ modified'),
-    deleted: chalk.red('- deleted'),
+    created: chalk.green('+'),
+    modified: chalk.yellow('~'),
+    deleted: chalk.red('-'),
   };
   const icon = icons[p.changeType] ?? chalk.white(p.changeType);
-  return `${formatTimestamp(msg.timestamp)} ${icon} ${agentNameColored(a.name, a.type)} ${p.path}`;
+
+  return [
+    `${markerColored(a.type)} ${agentNameColored(a.name, a.type)} ${formatTimestampDim(msg.timestamp)}`,
+    `${BODY_PREFIX}${contColored(a.type)}  ${icon} ${p.path}`,
+    '',
+  ];
 }
 
-export function formatJoin(msg: SkynetMessage): string {
+export function formatJoin(msg: SkynetMessage): string[] {
   const p = msg.payload as AgentJoinPayload;
-  return `  ${chalk.green('→')} ${agentNameColored(p.agent.name, p.agent.type)} ${agentTag(p.agent.type)} joined`;
+
+  return [
+    `${markerColored(p.agent.type)} ${dimText('system')}`,
+    `${BODY_PREFIX}${contColored(p.agent.type)}  ${agentNameColored(p.agent.name, p.agent.type)} ${agentTag(p.agent.type)} joined`,
+    '',
+  ];
 }
 
-export function formatLeave(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatLeave(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const p = msg.payload as AgentLeavePayload;
   const a = resolve(p.agentId);
-  return `  ${chalk.red('←')} ${agentNameColored(a.name, a.type)} left`;
+
+  return [
+    `${markerColored(a.type)} ${dimText('system')}`,
+    `${BODY_PREFIX}${contColored(a.type)}  ${agentNameColored(a.name, a.type)} left`,
+    '',
+  ];
 }
 
 export function formatSystemMessage(text: string): string {
-  return `  ${chalk.hex('#555555')('·')} ${dimText(text)}`;
+  return `${markerColored(AgentType.MONITOR)} ${dimText('system')}\n${BODY_PREFIX}${contColored(AgentType.MONITOR)}  ${dimText(text)}`;
+}
+
+export function formatMemberList(members: Map<string, AgentCard>, selfId?: string): string[] {
+  const sorted = Array.from(members.values()).sort((a, b) => {
+    if (a.type === AgentType.HUMAN && b.type !== AgentType.HUMAN) return -1;
+    if (a.type !== AgentType.HUMAN && b.type === AgentType.HUMAN) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const lines: string[] = [
+    `${markerColored(AgentType.MONITOR)} ${dimText('members')} ${dimText(`(${members.size})`)}`,
+  ];
+
+  for (const m of sorted) {
+    const isBusy = m.status === 'busy';
+    const statusIcon = isBusy ? chalk.yellow('\u25D0') : chalk.green('\u25CF');
+    const self = selfId === m.agentId ? dimText(' (you)') : '';
+    lines.push(`${BODY_PREFIX}${contColored(m.type)}  ${statusIcon} ${agentNameColored(m.name, m.type)} ${agentTag(m.type)}${self}`);
+  }
+
+  lines.push('');
+  return lines;
 }

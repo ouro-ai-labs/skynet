@@ -12,6 +12,7 @@ import {
   formatTimestamp,
   formatMessage,
   formatSystemMessage,
+  formatMemberList,
   createAgentResolver,
   AGENT_COLORS,
   AGENT_LABELS,
@@ -79,7 +80,6 @@ describe('agentNameColored', () => {
   it('wraps name with color and bold', () => {
     const result = agentNameColored('Alice', AgentType.HUMAN);
     expect(stripAnsi(result)).toBe('Alice');
-    // Should contain ANSI codes (i.e. not be plain)
     expect(result).not.toBe('Alice');
   });
 });
@@ -118,20 +118,23 @@ describe('createAgentResolver', () => {
 describe('formatMessage', () => {
   const resolve = makeResolver();
 
-  it('formats chat messages with sender on header and body with markdown', () => {
+  it('formats chat messages with marker header and continuation body', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       payload: { text: 'Hello world' },
     });
     const lines = formatMessage(msg, resolve);
-    // Multi-line: header, body line(s) with bar, trailing blank
     expect(lines.length).toBeGreaterThanOrEqual(3);
     const headerPlain = stripAnsi(lines[0]);
+    // Header has marker, name, and timestamp
+    expect(headerPlain).toContain('\u23FA');
     expect(headerPlain).toContain('Alice');
-    // Body lines contain the message text with a vertical bar
+    expect(headerPlain).toContain('(14:30)');
+    // Body has continuation marker
+    const bodyPlain = stripAnsi(lines[1]);
+    expect(bodyPlain).toContain('\u23BF');
     const allPlain = lines.map(stripAnsi).join('\n');
     expect(allPlain).toContain('Hello world');
-    // Last line is blank separator
     expect(lines[lines.length - 1]).toBe('');
   });
 
@@ -150,18 +153,19 @@ describe('formatMessage', () => {
     expect(allPlain).toContain('secret message');
   });
 
-  it('formats task assignment', () => {
+  it('formats task assignment with marker style', () => {
     const msg = makeMsg({
       type: MessageType.TASK_ASSIGN,
       payload: { taskId: 'task-1', title: 'Fix bug', description: 'Fix the bug', assignee: 'agent-2', status: 'pending' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('◆');
-    expect(plain).toContain('task');
-    expect(plain).toContain('Alice');
-    expect(plain).toContain('Fix bug');
-    expect(plain).toContain('Bob');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('\u25C6');
+    expect(allPlain).toContain('task');
+    expect(allPlain).toContain('Alice');
+    expect(allPlain).toContain('Fix bug');
+    expect(allPlain).toContain('Bob');
+    expect(lines[lines.length - 1]).toBe('');
   });
 
   it('formats task result success', () => {
@@ -170,11 +174,11 @@ describe('formatMessage', () => {
       payload: { taskId: 'task-1', success: true, summary: 'All good' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('◆');
-    expect(plain).toContain('result');
-    expect(plain).toContain('OK');
-    expect(plain).toContain('All good');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('\u25C6');
+    expect(allPlain).toContain('result');
+    expect(allPlain).toContain('OK');
+    expect(allPlain).toContain('All good');
   });
 
   it('formats task result failure', () => {
@@ -183,9 +187,9 @@ describe('formatMessage', () => {
       payload: { taskId: 'task-1', success: false, summary: 'Something broke' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('FAIL');
-    expect(plain).toContain('Something broke');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('FAIL');
+    expect(allPlain).toContain('Something broke');
   });
 
   it('formats task update', () => {
@@ -194,11 +198,11 @@ describe('formatMessage', () => {
       payload: { taskId: 'abcdef1234567890', status: 'in-progress' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('◆');
-    expect(plain).toContain('task');
-    expect(plain).toContain('in-progress');
-    expect(plain).toContain('abcdef12');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('\u25C6');
+    expect(allPlain).toContain('task');
+    expect(allPlain).toContain('in-progress');
+    expect(allPlain).toContain('abcdef12');
   });
 
   it('formats context share', () => {
@@ -207,10 +211,10 @@ describe('formatMessage', () => {
       payload: { files: [{ path: 'a.ts' }, { path: 'b.ts' }] },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('◇');
-    expect(plain).toContain('context');
-    expect(plain).toContain('2 file(s)');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('\u25C7');
+    expect(allPlain).toContain('shared');
+    expect(allPlain).toContain('2 file(s)');
   });
 
   it('formats file change', () => {
@@ -219,33 +223,35 @@ describe('formatMessage', () => {
       payload: { path: 'src/index.ts', changeType: 'modified', agentId: 'agent-2' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('~ modified');
-    expect(plain).toContain('Bob');
-    expect(plain).toContain('src/index.ts');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('~');
+    expect(allPlain).toContain('Bob');
+    expect(allPlain).toContain('src/index.ts');
   });
 
-  it('formats agent join', () => {
+  it('formats agent join with marker style', () => {
     const msg = makeMsg({
       type: MessageType.AGENT_JOIN,
       payload: { agent: bobCard },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('Bob');
-    expect(plain).toContain('joined');
-    expect(plain).toContain('Claude');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('system');
+    expect(allPlain).toContain('Bob');
+    expect(allPlain).toContain('joined');
+    expect(allPlain).toContain('Claude');
   });
 
-  it('formats agent leave', () => {
+  it('formats agent leave with marker style', () => {
     const msg = makeMsg({
       type: MessageType.AGENT_LEAVE,
       payload: { agentId: 'agent-2' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('Bob');
-    expect(plain).toContain('left');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('system');
+    expect(allPlain).toContain('Bob');
+    expect(allPlain).toContain('left');
   });
 
   it('formats unknown message types with JSON payload', () => {
@@ -254,8 +260,8 @@ describe('formatMessage', () => {
       payload: { agentId: 'agent-1', status: 'idle' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('agent.heartbeat');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('agent.heartbeat');
   });
 
   it('passes through curly braces in markdown body', () => {
@@ -265,16 +271,16 @@ describe('formatMessage', () => {
     });
     const lines = formatMessage(msg, resolve);
     const allPlain = lines.map(stripAnsi).join('\n');
-    // Markdown renderer preserves literal curly brace text
     expect(allPlain).toContain('{bold}test{/bold}');
   });
 });
 
 describe('formatSystemMessage', () => {
-  it('wraps text in dim formatting', () => {
+  it('wraps text in marker style with system label', () => {
     const result = formatSystemMessage('hello');
     const plain = stripAnsi(result);
-    expect(plain).toContain('·');
+    expect(plain).toContain('\u23FA');
+    expect(plain).toContain('system');
     expect(plain).toContain('hello');
   });
 });
@@ -300,18 +306,34 @@ describe('formatMessage spacing', () => {
     expect(lines[lines.length - 1]).toBe('');
   });
 
+  it('join messages end with blank separator line', () => {
+    const msg = makeMsg({
+      type: MessageType.AGENT_JOIN,
+      payload: { agent: bobCard },
+    });
+    const lines = formatMessage(msg, resolve);
+    expect(lines[lines.length - 1]).toBe('');
+  });
+
+  it('leave messages end with blank separator line', () => {
+    const msg = makeMsg({
+      type: MessageType.AGENT_LEAVE,
+      payload: { agentId: 'agent-2' },
+    });
+    const lines = formatMessage(msg, resolve);
+    expect(lines[lines.length - 1]).toBe('');
+  });
+
   it('renders markdown bold in chat body', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       payload: { text: 'this is **bold** text' },
     });
     const lines = formatMessage(msg, resolve);
-    // Body lines (skip header, skip trailing blank) should have ANSI for bold
     const bodyLines = lines.slice(1, -1);
     const bodyText = bodyLines.join('\n');
     const plainBody = stripAnsi(bodyText);
     expect(plainBody).toContain('bold');
-    // Should contain ANSI codes (markdown rendered bold)
     expect(bodyText).not.toBe(plainBody);
   });
 
@@ -325,15 +347,39 @@ describe('formatMessage spacing', () => {
     expect(allPlain).toContain('const x = 1;');
   });
 
-  it('chat body lines have colored vertical bar', () => {
+  it('chat body first line has continuation marker', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       payload: { text: 'hello' },
     });
     const lines = formatMessage(msg, resolve);
-    // Body line (index 1) should contain the bar character
     const bodyPlain = stripAnsi(lines[1]);
-    expect(bodyPlain).toContain('│');
+    expect(bodyPlain).toContain('\u23BF');
+  });
+});
+
+describe('formatMemberList', () => {
+  it('lists members with status icons and agent types', () => {
+    const members = new Map<string, AgentCard>();
+    members.set('agent-1', aliceCard);
+    members.set('agent-2', bobCard);
+    const lines = formatMemberList(members, 'agent-1');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('members');
+    expect(allPlain).toContain('(2)');
+    expect(allPlain).toContain('Alice');
+    expect(allPlain).toContain('Bob');
+    expect(allPlain).toContain('(you)');
+    expect(lines[lines.length - 1]).toBe('');
+  });
+
+  it('shows busy status for busy members', () => {
+    const members = new Map<string, AgentCard>();
+    const busyBob = makeCard({ agentId: 'agent-2', name: 'Bob', type: AgentType.CLAUDE_CODE, status: 'busy' });
+    members.set('agent-2', busyBob);
+    const lines = formatMemberList(members);
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('\u25D0');
   });
 });
 
