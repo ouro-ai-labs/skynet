@@ -65,6 +65,31 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
+  override supportsQuickReply(): boolean {
+    return this.sessionStarted;
+  }
+
+  override async quickReply(prompt: string): Promise<string> {
+    const args = [
+      '-p', prompt,
+      '--output-format', 'text',
+      '--resume', this.sessionId,
+      '--fork-session',
+    ];
+
+    if (this.model) {
+      args.push('--model', this.model);
+    }
+
+    const result = await execa('claude', args, {
+      cwd: this.projectRoot,
+      stdin: 'ignore',
+      timeout: 60_000, // 1 min timeout for quick replies
+    });
+
+    return result.stdout;
+  }
+
   async dispose(): Promise<void> {
     // No persistent process to clean up; each call is a new process
   }
