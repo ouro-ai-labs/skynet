@@ -258,6 +258,47 @@ describe('Server integration', () => {
     expect(disconnected).toBe(true);
   });
 
+  it('DM with mentions reaches both target and mentioned agents', async () => {
+    const alice = makeClient('alice', 'mention-room');
+    const bob = makeClient('bob', 'mention-room');
+    const charlie = makeClient('charlie', 'mention-room');
+    const dave = makeClient('dave', 'mention-room');
+
+    await alice.connect();
+    await bob.connect();
+    await charlie.connect();
+    await dave.connect();
+
+    const bobReceived: string[] = [];
+    const charlieReceived: string[] = [];
+    const daveReceived: string[] = [];
+
+    bob.on('chat', (msg: SkynetMessage) => {
+      bobReceived.push((msg.payload as { text: string }).text);
+    });
+    charlie.on('chat', (msg: SkynetMessage) => {
+      charlieReceived.push((msg.payload as { text: string }).text);
+    });
+    dave.on('chat', (msg: SkynetMessage) => {
+      daveReceived.push((msg.payload as { text: string }).text);
+    });
+
+    await sleep(50);
+    // Alice sends a DM to Bob, with Charlie mentioned
+    alice.chat('Hey discuss this', bob.agent.agentId, [charlie.agent.agentId]);
+    await sleep(200);
+
+    expect(bobReceived).toContain('Hey discuss this');
+    expect(charlieReceived).toContain('Hey discuss this');
+    // Dave should NOT receive it
+    expect(daveReceived).toHaveLength(0);
+
+    await alice.close();
+    await bob.close();
+    await charlie.close();
+    await dave.close();
+  });
+
   it('agent-join event is received by existing members', async () => {
     const alice = makeClient('alice', 'join-room');
     await alice.connect();

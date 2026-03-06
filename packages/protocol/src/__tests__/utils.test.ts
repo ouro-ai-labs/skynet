@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createMessage, createChatMessage, serialize, deserialize } from '../utils.js';
+import { createMessage, createChatMessage, serialize, deserialize, extractMentionNames } from '../utils.js';
 import { MessageType } from '../types.js';
 
 describe('createMessage', () => {
@@ -52,6 +52,45 @@ describe('createChatMessage', () => {
     const msg = createChatMessage('alice', 'room-1', 'Hey Bob', 'bob');
 
     expect(msg.to).toBe('bob');
+  });
+
+  it('includes mentions when provided', () => {
+    const msg = createChatMessage('alice', 'room-1', 'Hey @bob @charlie', 'bob', ['charlie-id']);
+
+    expect(msg.to).toBe('bob');
+    expect(msg.mentions).toEqual(['charlie-id']);
+  });
+
+  it('omits mentions when empty', () => {
+    const msg = createChatMessage('alice', 'room-1', 'Hello', null, []);
+
+    expect(msg.mentions).toBeUndefined();
+  });
+});
+
+describe('extractMentionNames', () => {
+  it('extracts single mention', () => {
+    expect(extractMentionNames('Hello @bob')).toEqual(['bob']);
+  });
+
+  it('extracts multiple mentions', () => {
+    const names = extractMentionNames('@alice @bob please discuss');
+    expect(names).toContain('alice');
+    expect(names).toContain('bob');
+    expect(names).toHaveLength(2);
+  });
+
+  it('deduplicates mentions (case insensitive)', () => {
+    expect(extractMentionNames('@Bob @bob hello')).toEqual(['bob']);
+  });
+
+  it('returns empty array when no mentions', () => {
+    expect(extractMentionNames('no mentions here')).toEqual([]);
+  });
+
+  it('handles mentions with hyphens and UUIDs', () => {
+    const names = extractMentionNames('@claude-code-19aa169c hi');
+    expect(names).toEqual(['claude-code-19aa169c']);
   });
 });
 
