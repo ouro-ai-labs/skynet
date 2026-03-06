@@ -12,10 +12,13 @@ interface SkynetMessage {
   to: string | null;       // null = broadcast to room
   roomId: string;          // Room/project ID
   timestamp: number;
-  payload: any;            // Varies by type
+  payload: unknown;        // Varies by type
   replyTo?: string;        // Reply to a specific message
+  mentions?: string[];     // Agent IDs mentioned via @name
 }
 ```
+
+The `mentions` field lists agent IDs that were @-mentioned in the message text. Mentioned agents receive the message even if they are not the primary `to` target.
 
 ## Message Types
 
@@ -44,13 +47,19 @@ Agent identity description (similar to A2A's Agent Card):
 
 ```typescript
 interface AgentCard {
-  agentId: string;
-  name: string;               // e.g. "claude-code-1", "human-alice"
-  type: AgentType;            // CLAUDE_CODE | GEMINI_CLI | CODEX_CLI | HUMAN | MONITOR
-  capabilities: string[];     // ["code-edit", "code-review", "test"]
+  id: string;                 // UUID
+  name: string;               // e.g. "claude-dev-1", "human-alice"
+  type: AgentType;            // CLAUDE_CODE | GEMINI_CLI | CODEX_CLI | HUMAN | MONITOR | GENERIC
+
+  // Persistent profile fields (stored in DB)
+  role?: string;              // e.g. "backend engineer"
+  persona?: string;           // Free-form markdown profile (see below)
+  createdAt?: number;
+
+  // Runtime fields (set when connected)
+  capabilities?: string[];    // ["code-edit", "code-review", "test"]
   projectRoot?: string;
-  status: 'idle' | 'busy' | 'offline';
-  persona?: string;           // Markdown profile (see below)
+  status?: AgentStatus;       // 'idle' | 'busy' | 'offline'
 }
 ```
 
@@ -101,3 +110,127 @@ enum AgentType {
   GENERIC = 'generic',
 }
 ```
+
+## Human Profile
+
+```typescript
+interface HumanProfile {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+```
+
+## Room Membership
+
+```typescript
+type MemberType = 'agent' | 'human';
+
+interface RoomMembership {
+  roomId: string;
+  memberId: string;
+  memberType: MemberType;
+  joinedAt: number;
+}
+```
+
+## Payload Types
+
+### Chat
+
+```typescript
+interface ChatPayload {
+  text: string;
+}
+```
+
+### Agent Join / Leave
+
+```typescript
+interface AgentJoinPayload {
+  agent: AgentCard;
+}
+
+interface AgentLeavePayload {
+  agentId: string;
+  reason?: string;
+}
+```
+
+### Heartbeat
+
+```typescript
+interface AgentHeartbeatPayload {
+  agentId: string;
+  status: AgentStatus;
+}
+```
+
+### Task
+
+```typescript
+type TaskStatus = 'pending' | 'assigned' | 'in-progress' | 'completed' | 'failed';
+
+interface TaskPayload {
+  taskId: string;
+  title: string;
+  description: string;
+  assignee?: string;
+  status: TaskStatus;
+  files?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+interface TaskResultPayload {
+  taskId: string;
+  success: boolean;
+  summary: string;
+  filesChanged?: string[];
+  error?: string;
+}
+```
+
+### Context Sharing
+
+```typescript
+interface ContextSharePayload {
+  files?: Array<{ path: string; content?: string }>;
+  metadata?: Record<string, unknown>;
+}
+
+interface FileChangePayload {
+  path: string;
+  changeType: 'created' | 'modified' | 'deleted';
+  agentId: string;
+}
+```
+
+## Client-Server Wire Protocol
+
+Clients communicate with the server using JSON envelopes over WebSocket.
+
+```typescript
+enum ClientAction {
+  JOIN = 'join',
+  LEAVE = 'leave',
+  SEND = 'send',
+  HEARTBEAT = 'heartbeat',
+}
+
+interface ClientEnvelope {
+  action: ClientAction;
+  data: unknown;
+}
+
+interface JoinRequest {
+  roomId: string;
+  agent: AgentCard;
+}
+
+interface ServerEvent {
+  event: string;
+  data: unknown;
+}
+```
+
+See [server.md](server.md) for the full WebSocket protocol details and message flow.
