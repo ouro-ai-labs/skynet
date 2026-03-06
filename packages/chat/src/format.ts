@@ -69,7 +69,7 @@ export function createAgentResolver(members: Map<string, AgentCard>): AgentResol
 export function formatMessage(msg: SkynetMessage, resolve: AgentResolver): string[] {
   switch (msg.type) {
     case MessageType.CHAT:
-      return [formatChat(msg, resolve)];
+      return formatChat(msg, resolve);
     case MessageType.TASK_ASSIGN:
       return [formatTaskAssign(msg, resolve)];
     case MessageType.TASK_UPDATE:
@@ -89,13 +89,18 @@ export function formatMessage(msg: SkynetMessage, resolve: AgentResolver): strin
   }
 }
 
-export function formatChat(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatChat(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as ChatPayload;
   const dm = msg.to
     ? ` ${dimText('->')} ${agentNameColored(resolve(msg.to).name, resolve(msg.to).type)}`
     : '';
-  return `${formatTimestamp(msg.timestamp)} ${agentNameColored(s.name, s.type)}${dm}: ${p.text}`;
+  const header = `${formatTimestamp(msg.timestamp)} ${agentNameColored(s.name, s.type)}${dm}:`;
+  const textLines = p.text.split('\n');
+  return [
+    `${header} ${textLines[0]}`,
+    ...textLines.slice(1).map((line) => `       ${line}`),
+  ];
 }
 
 export function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): string {

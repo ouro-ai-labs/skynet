@@ -252,6 +252,23 @@ describe('formatMessage', () => {
     expect(plain).toContain('agent.heartbeat');
   });
 
+  it('splits multi-line chat text into separate lines', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: { text: 'Line one\nLine two\nLine three' },
+    });
+    const lines = formatMessage(msg, resolve);
+    expect(lines).toHaveLength(3);
+    const plain0 = stripAnsi(lines[0]);
+    expect(plain0).toContain('Alice');
+    expect(plain0).toContain('Line one');
+    const plain1 = stripAnsi(lines[1]);
+    expect(plain1).toContain('Line two');
+    expect(plain1).not.toContain('Alice');
+    const plain2 = stripAnsi(lines[2]);
+    expect(plain2).toContain('Line three');
+  });
+
   it('does not escape curly braces (no more blessed markup)', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
