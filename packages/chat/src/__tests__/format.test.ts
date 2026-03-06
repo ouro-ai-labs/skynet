@@ -118,30 +118,36 @@ describe('createAgentResolver', () => {
 describe('formatMessage', () => {
   const resolve = makeResolver();
 
-  it('formats chat messages with sender name', () => {
+  it('formats chat messages with sender on header and body with markdown', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       payload: { text: 'Hello world' },
     });
     const lines = formatMessage(msg, resolve);
-    expect(lines).toHaveLength(1);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('Alice');
-    expect(plain).toContain('Hello world');
+    // Multi-line: header, body line(s) with bar, trailing blank
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    const headerPlain = stripAnsi(lines[0]);
+    expect(headerPlain).toContain('Alice');
+    // Body lines contain the message text with a vertical bar
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('Hello world');
+    // Last line is blank separator
+    expect(lines[lines.length - 1]).toBe('');
   });
 
-  it('formats chat DM with receiver', () => {
+  it('formats chat DM with receiver in header', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       to: 'agent-2',
       payload: { text: 'secret message' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    expect(plain).toContain('Alice');
-    expect(plain).toContain('Bob');
-    expect(plain).toContain('secret message');
-    expect(plain).toContain('->');
+    const headerPlain = stripAnsi(lines[0]);
+    expect(headerPlain).toContain('Alice');
+    expect(headerPlain).toContain('Bob');
+    expect(headerPlain).toContain('->');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('secret message');
   });
 
   it('formats task assignment', () => {
@@ -252,32 +258,15 @@ describe('formatMessage', () => {
     expect(plain).toContain('agent.heartbeat');
   });
 
-  it('splits multi-line chat text into separate lines', () => {
-    const msg = makeMsg({
-      type: MessageType.CHAT,
-      payload: { text: 'Line one\nLine two\nLine three' },
-    });
-    const lines = formatMessage(msg, resolve);
-    expect(lines).toHaveLength(3);
-    const plain0 = stripAnsi(lines[0]);
-    expect(plain0).toContain('Alice');
-    expect(plain0).toContain('Line one');
-    const plain1 = stripAnsi(lines[1]);
-    expect(plain1).toContain('Line two');
-    expect(plain1).not.toContain('Alice');
-    const plain2 = stripAnsi(lines[2]);
-    expect(plain2).toContain('Line three');
-  });
-
-  it('does not escape curly braces (no more blessed markup)', () => {
+  it('passes through curly braces in markdown body', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       payload: { text: '{bold}test{/bold}' },
     });
     const lines = formatMessage(msg, resolve);
-    const plain = stripAnsi(lines[0]);
-    // Chalk-based format passes text through as-is
-    expect(plain).toContain('{bold}test{/bold}');
+    const allPlain = lines.map(stripAnsi).join('\n');
+    // Markdown renderer preserves literal curly brace text
+    expect(allPlain).toContain('{bold}test{/bold}');
   });
 });
 
@@ -287,6 +276,64 @@ describe('formatSystemMessage', () => {
     const plain = stripAnsi(result);
     expect(plain).toContain('·');
     expect(plain).toContain('hello');
+  });
+});
+
+describe('formatMessage spacing', () => {
+  const resolve = makeResolver();
+
+  it('chat messages end with blank separator line', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: { text: 'hello' },
+    });
+    const lines = formatMessage(msg, resolve);
+    expect(lines[lines.length - 1]).toBe('');
+  });
+
+  it('task messages end with blank separator line', () => {
+    const msg = makeMsg({
+      type: MessageType.TASK_ASSIGN,
+      payload: { taskId: 't1', title: 'Do it', description: '', assignee: null, status: 'pending' },
+    });
+    const lines = formatMessage(msg, resolve);
+    expect(lines[lines.length - 1]).toBe('');
+  });
+
+  it('renders markdown bold in chat body', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: { text: 'this is **bold** text' },
+    });
+    const lines = formatMessage(msg, resolve);
+    // Body lines (skip header, skip trailing blank) should have ANSI for bold
+    const bodyLines = lines.slice(1, -1);
+    const bodyText = bodyLines.join('\n');
+    const plainBody = stripAnsi(bodyText);
+    expect(plainBody).toContain('bold');
+    // Should contain ANSI codes (markdown rendered bold)
+    expect(bodyText).not.toBe(plainBody);
+  });
+
+  it('renders markdown code blocks in chat body', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: { text: '```\nconst x = 1;\n```' },
+    });
+    const lines = formatMessage(msg, resolve);
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('const x = 1;');
+  });
+
+  it('chat body lines have colored vertical bar', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: { text: 'hello' },
+    });
+    const lines = formatMessage(msg, resolve);
+    // Body line (index 1) should contain the bar character
+    const bodyPlain = stripAnsi(lines[1]);
+    expect(bodyPlain).toContain('│');
   });
 });
 
