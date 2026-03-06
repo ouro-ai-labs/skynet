@@ -33,6 +33,9 @@ importers:
         specifier: ^9.0.0
         version: 9.6.1
     devDependencies:
+      '@skynet/server':
+        specifier: workspace:*
+        version: link:../server
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13
