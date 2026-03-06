@@ -12,6 +12,7 @@ import {
   type FileChangePayload,
   MessageType,
 } from '@skynet/protocol';
+import { renderMarkdown } from './markdown.js';
 
 // ── Color scheme by agent type ──
 
@@ -66,36 +67,53 @@ export function createAgentResolver(members: Map<string, AgentCard>): AgentResol
   };
 }
 
+// Indent padding for message body lines (aligns under sender name)
+const BODY_INDENT = '       ';
+
 export function formatMessage(msg: SkynetMessage, resolve: AgentResolver): string[] {
   switch (msg.type) {
     case MessageType.CHAT:
-      return [formatChat(msg, resolve)];
+      return formatChat(msg, resolve);
     case MessageType.TASK_ASSIGN:
-      return [formatTaskAssign(msg, resolve)];
+      return [formatTaskAssign(msg, resolve), ''];
     case MessageType.TASK_UPDATE:
-      return [formatTaskUpdate(msg, resolve)];
+      return [formatTaskUpdate(msg, resolve), ''];
     case MessageType.TASK_RESULT:
-      return [formatTaskResult(msg, resolve)];
+      return [formatTaskResult(msg, resolve), ''];
     case MessageType.CONTEXT_SHARE:
-      return [formatContextShare(msg, resolve)];
+      return [formatContextShare(msg, resolve), ''];
     case MessageType.FILE_CHANGE:
-      return [formatFileChange(msg, resolve)];
+      return [formatFileChange(msg, resolve), ''];
     case MessageType.AGENT_JOIN:
       return [formatJoin(msg)];
     case MessageType.AGENT_LEAVE:
       return [formatLeave(msg, resolve)];
     default:
-      return [`${formatTimestamp(msg.timestamp)} ${dimText(`[${msg.type}]`)} ${JSON.stringify(msg.payload)}`];
+      return [`${formatTimestamp(msg.timestamp)} ${dimText(`[${msg.type}]`)} ${JSON.stringify(msg.payload)}`, ''];
   }
 }
 
-export function formatChat(msg: SkynetMessage, resolve: AgentResolver): string {
+export function formatChat(msg: SkynetMessage, resolve: AgentResolver): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as ChatPayload;
   const dm = msg.to
     ? ` ${dimText('->')} ${agentNameColored(resolve(msg.to).name, resolve(msg.to).type)}`
     : '';
-  return `${formatTimestamp(msg.timestamp)} ${agentNameColored(s.name, s.type)}${dm}: ${p.text}`;
+  const color = AGENT_COLORS[s.type] ?? '#888888';
+  const bar = chalk.hex(color)('│');
+
+  // Header: timestamp + sender name
+  const header = `${formatTimestamp(msg.timestamp)} ${agentNameColored(s.name, s.type)}${dm}`;
+
+  // Render body with markdown
+  const rendered = renderMarkdown(p.text);
+  const bodyLines = rendered.split('\n');
+  const lines: string[] = [header];
+  for (const line of bodyLines) {
+    lines.push(`${BODY_INDENT}${bar} ${line}`);
+  }
+  lines.push(''); // blank separator after message
+  return lines;
 }
 
 export function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): string {
