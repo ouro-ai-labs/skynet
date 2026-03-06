@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { AgentCard, SkynetMessage } from '@skynet/protocol';
+import type { AgentCard, AgentStatus, SkynetMessage } from '@skynet/protocol';
 import { serialize } from '@skynet/protocol';
 
 export interface RoomMember {
@@ -16,7 +16,7 @@ export class Room {
   }
 
   join(agent: AgentCard, socket: WebSocket): void {
-    this.members.set(agent.agentId, { agent, socket });
+    this.members.set(agent.id, { agent, socket });
   }
 
   leave(agentId: string): void {
@@ -53,7 +53,7 @@ export class Room {
     return false;
   }
 
-  updateStatus(agentId: string, status: AgentCard['status']): void {
+  updateStatus(agentId: string, status: AgentStatus): void {
     const member = this.members.get(agentId);
     if (member) {
       member.agent.status = status;
@@ -107,7 +107,7 @@ export class RoomManager {
     }
     // Close all member sockets before removing
     for (const member of room.getMembers()) {
-      const rm = room.getMember(member.agentId);
+      const rm = room.getMember(member.id);
       if (rm && rm.socket.readyState === rm.socket.OPEN) {
         rm.socket.close(1000, 'Room destroyed');
       }

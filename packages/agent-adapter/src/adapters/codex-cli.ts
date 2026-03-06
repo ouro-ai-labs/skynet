@@ -69,7 +69,8 @@ export class CodexCliAdapter extends AgentAdapter {
   }
 
   private async runCodex(prompt: string): Promise<string> {
-    const args = ['-q', JSON.stringify(prompt)];
+    const fullPrompt = this.persona ? `${this.persona}\n\n${prompt}` : prompt;
+    const args = ['-q', JSON.stringify(fullPrompt)];
     if (this.fullAuto) {
       args.push('--full-auto');
     }

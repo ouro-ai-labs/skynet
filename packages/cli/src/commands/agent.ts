@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { AgentType } from '@skynet/protocol';
-import type { AgentProfile } from '@skynet/protocol';
+import type { AgentCard } from '@skynet/protocol';
 import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet/agent-adapter';
 import { getWorkspaceDir } from '../config.js';
 import { selectServer, getServerUrl } from '../utils/server-select.js';
@@ -17,10 +17,10 @@ export function registerAgentCommand(program: Command): void {
       const workspace = await selectServer(opts);
       const url = getServerUrl(workspace);
 
-      let agents: AgentProfile[];
+      let agents: AgentCard[];
       try {
         const res = await fetch(`${url}/api/agents`);
-        agents = await res.json() as AgentProfile[];
+        agents = await res.json() as AgentCard[];
       } catch {
         console.error(`Failed to connect to server at ${url}`);
         process.exit(1);
@@ -42,7 +42,7 @@ export function registerAgentCommand(program: Command): void {
         })),
       }]);
 
-      const agentProfile = selected as AgentProfile;
+      const agentProfile = selected as AgentCard;
       const wsDir = getWorkspaceDir(workspace.id);
       const workDir = join(wsDir, agentProfile.id, 'work');
 
@@ -52,6 +52,7 @@ export function registerAgentCommand(program: Command): void {
         roomId: '__idle__',
         adapter,
         agentName: agentProfile.name,
+        role: agentProfile.role,
         persona: agentProfile.persona,
         projectRoot: workDir,
       });
@@ -113,7 +114,7 @@ export function registerAgentCommand(program: Command): void {
         });
 
         if (res.status === 201) {
-          const body = await res.json() as AgentProfile;
+          const body = await res.json() as AgentCard;
           console.log(`Agent '${body.name}' created. (ID: ${body.id})`);
 
           // Create local agent directory and profile
@@ -149,7 +150,7 @@ export function registerAgentCommand(program: Command): void {
 
       try {
         const res = await fetch(`${url}/api/agents`);
-        const agents = await res.json() as AgentProfile[];
+        const agents = await res.json() as AgentCard[];
 
         if (agents.length === 0) {
           console.log('No agents.');

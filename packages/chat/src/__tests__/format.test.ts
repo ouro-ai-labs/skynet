@@ -37,7 +37,7 @@ function makeMsg(overrides: Partial<SkynetMessage> & Pick<SkynetMessage, 'type' 
 
 function makeCard(overrides: Partial<AgentCard> = {}): AgentCard {
   return {
-    agentId: 'agent-1',
+    id: 'agent-1',
     name: 'Alice',
     type: AgentType.HUMAN,
     capabilities: ['chat'],
@@ -46,8 +46,8 @@ function makeCard(overrides: Partial<AgentCard> = {}): AgentCard {
   };
 }
 
-const aliceCard = makeCard({ agentId: 'agent-1', name: 'Alice', type: AgentType.HUMAN });
-const bobCard = makeCard({ agentId: 'agent-2', name: 'Bob', type: AgentType.CLAUDE_CODE });
+const aliceCard = makeCard({ id: 'agent-1', name: 'Alice', type: AgentType.HUMAN });
+const bobCard = makeCard({ id: 'agent-2', name: 'Bob', type: AgentType.CLAUDE_CODE });
 
 function makeResolver() {
   const members = new Map<string, AgentCard>();
@@ -375,7 +375,7 @@ describe('formatMemberList', () => {
 
   it('shows busy status for busy members', () => {
     const members = new Map<string, AgentCard>();
-    const busyBob = makeCard({ agentId: 'agent-2', name: 'Bob', type: AgentType.CLAUDE_CODE, status: 'busy' });
+    const busyBob = makeCard({ id: 'agent-2', name: 'Bob', type: AgentType.CLAUDE_CODE, status: 'busy' });
     members.set('agent-2', busyBob);
     const lines = formatMemberList(members);
     const allPlain = lines.map(stripAnsi).join('\n');

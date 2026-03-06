@@ -19,6 +19,7 @@ export interface AgentRunnerOptions {
   adapter: AgentAdapter;
   agentName?: string;
   capabilities?: string[];
+  role?: string;
   persona?: string;
   projectRoot?: string;
 }
@@ -32,9 +33,10 @@ export class AgentRunner {
 
   constructor(private options: AgentRunnerOptions) {
     const agentCard: AgentCard = {
-      agentId: randomUUID(),
+      id: randomUUID(),
       name: options.agentName ?? `${options.adapter.name}-${randomUUID().slice(0, 8)}`,
       type: options.adapter.type,
+      role: options.role,
       capabilities: options.capabilities ?? ['code-edit', 'code-review'],
       projectRoot: options.projectRoot,
       status: 'idle',
@@ -48,6 +50,13 @@ export class AgentRunner {
     });
 
     this.adapter = options.adapter;
+
+    // Build persona prompt for injection
+    const parts: string[] = [];
+    if (options.role) parts.push(`You are a ${options.role}.`);
+    if (options.persona) parts.push(options.persona);
+    if (parts.length > 0) this.adapter.persona = parts.join(' ');
+
     this.adapter.setRoomId(options.roomId);
   }
 
@@ -56,12 +65,12 @@ export class AgentRunner {
 
     // Build initial member name map from room state
     for (const member of state.members) {
-      this.memberNames.set(member.agentId, member.name);
+      this.memberNames.set(member.id, member.name);
     }
 
     this.client.on('agent-join', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentJoinPayload;
-      this.memberNames.set(payload.agent.agentId, payload.agent.name);
+      this.memberNames.set(payload.agent.id, payload.agent.name);
     });
     this.client.on('agent-leave', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentLeavePayload;
@@ -80,7 +89,7 @@ export class AgentRunner {
   }
 
   get agentId(): string {
-    return this.client.agent.agentId;
+    return this.client.agent.id;
   }
 
   get agentName(): string {
@@ -89,7 +98,7 @@ export class AgentRunner {
 
   private enqueue(msg: SkynetMessage): void {
     // Skip messages from self
-    if (msg.from === this.client.agent.agentId) return;
+    if (msg.from === this.client.agent.id) return;
 
     // When busy and adapter supports fork: handle chat via forked session
     if (
@@ -156,7 +165,7 @@ export class AgentRunner {
   private resolveMentions(text: string): string[] {
     const names = extractMentionNames(text);
     if (names.length === 0) return [];
-    const selfId = this.client.agent.agentId;
+    const selfId = this.client.agent.id;
     const ids: string[] = [];
     for (const name of names) {
       for (const [agentId, agentName] of this.memberNames) {
@@ -173,7 +182,7 @@ export class AgentRunner {
     const task = msg.payload as TaskPayload;
 
     // Acknowledge
-    this.client.updateTask(task.taskId, 'in-progress', this.client.agent.agentId);
+    this.client.updateTask(task.taskId, 'in-progress', this.client.agent.id);
 
     const result = await this.adapter.executeTask(task);
 

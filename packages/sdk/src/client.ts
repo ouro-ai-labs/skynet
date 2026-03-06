@@ -154,7 +154,7 @@ export class SkynetClient extends EventEmitter {
   sendMessage(msg: Omit<SkynetMessage, 'id' | 'timestamp' | 'from' | 'roomId'>): void {
     const fullMsg = createMessage({
       ...msg,
-      from: this.agent.agentId,
+      from: this.agent.id,
       roomId: this.roomId,
     });
     this.send({ action: ClientAction.SEND, data: fullMsg });
@@ -242,7 +242,7 @@ export class SkynetClient extends EventEmitter {
     this.heartbeatTimer = setInterval(() => {
       this.send({
         action: ClientAction.HEARTBEAT,
-        data: { agentId: this.agent.agentId, status: this.agent.status },
+        data: { agentId: this.agent.id, status: this.agent.status },
       });
     }, this.heartbeatInterval);
   }

@@ -5,7 +5,7 @@ import type { WebSocket, RawData } from 'ws';
 import {
   type SkynetMessage,
   type AgentCard,
-  type AgentProfile,
+  type AgentStatus,
   type HumanProfile,
   type JoinRequest,
   type AgentJoinPayload,
@@ -135,7 +135,7 @@ export class SkynetServer {
         if (!this.store.checkNameUnique(name)) {
           return reply.status(409).send({ error: `Name '${name}' is already taken` });
         }
-        const agent: AgentProfile = {
+        const agent: AgentCard = {
           id: randomUUID(),
           name,
           type: type as AgentType,
@@ -314,7 +314,7 @@ export class SkynetServer {
         this.handleSend(socket, envelope.data as SkynetMessage);
         break;
       case ClientAction.HEARTBEAT:
-        this.handleHeartbeat(socket, envelope.data as { agentId: string; status: AgentCard['status'] });
+        this.handleHeartbeat(socket, envelope.data as { agentId: string; status: AgentStatus });
         break;
       default:
         socket.send(JSON.stringify({ event: 'error', data: { message: `Unknown action: ${envelope.action}` } }));
@@ -329,7 +329,7 @@ export class SkynetServer {
       this.store.saveRoom({ id: req.roomId, name: req.roomId });
     }
     room.join(req.agent, socket);
-    this.socketAgentMap.set(socket, { agentId: req.agent.agentId, roomId: req.roomId });
+    this.socketAgentMap.set(socket, { agentId: req.agent.id, roomId: req.roomId });
 
     // Notify the joining agent of current members
     socket.send(JSON.stringify({
@@ -344,13 +344,13 @@ export class SkynetServer {
     // Broadcast join to others
     const joinMsg = createMessage({
       type: MessageType.AGENT_JOIN,
-      from: req.agent.agentId,
+      from: req.agent.id,
       to: null,
       roomId: req.roomId,
       payload: { agent: req.agent } satisfies AgentJoinPayload,
     });
     this.store.save(joinMsg);
-    room.broadcast(joinMsg, req.agent.agentId);
+    room.broadcast(joinMsg, req.agent.id);
   }
 
   private handleSend(socket: WebSocket, msg: SkynetMessage): void {
@@ -398,7 +398,7 @@ export class SkynetServer {
     }
   }
 
-  private handleHeartbeat(socket: WebSocket, data: { agentId: string; status: AgentCard['status'] }): void {
+  private handleHeartbeat(socket: WebSocket, data: { agentId: string; status: AgentStatus }): void {
     const info = this.socketAgentMap.get(socket);
     if (!info) return;
 

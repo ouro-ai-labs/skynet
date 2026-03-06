@@ -10,6 +10,7 @@ export interface TaskResult {
 export abstract class AgentAdapter {
   abstract readonly type: AgentType;
   abstract readonly name: string;
+  persona?: string;
 
   /** Check if the underlying CLI tool is installed and available */
   abstract isAvailable(): Promise<boolean>;

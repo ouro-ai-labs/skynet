@@ -53,7 +53,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
     const client = new SkynetClient({
       serverUrl: opts.serverUrl,
       agent: {
-        agentId: agentIdRef.current,
+        id: agentIdRef.current,
         name: opts.name,
         type: AgentType.HUMAN,
         capabilities: ['chat', 'review'],
@@ -69,7 +69,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
       setConnecting(false);
       const memberMap = new Map<string, AgentCard>();
       for (const m of state.members) {
-        memberMap.set(m.agentId, m);
+        memberMap.set(m.id, m);
       }
       setMembers(memberMap);
       if (state.recentMessages.length > 0) {
@@ -85,7 +85,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
         const p = msg.payload as AgentJoinPayload;
         setMembers((prev) => {
           const next = new Map(prev);
-          next.set(p.agent.agentId, p.agent);
+          next.set(p.agent.id, p.agent);
           return next;
         });
       } else if (msg.type === MessageType.AGENT_LEAVE) {
