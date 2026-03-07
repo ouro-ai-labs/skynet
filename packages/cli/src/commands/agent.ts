@@ -5,16 +5,16 @@ import { AgentType } from '@skynet/protocol';
 import type { AgentCard } from '@skynet/protocol';
 import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet/agent-adapter';
 import { getWorkspaceDir } from '../config.js';
-import { selectServer, getServerUrl } from '../utils/server-select.js';
+import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
 export function registerAgentCommand(program: Command): void {
   const agent = program
     .command('agent')
     .description('Manage agents')
-    .option('--server <id>', 'Server UUID or name')
+    .option('--workspace <id>', 'Workspace UUID or name')
     .action(async (opts) => {
-      // Bare `skynet agent`: select server → select agent → start idle
-      const workspace = await selectServer(opts);
+      // Bare `skynet agent`: select workspace → select agent → start
+      const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
 
       let agents: AgentCard[];
@@ -22,7 +22,7 @@ export function registerAgentCommand(program: Command): void {
         const res = await fetch(`${url}/api/agents`);
         agents = await res.json() as AgentCard[];
       } catch {
-        console.error(`Failed to connect to server at ${url}`);
+        console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
 
@@ -49,7 +49,6 @@ export function registerAgentCommand(program: Command): void {
       const adapter = createAdapter(agentProfile.type as AgentType, workDir);
       const runner = new AgentRunner({
         serverUrl: url,
-        roomId: '__idle__',
         adapter,
         agentName: agentProfile.name,
         role: agentProfile.role,
@@ -63,8 +62,8 @@ export function registerAgentCommand(program: Command): void {
         process.exit(0);
       });
 
-      console.log(`Agent "${agentProfile.name}" started in idle state.`);
-      console.log('Use join commands to add to rooms.');
+      await runner.start();
+      console.log(`Agent "${agentProfile.name}" connected to workspace.`);
       console.log('Press Ctrl+C to stop.');
 
       // Keep process alive
@@ -74,13 +73,13 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('new')
     .description('Create a new agent')
-    .option('--server <id>', 'Server UUID or name')
+    .option('--workspace <id>', 'Workspace UUID or name')
     .option('--name <name>', 'Agent name (skip interactive prompt)')
     .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, generic')
     .option('--role <role>', 'Agent role')
     .option('--persona <persona>', 'Persona description')
     .action(async (opts) => {
-      const workspace = await selectServer(opts);
+      const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
 
       let name: string;
@@ -161,7 +160,7 @@ export function registerAgentCommand(program: Command): void {
           process.exit(1);
         }
       } catch {
-        console.error(`Failed to connect to server at ${url}`);
+        console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
     });
@@ -169,9 +168,9 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('list')
     .description('List all agents')
-    .option('--server <id>', 'Server UUID or name')
+    .option('--workspace <id>', 'Workspace UUID or name')
     .action(async (opts) => {
-      const workspace = await selectServer(opts);
+      const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
 
       try {
@@ -188,64 +187,7 @@ export function registerAgentCommand(program: Command): void {
           console.log(`  - ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id}]`);
         }
       } catch {
-        console.error(`Failed to connect to server at ${url}`);
-        process.exit(1);
-      }
-    });
-
-  agent
-    .command('join')
-    .description('Add an agent to a room')
-    .argument('<agent>', 'Agent name or UUID')
-    .argument('<room>', 'Room name or UUID')
-    .option('--server <id>', 'Server UUID or name')
-    .action(async (agentId: string, roomId: string, opts) => {
-      const workspace = await selectServer(opts);
-      const url = getServerUrl(workspace);
-
-      try {
-        const res = await fetch(`${url}/api/agents/${encodeURIComponent(agentId)}/join/${encodeURIComponent(roomId)}`, {
-          method: 'POST',
-        });
-
-        if (res.ok) {
-          const body = await res.json() as { roomId: string; agentId: string };
-          console.log(`Agent joined room. (agent: ${body.agentId}, room: ${body.roomId})`);
-        } else {
-          const body = await res.json() as { error?: string };
-          console.error(`Failed: ${body.error ?? res.statusText}`);
-          process.exit(1);
-        }
-      } catch {
-        console.error(`Failed to connect to server at ${url}`);
-        process.exit(1);
-      }
-    });
-
-  agent
-    .command('leave')
-    .description('Remove an agent from a room')
-    .argument('<agent>', 'Agent name or UUID')
-    .argument('<room>', 'Room name or UUID')
-    .option('--server <id>', 'Server UUID or name')
-    .action(async (agentId: string, roomId: string, opts) => {
-      const workspace = await selectServer(opts);
-      const url = getServerUrl(workspace);
-
-      try {
-        const res = await fetch(`${url}/api/agents/${encodeURIComponent(agentId)}/leave/${encodeURIComponent(roomId)}`, {
-          method: 'POST',
-        });
-
-        if (res.ok) {
-          console.log('Agent left room.');
-        } else {
-          const body = await res.json() as { error?: string };
-          console.error(`Failed: ${body.error ?? res.statusText}`);
-          process.exit(1);
-        }
-      } catch {
-        console.error(`Failed to connect to server at ${url}`);
+        console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
     });

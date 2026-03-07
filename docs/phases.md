@@ -7,19 +7,19 @@ Establish the message protocol, server framework, and base SDK so that two nodes
 
 ### Components Built
 1. **`packages/protocol`** - Message type definitions, entity types, serialization/deserialization
-2. **`packages/server`** - WebSocket server, room management, entity management, message routing
+2. **`packages/server`** - WebSocket server, member management, entity management, message routing
 3. **`packages/sdk`** - Client SDK for agents to connect to the server
 4. **`packages/cli`** - CLI entry point skeleton
 
 ### Key Files
-- `packages/protocol/src/types.ts` - All message and type definitions (AgentCard, HumanProfile, RoomMembership, etc.)
+- `packages/protocol/src/types.ts` - All message and type definitions (AgentCard, HumanProfile, etc.)
 - `packages/server/src/server.ts` - WebSocket server main body
-- `packages/server/src/room.ts` - Room management (one project = one room)
+- `packages/server/src/member-manager.ts` - Workspace-level member tracking
 - `packages/server/src/sqlite-store.ts` - SQLite message + entity persistence
 - `packages/sdk/src/client.ts` - SkynetClient class
 
 ### Validation
-- Start server, connect two SDK clients to the same room, exchange messages, verify correct routing
+- Start server, connect two SDK clients to the workspace, exchange messages, verify correct routing
 
 ---
 
@@ -52,7 +52,6 @@ abstract class AgentAdapter {
 - Uses `claude -p "prompt" --output-format text` non-interactive mode
 - Each message/task = one `claude -p` call
 - Uses `--allowedTools` for permission control
-- Session persistence via `--resume` keyed by roomId
 
 **Gemini CLI Adapter** (`packages/agent-adapter/src/adapters/gemini-cli.ts`):
 - Uses `echo "prompt" | gemini` pipe mode
@@ -66,43 +65,37 @@ abstract class AgentAdapter {
 
 ### Entity-Based CLI
 
-The CLI uses a workspace-based model with persistent entities:
+The CLI uses a workspace-based model with persistent entities. Agents and humans auto-join the workspace when they connect — no manual room management needed.
 
 ```bash
-# Server management
-skynet server new          # Create workspace (interactive: name, host, port)
-skynet server list         # List all workspaces
-skynet server              # Select and start a server
-skynet server start [id]   # Start a specific server
-
-# Room management
-skynet room new   [--server <id>]   # Create room (interactive name prompt)
-skynet room list  [--server <id>]   # List all rooms
+# Workspace management
+skynet workspace new          # Create workspace (interactive or --name/--host/--port)
+skynet workspace list         # List all workspaces
+skynet workspace              # Start the only workspace (errors if multiple exist)
+skynet workspace start [id]   # Start a specific workspace
 
 # Agent management
-skynet agent new   [--server <id>]               # Create agent (interactive)
-skynet agent list  [--server <id>]               # List agents
-skynet agent join <agent> <room> [--server <id>]  # Agent joins room
-skynet agent leave <agent> <room> [--server <id>] # Agent leaves room
-skynet agent       [--server <id>]               # Select agent, start idle
+skynet agent new   [--workspace <id>]  # Create agent (interactive)
+skynet agent list  [--workspace <id>]  # List agents
+skynet agent       [--workspace <id>]  # Select agent and start it
 
 # Human management
-skynet human new   [--server <id>]                # Create human (interactive)
-skynet human list  [--server <id>]                # List humans
-skynet human join <human> <room> [--server <id>]   # Human joins room
-skynet human leave <human> <room> [--server <id>]  # Human leaves room
-skynet human       [--server <id>]                # Select human, start chat TUI
+skynet human new   [--workspace <id>]  # Create human (interactive)
+skynet human list  [--workspace <id>]  # List humans
+skynet human       [--workspace <id>]  # Select human, start chat TUI
 
 # Status
-skynet status [room-id] [--server <id>]
+skynet status [--workspace <id>]
 ```
+
+All commands that need a workspace context use `--workspace <uuid|name>`. If omitted and only one workspace exists, it is auto-selected. If multiple workspaces exist and `--workspace` is not specified, the command errors out.
 
 ### Chat TUI
 
 Built with Ink (React for terminals):
 
 - `@skynet/chat` package, started via `skynet human` command
-- Supports @-mentions, slash commands for room/agent/human management
+- Supports @-mentions, slash commands for agent/human management
 - Markdown rendering for agent responses
 - Session fork: quick replies while agent is busy
 
@@ -116,7 +109,7 @@ Built with Ink (React for terminals):
 ### Components Built
 1. **`packages/agent-adapter`** - Base adapter + Claude Code + Gemini CLI + Codex CLI + Generic adapters + AgentRunner
 2. **`packages/coordinator`** - Task queue, file locks, git worktree management
-3. **`packages/cli`** - Full workspace-based CLI with server/room/agent/human commands
+3. **`packages/cli`** - Full workspace-based CLI with workspace/agent/human commands
 4. **`packages/chat`** - Ink-based chat TUI with slash commands and markdown support
 
 ### Key Files
@@ -127,10 +120,9 @@ Built with Ink (React for terminals):
 - `packages/coordinator/src/git-manager.ts`
 - `packages/coordinator/src/task-queue.ts`
 - `packages/coordinator/src/file-lock.ts`
-- `packages/cli/src/commands/server.ts`
+- `packages/cli/src/commands/workspace.ts`
 - `packages/cli/src/commands/agent.ts`
 - `packages/cli/src/commands/human.ts`
-- `packages/cli/src/commands/room.ts`
 - `packages/chat/src/tui.tsx`
 - `packages/chat/src/components/App.tsx`
 - `packages/chat/src/commands.ts`
@@ -174,7 +166,7 @@ Agents and humans across multiple machines form a larger collaboration network.
 
 ### Key Changes
 1. **Server Deployment** - Deploy server to cloud or publicly accessible machine
-2. **Authentication & Authorization** - Room token mechanism; only token holders can join
+2. **Authentication & Authorization** - Workspace token mechanism; only token holders can join
 3. **Git Sync** - Cross-machine relies on git remote (GitHub/GitLab) for code sync
 4. **Optional P2P** - Introduce libp2p; server degrades to relay/signaling server; agents can connect directly
 
@@ -185,7 +177,7 @@ skynet network create --name my-team-project
 
 # User B joins
 skynet network join --token sk_xxx
-skynet agent start --type claude-code --room my-team-project
+skynet agent --workspace my-team-project
 ```
 
 ### Key Files

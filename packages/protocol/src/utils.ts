@@ -13,7 +13,6 @@ export function createMessage(
 
 export function createChatMessage(
   from: string,
-  roomId: string,
   text: string,
   to: string | null = null,
   mentions?: string[],
@@ -22,7 +21,6 @@ export function createChatMessage(
     type: MessageType.CHAT,
     from,
     to,
-    roomId,
     payload: { text },
     ...(mentions && mentions.length > 0 ? { mentions } : {}),
   });

@@ -14,8 +14,8 @@ function createJoinHandler(wss: WebSocketServer): void {
       const msg = JSON.parse(raw.toString());
       if (msg.action === 'join') {
         ws.send(JSON.stringify({
-          event: 'room.state',
-          data: { roomId: 'test-room', members: [], recentMessages: [] },
+          event: 'workspace.state',
+          data: { members: [], recentMessages: [] },
         }));
       }
     });
@@ -32,7 +32,6 @@ function createTestClient(p: number, overrides: Record<string, unknown> = {}): S
       capabilities: ['chat'],
       status: 'idle',
     },
-    roomId: 'test-room',
     reconnect: true,
     reconnectInterval: 100,
     maxReconnectInterval: 1600,

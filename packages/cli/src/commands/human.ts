@@ -1,16 +1,16 @@
 import { Command } from 'commander';
 import type { HumanProfile } from '@skynet/protocol';
 import { runChatTUI } from '@skynet/chat';
-import { selectServer, getServerUrl } from '../utils/server-select.js';
+import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
 export function registerHumanCommand(program: Command): void {
   const human = program
     .command('human')
     .description('Manage humans')
-    .option('--server <id>', 'Server UUID or name')
+    .option('--workspace <id>', 'Workspace UUID or name')
     .action(async (opts) => {
-      // Bare `skynet human`: select server → select human → start chat TUI idle
-      const workspace = await selectServer(opts);
+      // Bare `skynet human`: select workspace → select human → start chat TUI
+      const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
 
       let humans: HumanProfile[];
@@ -18,7 +18,7 @@ export function registerHumanCommand(program: Command): void {
         const res = await fetch(`${url}/api/humans`);
         humans = await res.json() as HumanProfile[];
       } catch {
-        console.error(`Failed to connect to server at ${url}`);
+        console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
 
@@ -40,9 +40,7 @@ export function registerHumanCommand(program: Command): void {
 
       const humanProfile = selected as HumanProfile;
 
-      // Start chat TUI with a placeholder room (idle state)
       await runChatTUI({
-        roomId: '__idle__',
         serverUrl: url,
         name: humanProfile.name,
       });
@@ -51,10 +49,10 @@ export function registerHumanCommand(program: Command): void {
   human
     .command('new')
     .description('Create a new human')
-    .option('--server <id>', 'Server UUID or name')
+    .option('--workspace <id>', 'Workspace UUID or name')
     .option('--name <name>', 'Human name (skip interactive prompt)')
     .action(async (opts) => {
-      const workspace = await selectServer(opts);
+      const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
 
       let name: string;
@@ -87,7 +85,7 @@ export function registerHumanCommand(program: Command): void {
           process.exit(1);
         }
       } catch {
-        console.error(`Failed to connect to server at ${url}`);
+        console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
     });
@@ -95,9 +93,9 @@ export function registerHumanCommand(program: Command): void {
   human
     .command('list')
     .description('List all humans')
-    .option('--server <id>', 'Server UUID or name')
+    .option('--workspace <id>', 'Workspace UUID or name')
     .action(async (opts) => {
-      const workspace = await selectServer(opts);
+      const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
 
       try {
@@ -114,64 +112,7 @@ export function registerHumanCommand(program: Command): void {
           console.log(`  - ${h.name} [${h.id}]`);
         }
       } catch {
-        console.error(`Failed to connect to server at ${url}`);
-        process.exit(1);
-      }
-    });
-
-  human
-    .command('join')
-    .description('Add a human to a room')
-    .argument('<human>', 'Human name or UUID')
-    .argument('<room>', 'Room name or UUID')
-    .option('--server <id>', 'Server UUID or name')
-    .action(async (humanId: string, roomId: string, opts) => {
-      const workspace = await selectServer(opts);
-      const url = getServerUrl(workspace);
-
-      try {
-        const res = await fetch(`${url}/api/humans/${encodeURIComponent(humanId)}/join/${encodeURIComponent(roomId)}`, {
-          method: 'POST',
-        });
-
-        if (res.ok) {
-          const body = await res.json() as { roomId: string; humanId: string };
-          console.log(`Human joined room. (human: ${body.humanId}, room: ${body.roomId})`);
-        } else {
-          const body = await res.json() as { error?: string };
-          console.error(`Failed: ${body.error ?? res.statusText}`);
-          process.exit(1);
-        }
-      } catch {
-        console.error(`Failed to connect to server at ${url}`);
-        process.exit(1);
-      }
-    });
-
-  human
-    .command('leave')
-    .description('Remove a human from a room')
-    .argument('<human>', 'Human name or UUID')
-    .argument('<room>', 'Room name or UUID')
-    .option('--server <id>', 'Server UUID or name')
-    .action(async (humanId: string, roomId: string, opts) => {
-      const workspace = await selectServer(opts);
-      const url = getServerUrl(workspace);
-
-      try {
-        const res = await fetch(`${url}/api/humans/${encodeURIComponent(humanId)}/leave/${encodeURIComponent(roomId)}`, {
-          method: 'POST',
-        });
-
-        if (res.ok) {
-          console.log('Human left room.');
-        } else {
-          const body = await res.json() as { error?: string };
-          console.error(`Failed: ${body.error ?? res.statusText}`);
-          process.exit(1);
-        }
-      } catch {
-        console.error(`Failed to connect to server at ${url}`);
+        console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
     });

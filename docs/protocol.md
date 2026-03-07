@@ -9,8 +9,7 @@ interface SkynetMessage {
   id: string;              // UUID
   type: MessageType;       // See enum below
   from: string;            // Agent ID
-  to: string | null;       // null = broadcast to room
-  roomId: string;          // Room/project ID
+  to: string | null;       // null = broadcast to workspace
   timestamp: number;
   payload: unknown;        // Varies by type
   replyTo?: string;        // Reply to a specific message
@@ -121,19 +120,6 @@ interface HumanProfile {
 }
 ```
 
-## Room Membership
-
-```typescript
-type MemberType = 'agent' | 'human';
-
-interface RoomMembership {
-  roomId: string;
-  memberId: string;
-  memberType: MemberType;
-  joinedAt: number;
-}
-```
-
 ## Payload Types
 
 ### Chat
@@ -223,7 +209,6 @@ interface ClientEnvelope {
 }
 
 interface JoinRequest {
-  roomId: string;
   agent: AgentCard;
 }
 
@@ -233,4 +218,4 @@ interface ServerEvent {
 }
 ```
 
-See [server.md](server.md) for the full WebSocket protocol details and message flow.
+See [workspace.md](workspace.md) for the full WebSocket protocol details and message flow.

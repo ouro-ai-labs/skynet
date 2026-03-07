@@ -8,7 +8,6 @@ describe('createMessage', () => {
       type: MessageType.CHAT,
       from: 'agent-1',
       to: null,
-      roomId: 'room-1',
       payload: { text: 'hello' },
     });
 
@@ -18,7 +17,6 @@ describe('createMessage', () => {
     expect(msg.type).toBe(MessageType.CHAT);
     expect(msg.from).toBe('agent-1');
     expect(msg.to).toBeNull();
-    expect(msg.roomId).toBe('room-1');
   });
 
   it('preserves provided id and timestamp', () => {
@@ -28,7 +26,6 @@ describe('createMessage', () => {
       type: MessageType.CHAT,
       from: 'agent-1',
       to: null,
-      roomId: 'room-1',
       payload: { text: 'hello' },
     });
 
@@ -39,30 +36,29 @@ describe('createMessage', () => {
 
 describe('createChatMessage', () => {
   it('creates a chat message with correct fields', () => {
-    const msg = createChatMessage('alice', 'room-1', 'Hello!');
+    const msg = createChatMessage('alice', 'Hello!');
 
     expect(msg.type).toBe(MessageType.CHAT);
     expect(msg.from).toBe('alice');
     expect(msg.to).toBeNull();
-    expect(msg.roomId).toBe('room-1');
     expect(msg.payload).toEqual({ text: 'Hello!' });
   });
 
   it('supports DM with to field', () => {
-    const msg = createChatMessage('alice', 'room-1', 'Hey Bob', 'bob');
+    const msg = createChatMessage('alice', 'Hey Bob', 'bob');
 
     expect(msg.to).toBe('bob');
   });
 
   it('includes mentions when provided', () => {
-    const msg = createChatMessage('alice', 'room-1', 'Hey @bob @charlie', 'bob', ['charlie-id']);
+    const msg = createChatMessage('alice', 'Hey @bob @charlie', 'bob', ['charlie-id']);
 
     expect(msg.to).toBe('bob');
     expect(msg.mentions).toEqual(['charlie-id']);
   });
 
   it('omits mentions when empty', () => {
-    const msg = createChatMessage('alice', 'room-1', 'Hello', null, []);
+    const msg = createChatMessage('alice', 'Hello', null, []);
 
     expect(msg.mentions).toBeUndefined();
   });
@@ -96,7 +92,7 @@ describe('extractMentionNames', () => {
 
 describe('serialize / deserialize', () => {
   it('roundtrips a message', () => {
-    const original = createChatMessage('alice', 'room-1', 'test message');
+    const original = createChatMessage('alice', 'test message');
     const serialized = serialize(original);
     const deserialized = deserialize(serialized);
 
@@ -104,7 +100,7 @@ describe('serialize / deserialize', () => {
   });
 
   it('serializes to valid JSON string', () => {
-    const msg = createChatMessage('alice', 'room-1', 'hello');
+    const msg = createChatMessage('alice', 'hello');
     const json = serialize(msg);
 
     expect(typeof json).toBe('string');

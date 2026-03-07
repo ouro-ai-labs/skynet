@@ -21,12 +21,6 @@ export abstract class AgentAdapter {
   /** Execute a standalone task */
   abstract executeTask(task: TaskPayload): Promise<TaskResult>;
 
-  /** Current room name, set by the runner after connecting. */
-  roomName?: string;
-
-  /** Associate adapter with a room for session persistence. No-op by default. */
-  setRoomId(_roomId: string): void {}
-
   /** Whether this adapter supports forked quick replies while busy. */
   supportsQuickReply(): boolean {
     return false;

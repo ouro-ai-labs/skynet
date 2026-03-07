@@ -8,10 +8,9 @@ import {
   type AgentLeavePayload,
   MessageType,
 } from '@skynet/protocol';
-import { SkynetClient, type RoomState } from '@skynet/sdk';
+import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 
 export interface UseSkynetOptions {
-  roomId: string;
   serverUrl: string;
   name: string;
 }
@@ -23,7 +22,7 @@ export interface SkynetState {
   members: Map<string, AgentCard>;
   messages: SkynetMessage[];
   systemMessages: string[];
-  roomState: RoomState | null;
+  workspaceState: WorkspaceState | null;
 }
 
 export interface UseSkynetReturn {
@@ -43,7 +42,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
   const [members, setMembers] = useState<Map<string, AgentCard>>(new Map());
   const [messages, setMessages] = useState<SkynetMessage[]>([]);
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
-  const [roomState, setRoomState] = useState<RoomState | null>(null);
+  const [workspaceState, setWorkspaceState] = useState<WorkspaceState | null>(null);
 
   const addSystemMessage = useCallback((text: string) => {
     setSystemMessages((prev) => [...prev, text]);
@@ -59,12 +58,11 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
         capabilities: ['chat', 'review'],
         status: 'idle',
       },
-      roomId: opts.roomId,
     });
     clientRef.current = client;
 
     client.connect().then((state) => {
-      setRoomState(state);
+      setWorkspaceState(state);
       setConnected(true);
       setConnecting(false);
       const memberMap = new Map<string, AgentCard>();
@@ -101,7 +99,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
 
     client.on('disconnected', () => {
       setConnected(false);
-      addSystemMessage('Disconnected from server. Will attempt to reconnect...');
+      addSystemMessage('Disconnected from workspace. Will attempt to reconnect...');
     });
 
     client.on('reconnecting', (info: { attempt: number; delay: number }) => {
@@ -119,7 +117,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
     return () => {
       client.close().catch(() => {});
     };
-  }, [opts.serverUrl, opts.roomId, opts.name, addSystemMessage]);
+  }, [opts.serverUrl, opts.name, addSystemMessage]);
 
   const sendChat = useCallback((text: string, to?: string | null, mentions?: string[]) => {
     clientRef.current?.chat(text, to ?? null, mentions);
@@ -132,7 +130,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
   }, []);
 
   return {
-    state: { connected, connecting, error, members, messages, systemMessages, roomState },
+    state: { connected, connecting, error, members, messages, systemMessages, workspaceState },
     sendChat,
     close,
     agentId: agentIdRef.current,

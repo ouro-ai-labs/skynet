@@ -10,7 +10,6 @@ import {
   type JoinRequest,
   type AgentJoinPayload,
   type AgentLeavePayload,
-  type MemberType,
   AgentType,
   MessageType,
   ClientAction,
@@ -18,7 +17,7 @@ import {
   deserialize,
   serialize,
 } from '@skynet/protocol';
-import { RoomManager } from './room.js';
+import { MemberManager } from './member-manager.js';
 import type { Store } from './store.js';
 
 export interface SkynetServerOptions {
@@ -29,28 +28,21 @@ export interface SkynetServerOptions {
 
 export class SkynetServer {
   private fastify = Fastify({ logger: true });
-  private rooms = new RoomManager();
+  private members = new MemberManager();
   private store: Store;
-  private socketAgentMap = new WeakMap<WebSocket, { agentId: string; roomId: string }>();
+  private socketAgentMap = new WeakMap<WebSocket, string>();
 
   constructor(private options: SkynetServerOptions) {
     this.store = options.store;
-    this.restoreRooms();
-  }
-
-  private restoreRooms(): void {
-    for (const persisted of this.store.listRooms()) {
-      this.rooms.getOrCreate(persisted.id);
-    }
   }
 
   async start(): Promise<void> {
     await this.fastify.register(websocket);
 
     this.registerHealthRoutes();
-    this.registerRoomRoutes();
     this.registerAgentRoutes();
     this.registerHumanRoutes();
+    this.registerMessageRoutes();
     this.registerNameRoutes();
     this.registerWebSocket();
 
@@ -60,63 +52,23 @@ export class SkynetServer {
   }
 
   private registerHealthRoutes(): void {
-    this.fastify.get('/health', async () => ({ status: 'ok', rooms: this.rooms.listRooms() }));
+    this.fastify.get('/health', async () => ({ status: 'ok', memberCount: this.members.size }));
   }
 
-  private registerRoomRoutes(): void {
-    // List rooms
-    this.fastify.get('/api/rooms', async () => {
-      const persisted = this.store.listRooms();
-      return persisted.map((r) => {
-        const room = this.rooms.get(r.id);
-        return { id: r.id, name: r.name, memberCount: room?.size ?? 0 };
-      });
-    });
-
-    // Get room members (connected WebSocket members)
-    this.fastify.get<{ Params: { roomId: string } }>('/api/rooms/:roomId/members', async (req) => {
-      const room = this.rooms.get(req.params.roomId);
-      return room ? room.getMembers() : [];
-    });
-
-    // Create room (now takes { name } and auto-generates UUID)
-    this.fastify.post<{ Body: { name: string } }>('/api/rooms', async (req, reply) => {
-      const { name } = req.body;
-      if (!name || typeof name !== 'string') {
-        return reply.status(400).send({ error: 'name is required' });
-      }
-      if (!this.store.checkNameUnique(name)) {
-        return reply.status(409).send({ error: `Name '${name}' is already taken` });
-      }
-      const id = randomUUID();
-      this.store.saveRoom({ id, name });
-      this.rooms.getOrCreate(id);
-      return reply.status(201).send({ id, name, memberCount: 0 });
-    });
-
-    // Destroy room
-    this.fastify.delete<{ Params: { roomId: string } }>('/api/rooms/:roomId', async (req, reply) => {
-      const result = this.rooms.remove(req.params.roomId);
-      if (!result.removed) {
-        return reply.status(404).send({ error: result.reason });
-      }
-      this.store.deleteRoom(req.params.roomId);
-      return { ok: true };
-    });
-
-    // Get room messages
-    this.fastify.get<{ Params: { roomId: string }; Querystring: { limit?: string; before?: string } }>(
-      '/api/rooms/:roomId/messages',
+  private registerMessageRoutes(): void {
+    // Get workspace messages
+    this.fastify.get<{ Querystring: { limit?: string; before?: string } }>(
+      '/api/messages',
       async (req) => {
         const limit = req.query.limit ? parseInt(req.query.limit, 10) : 100;
         const before = req.query.before ? parseInt(req.query.before, 10) : undefined;
-        return this.store.getByRoom(req.params.roomId, limit, before);
+        return this.store.getMessages(limit, before);
       },
     );
 
-    // Get room registered members (from DB, not WebSocket connections)
-    this.fastify.get<{ Params: { roomId: string } }>('/api/rooms/:roomId/registered-members', async (req) => {
-      return this.store.getRoomMembers(req.params.roomId);
+    // Get connected members
+    this.fastify.get('/api/members', async () => {
+      return this.members.getMembers();
     });
   }
 
@@ -159,40 +111,6 @@ export class SkynetServer {
       }
       return agent;
     });
-
-    // Agent joins room
-    this.fastify.post<{ Params: { id: string; roomId: string } }>(
-      '/api/agents/:id/join/:roomId',
-      async (req, reply) => {
-        const agent = this.store.getAgent(req.params.id);
-        if (!agent) {
-          return reply.status(404).send({ error: 'Agent not found' });
-        }
-        const roomId = this.resolveRoomId(req.params.roomId);
-        if (!roomId) {
-          return reply.status(404).send({ error: 'Room not found' });
-        }
-        this.store.addRoomMember(roomId, agent.id, 'agent');
-        return { ok: true, roomId, agentId: agent.id };
-      },
-    );
-
-    // Agent leaves room
-    this.fastify.post<{ Params: { id: string; roomId: string } }>(
-      '/api/agents/:id/leave/:roomId',
-      async (req, reply) => {
-        const agent = this.store.getAgent(req.params.id);
-        if (!agent) {
-          return reply.status(404).send({ error: 'Agent not found' });
-        }
-        const roomId = this.resolveRoomId(req.params.roomId);
-        if (!roomId) {
-          return reply.status(404).send({ error: 'Room not found' });
-        }
-        this.store.removeRoomMember(roomId, agent.id);
-        return { ok: true };
-      },
-    );
   }
 
   private registerHumanRoutes(): void {
@@ -225,40 +143,6 @@ export class SkynetServer {
       }
       return human;
     });
-
-    // Human joins room
-    this.fastify.post<{ Params: { id: string; roomId: string } }>(
-      '/api/humans/:id/join/:roomId',
-      async (req, reply) => {
-        const human = this.store.getHuman(req.params.id);
-        if (!human) {
-          return reply.status(404).send({ error: 'Human not found' });
-        }
-        const roomId = this.resolveRoomId(req.params.roomId);
-        if (!roomId) {
-          return reply.status(404).send({ error: 'Room not found' });
-        }
-        this.store.addRoomMember(roomId, human.id, 'human');
-        return { ok: true, roomId, humanId: human.id };
-      },
-    );
-
-    // Human leaves room
-    this.fastify.post<{ Params: { id: string; roomId: string } }>(
-      '/api/humans/:id/leave/:roomId',
-      async (req, reply) => {
-        const human = this.store.getHuman(req.params.id);
-        if (!human) {
-          return reply.status(404).send({ error: 'Human not found' });
-        }
-        const roomId = this.resolveRoomId(req.params.roomId);
-        if (!roomId) {
-          return reply.status(404).send({ error: 'Room not found' });
-        }
-        this.store.removeRoomMember(roomId, human.id);
-        return { ok: true };
-      },
-    );
   }
 
   private registerNameRoutes(): void {
@@ -275,16 +159,6 @@ export class SkynetServer {
     this.fastify.get('/ws', { websocket: true }, (socket) => {
       this.handleConnection(socket);
     });
-  }
-
-  private resolveRoomId(idOrName: string): string | undefined {
-    // Try direct ID lookup first
-    const rooms = this.store.listRooms();
-    const byId = rooms.find((r) => r.id === idOrName);
-    if (byId) return byId.id;
-    // Try name lookup
-    const byName = this.store.getRoomByName(idOrName);
-    return byName?.id;
   }
 
   private handleConnection(socket: WebSocket): void {
@@ -322,24 +196,15 @@ export class SkynetServer {
   }
 
   private handleJoin(socket: WebSocket, req: JoinRequest): void {
-    const room = this.rooms.getOrCreate(req.roomId);
-    // Ensure the room exists in the store (for WebSocket-created rooms, use roomId as name fallback)
-    const existing = this.store.listRooms().find((r) => r.id === req.roomId);
-    if (!existing) {
-      this.store.saveRoom({ id: req.roomId, name: req.roomId });
-    }
-    room.join(req.agent, socket);
-    this.socketAgentMap.set(socket, { agentId: req.agent.id, roomId: req.roomId });
+    this.members.join(req.agent, socket);
+    this.socketAgentMap.set(socket, req.agent.id);
 
-    // Notify the joining agent of current members
-    const roomRecord = this.store.listRooms().find((r) => r.id === req.roomId);
+    // Notify the joining agent of current workspace state
     socket.send(JSON.stringify({
-      event: 'room.state',
+      event: 'workspace.state',
       data: {
-        roomId: req.roomId,
-        roomName: roomRecord?.name ?? req.roomId,
-        members: room.getMembers(),
-        recentMessages: this.store.getByRoom(req.roomId, 50),
+        members: this.members.getMembers(),
+        recentMessages: this.store.getMessages(50),
       },
     }));
 
@@ -348,44 +213,39 @@ export class SkynetServer {
       type: MessageType.AGENT_JOIN,
       from: req.agent.id,
       to: null,
-      roomId: req.roomId,
       payload: { agent: req.agent } satisfies AgentJoinPayload,
     });
     this.store.save(joinMsg);
-    room.broadcast(joinMsg, req.agent.id);
+    this.members.broadcast(joinMsg, req.agent.id);
   }
 
   private handleSend(socket: WebSocket, msg: SkynetMessage): void {
-    const info = this.socketAgentMap.get(socket);
-    if (!info) {
-      socket.send(JSON.stringify({ event: 'error', data: { message: 'Not joined to any room' } }));
+    const agentId = this.socketAgentMap.get(socket);
+    if (!agentId) {
+      socket.send(JSON.stringify({ event: 'error', data: { message: 'Not connected to workspace' } }));
       return;
     }
 
     // Ensure message has proper fields
     const fullMsg = createMessage({
       ...msg,
-      from: info.agentId,
-      roomId: info.roomId,
+      from: agentId,
     });
 
     this.store.save(fullMsg);
-
-    const room = this.rooms.get(info.roomId);
-    if (!room) return;
 
     const delivered = new Set<string>();
 
     if (fullMsg.to) {
       // Point-to-point
-      room.sendTo(fullMsg.to, fullMsg);
+      this.members.sendTo(fullMsg.to, fullMsg);
       delivered.add(fullMsg.to);
       // Also send back to sender as confirmation
       socket.send(serialize(fullMsg));
-      delivered.add(info.agentId);
+      delivered.add(agentId);
     } else {
       // Broadcast (including back to sender)
-      room.broadcast(fullMsg);
+      this.members.broadcast(fullMsg);
       return;
     }
 
@@ -393,7 +253,7 @@ export class SkynetServer {
     if (fullMsg.mentions && fullMsg.mentions.length > 0) {
       for (const mentionedId of fullMsg.mentions) {
         if (!delivered.has(mentionedId)) {
-          room.sendTo(mentionedId, fullMsg);
+          this.members.sendTo(mentionedId, fullMsg);
           delivered.add(mentionedId);
         }
       }
@@ -401,37 +261,28 @@ export class SkynetServer {
   }
 
   private handleHeartbeat(socket: WebSocket, data: { agentId: string; status: AgentStatus }): void {
-    const info = this.socketAgentMap.get(socket);
-    if (!info) return;
+    const agentId = this.socketAgentMap.get(socket);
+    if (!agentId) return;
 
-    const room = this.rooms.get(info.roomId);
-    if (room) {
-      room.updateStatus(data.agentId, data.status);
-    }
+    this.members.updateStatus(data.agentId, data.status);
 
     socket.send(JSON.stringify({ event: 'heartbeat.ack', data: { timestamp: Date.now() } }));
   }
 
   private handleDisconnect(socket: WebSocket): void {
-    const info = this.socketAgentMap.get(socket);
-    if (!info) return;
+    const agentId = this.socketAgentMap.get(socket);
+    if (!agentId) return;
 
-    const room = this.rooms.get(info.roomId);
-    if (room) {
-      room.leave(info.agentId);
+    this.members.leave(agentId);
 
-      const leaveMsg = createMessage({
-        type: MessageType.AGENT_LEAVE,
-        from: info.agentId,
-        to: null,
-        roomId: info.roomId,
-        payload: { agentId: info.agentId } satisfies AgentLeavePayload,
-      });
-      this.store.save(leaveMsg);
-      room.broadcast(leaveMsg);
-
-      this.rooms.removeIfEmpty(info.roomId);
-    }
+    const leaveMsg = createMessage({
+      type: MessageType.AGENT_LEAVE,
+      from: agentId,
+      to: null,
+      payload: { agentId } satisfies AgentLeavePayload,
+    });
+    this.store.save(leaveMsg);
+    this.members.broadcast(leaveMsg);
 
     this.socketAgentMap.delete(socket);
   }

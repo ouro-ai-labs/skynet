@@ -145,8 +145,8 @@ See [docs/phases.md](docs/phases.md) for the full roadmap.
 
 - [Architecture](docs/architecture.md) — Design overview, tech stack, competitive analysis
 - [Protocol](docs/protocol.md) — Message format, agent card, entity types
-- [Entities](docs/entities.md) — Workspace/server, room, agent, human entity model
-- [Server](docs/server.md) — WebSocket protocol, HTTP API, message store
+- [Entities](docs/entities.md) — Workspace, agent, human entity model
+- [Workspace](docs/workspace.md) — WebSocket protocol, HTTP API, message store
 - [Agent Adapter](docs/adapter.md) — CLI agent adapter system
 - [Usage](docs/usage.md) — CLI commands, SDK examples, multi-agent workflows
 - [Phases](docs/phases.md) — Implementation roadmap

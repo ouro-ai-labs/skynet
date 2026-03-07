@@ -10,13 +10,12 @@ import {
   MessageType,
   extractMentionNames,
 } from '@skynet/protocol';
-import { SkynetClient, type RoomState } from '@skynet/sdk';
+import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
-
+import { SKYNET_SKILL } from './skynet-skill.js';
 
 export interface AgentRunnerOptions {
   serverUrl: string;
-  roomId: string;
   adapter: AgentAdapter;
   agentName?: string;
   capabilities?: string[];
@@ -47,7 +46,6 @@ export class AgentRunner {
     this.client = new SkynetClient({
       serverUrl: options.serverUrl,
       agent: agentCard,
-      roomId: options.roomId,
     });
 
     this.adapter = options.adapter;
@@ -56,20 +54,14 @@ export class AgentRunner {
     const parts: string[] = [];
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
-    if (parts.length > 0) {
-      this.adapter.persona = parts.join('\n\n');
-    }
-
-    this.adapter.setRoomId(options.roomId);
+    parts.push(SKYNET_SKILL);
+    this.adapter.persona = parts.join('\n\n');
   }
 
-  async start(): Promise<RoomState> {
+  async start(): Promise<WorkspaceState> {
     const state = await this.client.connect();
 
-    // Pass room name to adapter for message context
-    this.adapter.roomName = state.roomName;
-
-    // Build initial member name map from room state
+    // Build initial member name map from workspace state
     for (const member of state.members) {
       this.memberNames.set(member.id, member.name);
     }

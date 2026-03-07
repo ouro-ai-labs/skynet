@@ -12,17 +12,15 @@ vi.mock('@skynet/sdk', () => {
 
   class MockSkynetClient extends EventEmitter {
     agent: AgentCard;
-    roomId: string;
     chatCalls: Array<{ text: string; to: string | null }> = [];
 
-    constructor(options: { agent: AgentCard; roomId: string }) {
+    constructor(options: { agent: AgentCard }) {
       super();
       this.agent = options.agent;
-      this.roomId = options.roomId;
     }
 
     async connect() {
-      return { roomId: this.roomId, members: [], recentMessages: [] };
+      return { members: [], recentMessages: [] };
     }
 
     async close() {}
@@ -47,7 +45,6 @@ function makeChatMsg(overrides: Partial<{ from: string; text: string }> = {}): S
     type: MessageType.CHAT,
     from: overrides.from ?? 'human-1',
     to: null,
-    roomId: 'room-1',
     timestamp: Date.now(),
     payload: { text: overrides.text ?? 'hello' },
   };
@@ -59,7 +56,6 @@ function makeTaskMsg(from = 'coordinator-1'): SkynetMessage {
     type: MessageType.TASK_ASSIGN,
     from,
     to: null,
-    roomId: 'room-1',
     timestamp: Date.now(),
     payload: {
       taskId: 'task-1',
@@ -136,7 +132,6 @@ describe('AgentRunner fork dispatch', () => {
     adapter = new FakeAdapter();
     runner = new AgentRunner({
       serverUrl: 'ws://localhost:0',
-      roomId: 'room-1',
       adapter,
     });
     await runner.start();
@@ -235,9 +230,8 @@ describe('AgentRunner fork dispatch', () => {
     adapter.setSupportsQuickReply(true);
 
     // Make quickReply throw
-    const originalQuickReply = adapter.quickReply.bind(adapter);
     let quickReplyCallCount = 0;
-    adapter.quickReply = async (prompt: string) => {
+    adapter.quickReply = async (_prompt: string) => {
       quickReplyCallCount++;
       throw new Error('fork failed');
     };

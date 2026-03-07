@@ -25,7 +25,7 @@ Skynet's core idea: **agents and humans communicate and collaborate freely, just
 ```
 +---------------------------------------------+
 |              Skynet Server                   |
-|  (Message Routing / Room Mgmt / Entity Mgmt |
+|  (Message Routing / Member Mgmt / Entity Mgmt
 |   / WebSocket / SQLite)                      |
 +------+----------+----------+----------+-----+
        |          |          |          |
@@ -37,9 +37,9 @@ Skynet's core idea: **agents and humans communicate and collaborate freely, just
 ```
 
 **The architecture uses a central server (similar to IM)**. Agents connect to the server via WebSocket. The server is responsible for:
-- Message routing (point-to-point + broadcast + rooms/channels)
+- Message routing (point-to-point + broadcast within workspace)
 - Agent and human registration and discovery
-- Entity management (workspaces, rooms, agents, humans)
+- Entity management (workspaces, agents, humans)
 - Message persistence
 - Can later evolve to P2P (server degrades to an optional relay/bootstrap node)
 
@@ -82,11 +82,10 @@ skynet/
 
 ## Entity Model
 
-Skynet uses a hierarchical entity model: **Workspace/Server > Room, Agent, Human**.
+Skynet uses a simple two-level entity model: **Workspace > Agent, Human**.
 
 - **Workspace**: Isolated unit with its own database and entities, stored at `~/.skynet/<uuid>/`
-- **Room**: Communication channel where agents and humans send messages
-- **Agent**: AI agent with type, role, persona; connected via adapter
-- **Human**: Human participant, interacts via chat TUI
+- **Agent**: AI agent with type, role, persona; connected via adapter, auto-joins workspace
+- **Human**: Human participant, interacts via chat TUI, auto-joins workspace
 
 Names are unique per workspace across all entity types. See [entities.md](entities.md) for the full entity model.

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);
 
-function makeClient(name: string, roomId: string, type = AgentType.HUMAN) {
+function makeClient(name: string, type = AgentType.HUMAN) {
   return new SkynetClient({
     serverUrl: `http://localhost:${PORT}`,
     agent: {
@@ -15,7 +15,6 @@ function makeClient(name: string, roomId: string, type = AgentType.HUMAN) {
       name,
       type,
     },
-    roomId,
     reconnect: false,
   });
 }
@@ -43,8 +42,8 @@ describe('Server integration', () => {
   });
 
   it('two clients can exchange messages', async () => {
-    const alice = makeClient('alice', 'test-room');
-    const bob = makeClient('bob', 'test-room');
+    const alice = makeClient('alice');
+    const bob = makeClient('bob');
 
     await alice.connect();
     const bobState = await bob.connect();
@@ -67,9 +66,9 @@ describe('Server integration', () => {
   });
 
   it('DM reaches only the target', async () => {
-    const alice = makeClient('alice', 'dm-room');
-    const bob = makeClient('bob', 'dm-room');
-    const charlie = makeClient('charlie', 'dm-room');
+    const alice = makeClient('alice-dm');
+    const bob = makeClient('bob-dm');
+    const charlie = makeClient('charlie-dm');
 
     await alice.connect();
     await bob.connect();
@@ -89,8 +88,6 @@ describe('Server integration', () => {
     alice.chat('Secret for Bob', bob.agent.id);
     await sleep(200);
 
-    // Bob should NOT receive DMs through broadcast since sendTo sends only to target
-    // and sends confirmation back to sender
     expect(charlieReceived).toHaveLength(0);
 
     await alice.close();
@@ -99,9 +96,9 @@ describe('Server integration', () => {
   });
 
   it('broadcast reaches all members', async () => {
-    const alice = makeClient('alice', 'broadcast-room');
-    const bob = makeClient('bob', 'broadcast-room');
-    const charlie = makeClient('charlie', 'broadcast-room');
+    const alice = makeClient('alice-bc');
+    const bob = makeClient('bob-bc');
+    const charlie = makeClient('charlie-bc');
 
     await alice.connect();
     await bob.connect();
@@ -129,140 +126,39 @@ describe('Server integration', () => {
     await charlie.close();
   });
 
-  it('rooms API returns room info', async () => {
-    const client = makeClient('alice', 'api-room');
+  it('members API returns connected members', async () => {
+    const client = makeClient('alice-api');
     await client.connect();
 
-    const res = await fetch(`http://localhost:${PORT}/api/rooms`);
-    const rooms = (await res.json()) as Array<{ id: string; memberCount: number }>;
-    const room = rooms.find((r) => r.id === 'api-room');
-    expect(room).toBeDefined();
-    expect(room!.memberCount).toBe(1);
-
-    const membersRes = await fetch(`http://localhost:${PORT}/api/rooms/api-room/members`);
-    const members = (await membersRes.json()) as Array<{ name: string }>;
-    expect(members).toHaveLength(1);
-    expect(members[0].name).toBe('alice');
+    const res = await fetch(`http://localhost:${PORT}/api/members`);
+    const members = (await res.json()) as Array<{ name: string }>;
+    expect(members.some((m) => m.name === 'alice-api')).toBe(true);
 
     await client.close();
   });
 
   it('messages are persisted and retrievable', async () => {
-    const roomId = `persist-${randomUUID().slice(0, 8)}`;
-    const alice = makeClient('alice', roomId);
+    const alice = makeClient('alice-persist');
     await alice.connect();
 
     await sleep(50);
     alice.chat('Persistent message');
     await sleep(200);
 
-    const res = await fetch(`http://localhost:${PORT}/api/rooms/${roomId}/messages`);
+    const res = await fetch(`http://localhost:${PORT}/api/messages`);
     const messages = (await res.json()) as Array<{ payload: unknown }>;
 
-    // Should have at least the join message + chat message
+    // Should have at least join messages + chat messages
     expect(messages.length).toBeGreaterThanOrEqual(2);
 
     await alice.close();
   });
 
-  it('POST /api/rooms creates a room with name', async () => {
-    const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'created-room' }),
-    });
-
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; name: string; memberCount: number };
-    expect(body.name).toBe('created-room');
-    expect(body.id).toBeTruthy();
-    expect(body.memberCount).toBe(0);
-
-    // Verify room appears in list
-    const listRes = await fetch(`http://localhost:${PORT}/api/rooms`);
-    const rooms = (await listRes.json()) as Array<{ id: string; name: string }>;
-    expect(rooms.some((r) => r.name === 'created-room')).toBe(true);
-  });
-
-  it('POST /api/rooms returns 409 for duplicate name', async () => {
-    await fetch(`http://localhost:${PORT}/api/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'dup-room' }),
-    });
-
-    const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'dup-room' }),
-    });
-
-    expect(res.status).toBe(409);
-  });
-
-  it('POST /api/rooms returns 400 when name missing', async () => {
-    const res = await fetch(`http://localhost:${PORT}/api/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('DELETE /api/rooms/:roomId destroys a room', async () => {
-    // Create room first
-    const createRes = await fetch(`http://localhost:${PORT}/api/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'doomed-room' }),
-    });
-    const created = (await createRes.json()) as { id: string };
-
-    const res = await fetch(`http://localhost:${PORT}/api/rooms/${created.id}`, {
-      method: 'DELETE',
-    });
-
-    expect(res.ok).toBe(true);
-
-    // Verify room is gone
-    const listRes = await fetch(`http://localhost:${PORT}/api/rooms`);
-    const rooms = (await listRes.json()) as Array<{ id: string }>;
-    expect(rooms.some((r) => r.id === created.id)).toBe(false);
-  });
-
-  it('DELETE /api/rooms/:roomId returns 404 for non-existent room', async () => {
-    const res = await fetch(`http://localhost:${PORT}/api/rooms/ghost-room`, {
-      method: 'DELETE',
-    });
-
-    expect(res.status).toBe(404);
-  });
-
-  it('DELETE /api/rooms/:roomId disconnects members', async () => {
-    const roomId = `destroy-members-${randomUUID().slice(0, 8)}`;
-    const client = makeClient('alice', roomId);
-    await client.connect();
-
-    let disconnected = false;
-    client.on('disconnected', () => {
-      disconnected = true;
-    });
-
-    const res = await fetch(`http://localhost:${PORT}/api/rooms/${roomId}`, {
-      method: 'DELETE',
-    });
-    expect(res.ok).toBe(true);
-
-    await sleep(300);
-    expect(disconnected).toBe(true);
-  });
-
   it('DM with mentions reaches both target and mentioned agents', async () => {
-    const alice = makeClient('alice', 'mention-room');
-    const bob = makeClient('bob', 'mention-room');
-    const charlie = makeClient('charlie', 'mention-room');
-    const dave = makeClient('dave', 'mention-room');
+    const alice = makeClient('alice-mention');
+    const bob = makeClient('bob-mention');
+    const charlie = makeClient('charlie-mention');
+    const dave = makeClient('dave-mention');
 
     await alice.connect();
     await bob.connect();
@@ -300,7 +196,7 @@ describe('Server integration', () => {
   });
 
   it('agent-join event is received by existing members', async () => {
-    const alice = makeClient('alice', 'join-room');
+    const alice = makeClient('alice-join');
     await alice.connect();
 
     const joinEvents: string[] = [];
@@ -309,13 +205,223 @@ describe('Server integration', () => {
       joinEvents.push(payload.agent.name);
     });
 
-    const bob = makeClient('bob', 'join-room');
+    const bob = makeClient('bob-join');
     await bob.connect();
     await sleep(200);
 
-    expect(joinEvents).toContain('bob');
+    expect(joinEvents).toContain('bob-join');
 
     await alice.close();
     await bob.close();
+  });
+
+  it('agent-leave event is received when a member disconnects', async () => {
+    const alice = makeClient('alice-leave');
+    const bob = makeClient('bob-leave');
+
+    await alice.connect();
+    await bob.connect();
+    await sleep(50);
+
+    const leaveEvents: string[] = [];
+    alice.on('agent-leave', (msg: SkynetMessage) => {
+      const payload = msg.payload as { agentId: string };
+      leaveEvents.push(payload.agentId);
+    });
+
+    await bob.close();
+    await sleep(200);
+
+    expect(leaveEvents).toHaveLength(1);
+    expect(leaveEvents[0]).toBe(bob.agent.id);
+
+    await alice.close();
+  });
+
+  it('workspace.state includes recent messages', async () => {
+    // First client sends a message
+    const alice = makeClient('alice-state');
+    await alice.connect();
+    await sleep(50);
+    alice.chat('State test message');
+    await sleep(200);
+    await alice.close();
+
+    // Second client connects and gets workspace state with that message
+    const bob = makeClient('bob-state');
+    const state = await bob.connect();
+
+    const chatMessages = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMessages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toContain('State test message');
+
+    await bob.close();
+  });
+});
+
+describe('Server HTTP API', () => {
+  let server: SkynetServer;
+  const API_PORT = 4200 + Math.floor(Math.random() * 100) + 100;
+
+  beforeAll(async () => {
+    server = new SkynetServer({ port: API_PORT, store: new SqliteStore(':memory:') });
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('creates and retrieves an agent', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'test-agent', type: 'claude-code', role: 'dev' }),
+    });
+    expect(createRes.status).toBe(201);
+    const agent = await createRes.json() as { id: string; name: string; type: string; role: string };
+    expect(agent.name).toBe('test-agent');
+    expect(agent.type).toBe('claude-code');
+    expect(agent.role).toBe('dev');
+
+    // Get by ID
+    const getRes = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}`);
+    expect(getRes.status).toBe(200);
+    const fetched = await getRes.json() as { name: string };
+    expect(fetched.name).toBe('test-agent');
+
+    // Get by name
+    const getByNameRes = await fetch(`http://localhost:${API_PORT}/api/agents/test-agent`);
+    expect(getByNameRes.status).toBe(200);
+
+    // List
+    const listRes = await fetch(`http://localhost:${API_PORT}/api/agents`);
+    const agents = await listRes.json() as Array<{ name: string }>;
+    expect(agents.some(a => a.name === 'test-agent')).toBe(true);
+  });
+
+  it('returns 409 for duplicate agent name', async () => {
+    await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'dup-agent', type: 'generic' }),
+    });
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'dup-agent', type: 'generic' }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 400 for agent missing name', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'generic' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for non-existent agent', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/nonexistent`);
+    expect(res.status).toBe(404);
+  });
+
+  it('creates and retrieves a human', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'test-human' }),
+    });
+    expect(createRes.status).toBe(201);
+    const human = await createRes.json() as { id: string; name: string };
+    expect(human.name).toBe('test-human');
+
+    // Get by ID
+    const getRes = await fetch(`http://localhost:${API_PORT}/api/humans/${human.id}`);
+    expect(getRes.status).toBe(200);
+
+    // List
+    const listRes = await fetch(`http://localhost:${API_PORT}/api/humans`);
+    const humans = await listRes.json() as Array<{ name: string }>;
+    expect(humans.some(h => h.name === 'test-human')).toBe(true);
+  });
+
+  it('returns 409 for duplicate human name', async () => {
+    await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'dup-human' }),
+    });
+    const res = await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'dup-human' }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 404 for non-existent human', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/humans/nonexistent`);
+    expect(res.status).toBe(404);
+  });
+
+  it('cross-entity name uniqueness: agent name blocks human creation', async () => {
+    await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'shared-name', type: 'generic' }),
+    });
+    const res = await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'shared-name' }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('name check endpoint', async () => {
+    const availRes = await fetch(`http://localhost:${API_PORT}/api/names/check?name=fresh-unique-name`);
+    const avail = await availRes.json() as { available: boolean };
+    expect(avail.available).toBe(true);
+
+    await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'taken-name-check', type: 'generic' }),
+    });
+    const takenRes = await fetch(`http://localhost:${API_PORT}/api/names/check?name=taken-name-check`);
+    const taken = await takenRes.json() as { available: boolean };
+    expect(taken.available).toBe(false);
+  });
+
+  it('name check returns 400 without name param', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/names/check`);
+    expect(res.status).toBe(400);
+  });
+
+  it('messages endpoint supports pagination', async () => {
+    // Connect a client and send a few messages
+    const client = makeClient('paginator');
+    // Use the API port server
+    const paginatorClient = new SkynetClient({
+      serverUrl: `http://localhost:${API_PORT}`,
+      agent: { id: randomUUID(), name: 'paginator', type: AgentType.HUMAN },
+      reconnect: false,
+    });
+    await paginatorClient.connect();
+    await sleep(50);
+    paginatorClient.chat('page msg 1');
+    paginatorClient.chat('page msg 2');
+    paginatorClient.chat('page msg 3');
+    await sleep(200);
+
+    // Get with limit
+    const limitRes = await fetch(`http://localhost:${API_PORT}/api/messages?limit=2`);
+    const limitMsgs = await limitRes.json() as SkynetMessage[];
+    expect(limitMsgs.length).toBeLessThanOrEqual(2);
+
+    await paginatorClient.close();
   });
 });

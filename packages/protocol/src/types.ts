@@ -34,15 +34,6 @@ export interface HumanProfile {
   createdAt: number;
 }
 
-export type MemberType = 'agent' | 'human';
-
-export interface RoomMembership {
-  roomId: string;
-  memberId: string;
-  memberType: MemberType;
-  joinedAt: number;
-}
-
 // ── Message Types ──
 
 export enum MessageType {
@@ -67,7 +58,6 @@ export interface SkynetMessage {
   type: MessageType;
   from: string;
   to: string | null;
-  roomId: string;
   timestamp: number;
   payload: unknown;
   replyTo?: string;
@@ -141,7 +131,6 @@ export interface ClientEnvelope {
 }
 
 export interface JoinRequest {
-  roomId: string;
   agent: AgentCard;
 }
 

@@ -3,7 +3,6 @@ import { render } from 'ink';
 import { App } from './components/App.js';
 
 export interface ChatTUIOptions {
-  roomId: string;
   serverUrl: string;
   name: string;
 }
