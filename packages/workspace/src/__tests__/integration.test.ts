@@ -292,23 +292,68 @@ describe('Server integration', () => {
     await reconnectBob2.close();
   });
 
-  it('workspace.state includes recent messages', async () => {
-    // First client sends a message
-    const alice = makeClient('alice-state');
+  it('workspace.state respects lastSeenTimestamp from client', async () => {
+    const alice = makeClient('alice-seen');
     await alice.connect();
     await sleep(50);
-    alice.chat('State test message');
-    await sleep(200);
-    await alice.close();
 
-    // Second client connects and gets workspace state with that message
-    const bob = makeClient('bob-state');
+    const bobId = randomUUID();
+
+    // Send two DMs to bob at different times
+    alice.chat('old msg for bob', bobId);
+    await sleep(100);
+
+    // Record the timestamp boundary
+    const boundary = Date.now();
+    await sleep(50);
+
+    alice.chat('new msg for bob', bobId);
+    await sleep(200);
+
+    // Bob connects with lastSeenTimestamp — should only get the newer message
+    const bob = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: { id: bobId, name: 'bob-seen', type: AgentType.HUMAN },
+      reconnect: false,
+      lastSeenTimestamp: boundary,
+    });
     const state = await bob.connect();
 
     const chatMessages = state.recentMessages.filter(m => m.type === 'chat');
     const texts = chatMessages.map(m => (m.payload as { text: string }).text);
-    expect(texts).toContain('State test message');
+    expect(texts).toContain('new msg for bob');
+    expect(texts).not.toContain('old msg for bob');
 
+    await alice.close();
+    await bob.close();
+  });
+
+  it('workspace.state only includes messages mentioning the connecting agent', async () => {
+    const alice = makeClient('alice-state');
+    const bob = makeClient('bob-state');
+    await alice.connect();
+    await sleep(50);
+
+    // Broadcast message (not addressed to bob)
+    alice.chat('General broadcast');
+    await sleep(50);
+    // DM to bob
+    alice.chat('DM for bob', bob.agent.id);
+    await sleep(50);
+    // Message mentioning bob
+    alice.chat('Hey @bob check this', null, [bob.agent.id]);
+    await sleep(200);
+
+    // Bob connects and should only see messages addressed to or mentioning him
+    const state = await bob.connect();
+
+    const chatMessages = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMessages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toContain('DM for bob');
+    expect(texts).toContain('Hey @bob check this');
+    expect(texts).not.toContain('General broadcast');
+
+    await alice.close();
     await bob.close();
   });
 });

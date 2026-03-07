@@ -26,6 +26,8 @@ export interface SkynetWorkspaceOptions {
   store: Store;
   /** Grace period (ms) before broadcasting AGENT_LEAVE after socket close. Default: 300000 (5 minutes). */
   disconnectGraceMs?: number;
+  /** Max number of recent mentioned/DM messages to include in workspace.state. Default: 3. */
+  recentMentionsLimit?: number;
 }
 
 export class SkynetWorkspace {
@@ -36,11 +38,13 @@ export class SkynetWorkspace {
   /** Pending leave timers — cancelled if agent reconnects within grace period. */
   private pendingLeaves = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly disconnectGraceMs: number;
+  private readonly recentMentionsLimit: number;
   private _stopping = false;
 
   constructor(private options: SkynetWorkspaceOptions) {
     this.store = options.store;
     this.disconnectGraceMs = options.disconnectGraceMs ?? 300000;
+    this.recentMentionsLimit = options.recentMentionsLimit ?? 3;
   }
 
   async start(): Promise<void> {
@@ -224,12 +228,15 @@ export class SkynetWorkspace {
     this.members.join(req.agent, socket);
     this.socketAgentMap.set(socket, agentId);
 
-    // Always send workspace state to the (re)connecting agent
+    // Always send workspace state to the (re)connecting agent.
+    // Only include recent messages that mention or are addressed to this agent,
+    // filtered to messages newer than the client's last seen timestamp.
+    const since = req.lastSeenTimestamp;
     socket.send(JSON.stringify({
       event: 'workspace.state',
       data: {
         members: this.members.getMembers(),
-        recentMessages: this.store.getMessages(50),
+        recentMessages: this.store.getMessagesFor(agentId, this.recentMentionsLimit, since),
       },
     }));
 

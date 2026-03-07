@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { MessageType } from '@skynet/protocol';
 import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet/protocol';
 import { AgentRunner } from '../agent-runner.js';
@@ -13,10 +16,12 @@ vi.mock('@skynet/sdk', () => {
   class MockSkynetClient extends EventEmitter {
     agent: AgentCard;
     chatCalls: Array<{ text: string; to: string | null }> = [];
+    lastSeenTimestamp = 0;
 
-    constructor(options: { agent: AgentCard }) {
+    constructor(options: { agent: AgentCard; lastSeenTimestamp?: number }) {
       super();
       this.agent = options.agent;
+      this.lastSeenTimestamp = options.lastSeenTimestamp ?? 0;
     }
 
     async connect() {
@@ -512,5 +517,66 @@ describe('AgentRunner batch processing', () => {
 
     // msg1 processed, msg2 processed (single chat before task), task processed, msg3 processed
     expect(adapter.handleMessageCalls).toHaveLength(3); // msg1, msg2, msg3
+  });
+});
+
+describe('AgentRunner state persistence', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `skynet-test-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(testDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('persists lastSeenTimestamp after processing messages', async () => {
+    const statePath = join(testDir, 'state.json');
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      statePath,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+
+    // Simulate receiving a message with a known timestamp
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello' });
+    // Override timestamp to a predictable value
+    (msg as { timestamp: number }).timestamp = 42000;
+    // Also set lastSeenTimestamp on the mock client
+    (client as unknown as { lastSeenTimestamp: number }).lastSeenTimestamp = 42000;
+
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    // State file should exist with the timestamp
+    expect(existsSync(statePath)).toBe(true);
+    const state = JSON.parse(readFileSync(statePath, 'utf-8'));
+    expect(state.lastSeenTimestamp).toBe(42000);
+  });
+
+  it('loads lastSeenTimestamp from state file on start', async () => {
+    const statePath = join(testDir, 'state.json');
+
+    // Write existing state
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(statePath, JSON.stringify({ lastSeenTimestamp: 99000 }));
+
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      statePath,
+    });
+    await runner.start();
+
+    // The client should have been constructed with the persisted timestamp
+    const client = getClient(runner);
+    expect((client as unknown as { lastSeenTimestamp: number }).lastSeenTimestamp).toBe(99000);
   });
 });

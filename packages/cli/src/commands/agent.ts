@@ -31,6 +31,7 @@ async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl:
   const workDir = join(wsDir, agentProfile.id, 'work');
 
   const adapter = createAdapter(agentProfile.type as AgentType, workDir);
+  const statePath = join(wsDir, agentProfile.id, 'state.json');
   const runner = new AgentRunner({
     serverUrl,
     adapter,
@@ -39,6 +40,7 @@ async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl:
     role: agentProfile.role,
     persona: agentProfile.persona,
     projectRoot: workDir,
+    statePath,
   });
 
   process.on('SIGINT', async () => {

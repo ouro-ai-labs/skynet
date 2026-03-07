@@ -77,6 +77,23 @@ export class SqliteStore implements Store {
     return row ? this.rowToMessage(row) : undefined;
   }
 
+  getMessagesFor(agentId: string, limit: number = 3, since?: number): SkynetMessage[] {
+    const baseCondition = '("to" = ? OR (mentions IS NOT NULL AND instr(mentions, ?) > 0))';
+    const rows = since
+      ? this.db.prepare(`
+          SELECT * FROM messages
+          WHERE ${baseCondition} AND timestamp > ?
+          ORDER BY timestamp DESC LIMIT ?
+        `).all(agentId, agentId, since, limit)
+      : this.db.prepare(`
+          SELECT * FROM messages
+          WHERE ${baseCondition}
+          ORDER BY timestamp DESC LIMIT ?
+        `).all(agentId, agentId, limit);
+
+    return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
+  }
+
   // ── Agents ──
 
   saveAgent(agent: AgentCard): void {

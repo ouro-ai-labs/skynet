@@ -132,6 +132,59 @@ describe('SqliteStore', () => {
       expect(messages[i].timestamp).toBeGreaterThanOrEqual(messages[i - 1].timestamp);
     }
   });
+
+  it('getMessagesFor returns messages addressed to or mentioning the agent', () => {
+    // Broadcast (no to, no mentions)
+    store.save(createChatMessage('alice', 'broadcast'));
+    // DM to bob
+    store.save(createChatMessage('alice', 'dm for bob', 'bob-id'));
+    // Mentions bob
+    store.save(createChatMessage('alice', 'hey @bob', null, ['bob-id']));
+    // DM to charlie
+    store.save(createChatMessage('alice', 'dm for charlie', 'charlie-id'));
+
+    const bobMessages = store.getMessagesFor('bob-id');
+    expect(bobMessages).toHaveLength(2);
+    const texts = bobMessages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toContain('dm for bob');
+    expect(texts).toContain('hey @bob');
+  });
+
+  it('getMessagesFor respects limit', () => {
+    for (let i = 0; i < 10; i++) {
+      store.save(createChatMessage('alice', `dm ${i}`, 'bob-id'));
+    }
+
+    const messages = store.getMessagesFor('bob-id', 3);
+    expect(messages).toHaveLength(3);
+    // Should be the most recent 3, in chronological order
+    const texts = messages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toEqual(['dm 7', 'dm 8', 'dm 9']);
+  });
+
+  it('getMessagesFor returns empty when no matching messages', () => {
+    store.save(createChatMessage('alice', 'broadcast'));
+    expect(store.getMessagesFor('bob-id')).toEqual([]);
+  });
+
+  it('getMessagesFor filters by since timestamp', () => {
+    for (let i = 0; i < 5; i++) {
+      const msg = createMessage({
+        type: MessageType.CHAT,
+        from: 'alice',
+        to: 'bob-id',
+        timestamp: 1000 + i,
+        payload: { text: `dm ${i}` },
+      });
+      store.save(msg);
+    }
+
+    // Only messages after timestamp 1002
+    const messages = store.getMessagesFor('bob-id', 10, 1002);
+    expect(messages).toHaveLength(2);
+    const texts = messages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toEqual(['dm 3', 'dm 4']);
+  });
 });
 
 describe('SqliteStore agents', () => {
