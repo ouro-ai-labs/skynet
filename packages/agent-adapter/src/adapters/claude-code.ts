@@ -25,12 +25,6 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     this.model = options.model;
   }
 
-  override setRoomId(_roomId: string): void {
-    // Reset session for new room
-    this.sessionId = randomUUID();
-    this.sessionStarted = false;
-  }
-
   async isAvailable(): Promise<boolean> {
     try {
       await execaCommand('claude --version');
@@ -97,18 +91,17 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
   private messageToPrompt(msg: SkynetMessage, senderName?: string): string {
     const sender = senderName ?? msg.from;
-    const room = this.roomName ? `[${this.roomName}] ` : '';
     switch (msg.type) {
       case MessageType.CHAT: {
         const payload = msg.payload as { text: string };
-        return `${room}Message from ${sender}: ${payload.text}`;
+        return `Message from ${sender}: ${payload.text}`;
       }
       case MessageType.TASK_ASSIGN: {
         const payload = msg.payload as TaskPayload;
-        return `${room}Task assigned: ${payload.title}\n\n${payload.description}`;
+        return `Task assigned: ${payload.title}\n\n${payload.description}`;
       }
       default:
-        return `${room}Received ${msg.type} from ${sender}: ${JSON.stringify(msg.payload)}`;
+        return `Received ${msg.type} from ${sender}: ${JSON.stringify(msg.payload)}`;
     }
   }
 

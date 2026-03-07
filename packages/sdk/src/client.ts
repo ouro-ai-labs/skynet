@@ -14,16 +14,13 @@ import {
 export interface SkynetClientOptions {
   serverUrl: string;
   agent: AgentCard;
-  roomId: string;
   reconnect?: boolean;
   reconnectInterval?: number;
   maxReconnectInterval?: number;
   heartbeatInterval?: number;
 }
 
-export interface RoomState {
-  roomId: string;
-  roomName: string;
+export interface WorkspaceState {
   members: AgentCard[];
   recentMessages: SkynetMessage[];
 }
@@ -38,7 +35,6 @@ export class SkynetClient extends EventEmitter {
   private _reconnectAttempt = 0;
 
   readonly agent: AgentCard;
-  readonly roomId: string;
   private serverUrl: string;
   private reconnect: boolean;
   private reconnectInterval: number;
@@ -49,7 +45,6 @@ export class SkynetClient extends EventEmitter {
     super();
     this.serverUrl = options.serverUrl;
     this.agent = options.agent;
-    this.roomId = options.roomId;
     this.reconnect = options.reconnect ?? true;
     this.reconnectInterval = options.reconnectInterval ?? 1000;
     this.maxReconnectInterval = options.maxReconnectInterval ?? 30000;
@@ -60,7 +55,7 @@ export class SkynetClient extends EventEmitter {
     return this._connected;
   }
 
-  async connect(): Promise<RoomState> {
+  async connect(): Promise<WorkspaceState> {
     return new Promise((resolve, reject) => {
       const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/ws';
       this.ws = new WebSocket(wsUrl);
@@ -69,7 +64,7 @@ export class SkynetClient extends EventEmitter {
         this._connected = true;
         this._reconnecting = false;
         this._reconnectAttempt = 0;
-        this.send({ action: ClientAction.JOIN, data: { roomId: this.roomId, agent: this.agent } satisfies JoinRequest });
+        this.send({ action: ClientAction.JOIN, data: { agent: this.agent } satisfies JoinRequest });
         this.startHeartbeat();
       });
 
@@ -81,9 +76,9 @@ export class SkynetClient extends EventEmitter {
         // Server event (has 'event' field)
         if ('event' in parsed) {
           const evt = parsed as ServerEvent;
-          if (evt.event === 'room.state' && !resolved) {
+          if (evt.event === 'workspace.state' && !resolved) {
             resolved = true;
-            resolve(evt.data as RoomState);
+            resolve(evt.data as WorkspaceState);
           } else if (evt.event === 'error') {
             this.emit('error', evt.data);
           }
@@ -152,11 +147,10 @@ export class SkynetClient extends EventEmitter {
     });
   }
 
-  sendMessage(msg: Omit<SkynetMessage, 'id' | 'timestamp' | 'from' | 'roomId'>): void {
+  sendMessage(msg: Omit<SkynetMessage, 'id' | 'timestamp' | 'from'>): void {
     const fullMsg = createMessage({
       ...msg,
       from: this.agent.id,
-      roomId: this.roomId,
     });
     this.send({ action: ClientAction.SEND, data: fullMsg });
   }

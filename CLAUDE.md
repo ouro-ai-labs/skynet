@@ -55,10 +55,10 @@ See `docs/architecture.md` for the full architecture and `docs/phases.md` for th
 If you modify code under these paths, also read the matching docs first:
 
 - `packages/protocol` → `docs/protocol.md` (message types, entity types, backward compatibility)
-- `packages/server` → `docs/server.md` (WebSocket protocol, HTTP API, entity management)
+- `packages/server` → `docs/workspace.md` (WebSocket protocol, HTTP API, entity management)
 - `packages/sdk` → `docs/usage.md` (client SDK usage, reconnection, error handling)
 - `packages/agent-adapter` → `docs/adapter.md` (adapter contracts, CLI process management)
-- Entity model → `docs/entities.md` (workspace, room, agent, human lifecycle)
+- Entity model → `docs/entities.md` (workspace, agent, human lifecycle)
 
 ## Language
 
@@ -151,7 +151,7 @@ What changed and why (user-facing when applicable).
 - Architecture: `docs/architecture.md`
 - Protocol design: `docs/protocol.md`
 - Entity model: `docs/entities.md`
-- Server implementation: `docs/server.md`
+- Workspace server: `docs/workspace.md`
 - Agent adapter: `docs/adapter.md`
 - Usage guide: `docs/usage.md`
 - Implementation phases: `docs/phases.md`

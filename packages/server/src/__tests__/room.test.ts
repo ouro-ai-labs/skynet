@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Room, RoomManager } from '../room.js';
+import { MemberManager } from '../member-manager.js';
 import { AgentType, createChatMessage } from '@skynet/protocol';
 import type { AgentCard } from '@skynet/protocol';
 import type { WebSocket } from 'ws';
@@ -20,46 +20,46 @@ function mockAgent(id: string, name: string): AgentCard {
   };
 }
 
-describe('Room', () => {
-  let room: Room;
+describe('MemberManager', () => {
+  let members: MemberManager;
 
   beforeEach(() => {
-    room = new Room('test-room');
+    members = new MemberManager();
   });
 
   it('allows agents to join and leave', () => {
     const agent = mockAgent('a1', 'alice');
     const socket = mockSocket();
 
-    room.join(agent, socket);
-    expect(room.size).toBe(1);
-    expect(room.getMembers()).toHaveLength(1);
-    expect(room.getMembers()[0].name).toBe('alice');
+    members.join(agent, socket);
+    expect(members.size).toBe(1);
+    expect(members.getMembers()).toHaveLength(1);
+    expect(members.getMembers()[0].name).toBe('alice');
 
-    room.leave('a1');
-    expect(room.size).toBe(0);
+    members.leave('a1');
+    expect(members.size).toBe(0);
   });
 
   it('returns member by id', () => {
     const agent = mockAgent('a1', 'alice');
     const socket = mockSocket();
-    room.join(agent, socket);
+    members.join(agent, socket);
 
-    expect(room.getMember('a1')).toBeDefined();
-    expect(room.getMember('a1')!.agent.name).toBe('alice');
-    expect(room.getMember('nonexistent')).toBeUndefined();
+    expect(members.getMember('a1')).toBeDefined();
+    expect(members.getMember('a1')!.agent.name).toBe('alice');
+    expect(members.getMember('nonexistent')).toBeUndefined();
   });
 
   it('broadcasts message to all except sender', () => {
     const s1 = mockSocket();
     const s2 = mockSocket();
     const s3 = mockSocket();
-    room.join(mockAgent('a1', 'alice'), s1);
-    room.join(mockAgent('a2', 'bob'), s2);
-    room.join(mockAgent('a3', 'charlie'), s3);
+    members.join(mockAgent('a1', 'alice'), s1);
+    members.join(mockAgent('a2', 'bob'), s2);
+    members.join(mockAgent('a3', 'charlie'), s3);
 
-    const msg = createChatMessage('a1', 'test-room', 'hello');
-    room.broadcast(msg, 'a1');
+    const msg = createChatMessage('a1', 'hello');
+    members.broadcast(msg, 'a1');
 
     expect(s1.send).not.toHaveBeenCalled();
     expect(s2.send).toHaveBeenCalledOnce();
@@ -69,11 +69,11 @@ describe('Room', () => {
   it('broadcasts to all when no excludeAgentId', () => {
     const s1 = mockSocket();
     const s2 = mockSocket();
-    room.join(mockAgent('a1', 'alice'), s1);
-    room.join(mockAgent('a2', 'bob'), s2);
+    members.join(mockAgent('a1', 'alice'), s1);
+    members.join(mockAgent('a2', 'bob'), s2);
 
-    const msg = createChatMessage('a1', 'test-room', 'hello');
-    room.broadcast(msg);
+    const msg = createChatMessage('a1', 'hello');
+    members.broadcast(msg);
 
     expect(s1.send).toHaveBeenCalledOnce();
     expect(s2.send).toHaveBeenCalledOnce();
@@ -82,11 +82,11 @@ describe('Room', () => {
   it('skips closed sockets on broadcast', () => {
     const openSocket = mockSocket(true);
     const closedSocket = mockSocket(false);
-    room.join(mockAgent('a1', 'alice'), openSocket);
-    room.join(mockAgent('a2', 'bob'), closedSocket);
+    members.join(mockAgent('a1', 'alice'), openSocket);
+    members.join(mockAgent('a2', 'bob'), closedSocket);
 
-    const msg = createChatMessage('a3', 'test-room', 'hello');
-    room.broadcast(msg);
+    const msg = createChatMessage('a3', 'hello');
+    members.broadcast(msg);
 
     expect(openSocket.send).toHaveBeenCalledOnce();
     expect(closedSocket.send).not.toHaveBeenCalled();
@@ -95,11 +95,11 @@ describe('Room', () => {
   it('sends direct message to specific agent', () => {
     const s1 = mockSocket();
     const s2 = mockSocket();
-    room.join(mockAgent('a1', 'alice'), s1);
-    room.join(mockAgent('a2', 'bob'), s2);
+    members.join(mockAgent('a1', 'alice'), s1);
+    members.join(mockAgent('a2', 'bob'), s2);
 
-    const msg = createChatMessage('a1', 'test-room', 'hey bob', 'a2');
-    const sent = room.sendTo('a2', msg);
+    const msg = createChatMessage('a1', 'hey bob', 'a2');
+    const sent = members.sendTo('a2', msg);
 
     expect(sent).toBe(true);
     expect(s2.send).toHaveBeenCalledOnce();
@@ -107,101 +107,71 @@ describe('Room', () => {
   });
 
   it('returns false when sending to non-existent agent', () => {
-    const result = room.sendTo('non-existent', createChatMessage('a1', 'test-room', 'hello'));
+    const result = members.sendTo('non-existent', createChatMessage('a1', 'hello'));
     expect(result).toBe(false);
   });
 
   it('updates agent status', () => {
-    room.join(mockAgent('a1', 'alice'), mockSocket());
-    expect(room.getMember('a1')!.agent.status).toBeUndefined();
+    members.join(mockAgent('a1', 'alice'), mockSocket());
+    expect(members.getMember('a1')!.agent.status).toBeUndefined();
 
-    room.updateStatus('a1', 'busy');
-    expect(room.getMember('a1')!.agent.status).toBe('busy');
-  });
-});
-
-describe('RoomManager', () => {
-  it('creates rooms on demand', () => {
-    const mgr = new RoomManager();
-    const room = mgr.getOrCreate('room-1');
-
-    expect(room.id).toBe('room-1');
-    expect(mgr.get('room-1')).toBe(room);
+    members.updateStatus('a1', 'busy');
+    expect(members.getMember('a1')!.agent.status).toBe('busy');
   });
 
-  it('returns same room instance', () => {
-    const mgr = new RoomManager();
-    const r1 = mgr.getOrCreate('room-1');
-    const r2 = mgr.getOrCreate('room-1');
-
-    expect(r1).toBe(r2);
+  it('updateStatus is a no-op for non-existent agent', () => {
+    members.updateStatus('nonexistent', 'busy');
+    expect(members.getMember('nonexistent')).toBeUndefined();
   });
 
-  it('lists rooms with member counts', () => {
-    const mgr = new RoomManager();
-    mgr.getOrCreate('room-1').join(mockAgent('a1', 'alice'), mockSocket());
-    mgr.getOrCreate('room-2');
+  it('sendTo returns false for closed socket', () => {
+    const closedSocket = mockSocket(false);
+    members.join(mockAgent('a1', 'alice'), closedSocket);
 
-    const list = mgr.listRooms();
-    expect(list).toHaveLength(2);
-    expect(list.find((r) => r.id === 'room-1')!.memberCount).toBe(1);
-    expect(list.find((r) => r.id === 'room-2')!.memberCount).toBe(0);
+    const msg = createChatMessage('a2', 'hello');
+    const result = members.sendTo('a1', msg);
+
+    expect(result).toBe(false);
+    expect(closedSocket.send).not.toHaveBeenCalled();
   });
 
-  it('removes empty rooms', () => {
-    const mgr = new RoomManager();
-    mgr.getOrCreate('room-1');
-    mgr.removeIfEmpty('room-1');
+  it('replaces existing member on re-join', () => {
+    const s1 = mockSocket();
+    const s2 = mockSocket();
+    const agent = mockAgent('a1', 'alice');
 
-    expect(mgr.get('room-1')).toBeUndefined();
+    members.join(agent, s1);
+    members.join(agent, s2);
+
+    expect(members.size).toBe(1);
+
+    const msg = createChatMessage('a2', 'hello');
+    members.sendTo('a1', msg);
+
+    expect(s1.send).not.toHaveBeenCalled();
+    expect(s2.send).toHaveBeenCalledOnce();
   });
 
-  it('does not remove non-empty rooms', () => {
-    const mgr = new RoomManager();
-    mgr.getOrCreate('room-1').join(mockAgent('a1', 'alice'), mockSocket());
-    mgr.removeIfEmpty('room-1');
-
-    expect(mgr.get('room-1')).toBeDefined();
+  it('leave is a no-op for non-existent agent', () => {
+    members.leave('nonexistent');
+    expect(members.size).toBe(0);
   });
 
-  it('creates a new room explicitly', () => {
-    const mgr = new RoomManager();
-    const room = mgr.create('new-room');
-
-    expect(room).not.toBeNull();
-    expect(room!.id).toBe('new-room');
-    expect(mgr.get('new-room')).toBe(room);
+  it('getMembers returns empty array when no members', () => {
+    expect(members.getMembers()).toEqual([]);
+    expect(members.size).toBe(0);
   });
 
-  it('returns null when creating a room that already exists', () => {
-    const mgr = new RoomManager();
-    mgr.create('dup-room');
-    const second = mgr.create('dup-room');
+  it('broadcast serializes message correctly', () => {
+    const s1 = mockSocket();
+    members.join(mockAgent('a1', 'alice'), s1);
 
-    expect(second).toBeNull();
-  });
+    const msg = createChatMessage('a2', 'hello');
+    members.broadcast(msg);
 
-  it('removes a room and closes member sockets', () => {
-    const mgr = new RoomManager();
-    const room = mgr.getOrCreate('rm-room');
-    const socket = mockSocket(true);
-    (socket as unknown as { close: ReturnType<typeof vi.fn> }).close = vi.fn();
-    room.join(mockAgent('a1', 'alice'), socket);
-
-    const result = mgr.remove('rm-room');
-
-    expect(result.removed).toBe(true);
-    expect(mgr.get('rm-room')).toBeUndefined();
-    expect(
-      (socket as unknown as { close: ReturnType<typeof vi.fn> }).close,
-    ).toHaveBeenCalledWith(1000, 'Room destroyed');
-  });
-
-  it('returns not found when removing non-existent room', () => {
-    const mgr = new RoomManager();
-    const result = mgr.remove('ghost');
-
-    expect(result.removed).toBe(false);
-    expect(result.reason).toBe('Room not found');
+    const sent = JSON.parse((s1.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string);
+    expect(sent.type).toBe('chat');
+    expect(sent.from).toBe('a2');
+    expect(sent.payload).toEqual({ text: 'hello' });
   });
 });

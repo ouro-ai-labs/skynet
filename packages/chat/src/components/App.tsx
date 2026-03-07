@@ -53,8 +53,8 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Management commands: /room, /agent, /human
-    if (cmd.startsWith('/room') || cmd.startsWith('/agent') || cmd.startsWith('/human')) {
+    // Management commands: /agent, /human
+    if (cmd.startsWith('/agent') || cmd.startsWith('/human')) {
       executeCommand(options.serverUrl, text.trim()).then((result) => {
         if (result) {
           setCommandOutputs((prev) => [...prev, { lines: result.lines, error: result.error }]);
@@ -127,7 +127,7 @@ export function App({ options }: AppProps): React.ReactElement {
   if (state.connecting) {
     return (
       <Box flexDirection="column" paddingX={1} paddingY={1}>
-        <Text>Connecting to <Text bold color="cyan">{options.roomId}</Text> at {options.serverUrl}...</Text>
+        <Text>Connecting to workspace at {options.serverUrl}...</Text>
       </Box>
     );
   }
@@ -142,7 +142,7 @@ export function App({ options }: AppProps): React.ReactElement {
     );
   }
 
-  const statusLine = `${state.connected ? '\u25CF' : '\u25CB'} #${options.roomId} \u00B7 ${state.members.size} members`;
+  const statusLine = `${state.connected ? '\u25CF' : '\u25CB'} workspace \u00B7 ${state.members.size} members`;
 
   return (
     <>
@@ -217,12 +217,8 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text>  @name message   Direct message</Text>
             <Text />
             <Text bold> Management</Text>
-            <Text>  /room list               List rooms</Text>
-            <Text>  /room new {'<name>'}        Create room</Text>
-            <Text>  /agent list              List agents</Text>
-            <Text>  /agent {'<name>'} join {'<room>'} Add agent to room</Text>
-            <Text>  /human list              List humans</Text>
-            <Text>  /human {'<name>'} join {'<room>'} Add human to room</Text>
+            <Text>  /agent list     List agents</Text>
+            <Text>  /human list     List humans</Text>
             <Text />
             <Text bold> Input</Text>
             <Text>  Up/Down         Input history</Text>

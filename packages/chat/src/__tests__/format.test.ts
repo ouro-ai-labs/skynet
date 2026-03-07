@@ -29,7 +29,6 @@ function makeMsg(overrides: Partial<SkynetMessage> & Pick<SkynetMessage, 'type' 
     id: 'msg-1',
     from: 'agent-1',
     to: null,
-    roomId: 'room-1',
     timestamp: new Date('2026-03-05T14:30:00').getTime(),
     ...overrides,
   };

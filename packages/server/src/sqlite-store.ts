@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
-import type { SkynetMessage, AgentCard, HumanProfile, RoomMembership, MemberType } from '@skynet/protocol';
-import type { Store, PersistedRoom } from './store.js';
+import type { SkynetMessage, AgentCard, HumanProfile } from '@skynet/protocol';
+import type { Store } from './store.js';
 
 export class SqliteStore implements Store {
   private db: Database.Database;
@@ -17,19 +17,13 @@ export class SqliteStore implements Store {
         type TEXT NOT NULL,
         "from" TEXT NOT NULL,
         "to" TEXT,
-        room_id TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         payload TEXT NOT NULL,
-        reply_to TEXT
+        reply_to TEXT,
+        mentions TEXT
       );
-      CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
       CREATE INDEX IF NOT EXISTS idx_messages_from ON messages("from");
-
-      CREATE TABLE IF NOT EXISTS rooms (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        created_at INTEGER NOT NULL
-      );
 
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
@@ -45,14 +39,6 @@ export class SqliteStore implements Store {
         name TEXT UNIQUE NOT NULL,
         created_at INTEGER NOT NULL
       );
-
-      CREATE TABLE IF NOT EXISTS room_members (
-        room_id TEXT NOT NULL REFERENCES rooms(id),
-        member_id TEXT NOT NULL,
-        member_type TEXT NOT NULL,
-        joined_at INTEGER NOT NULL,
-        PRIMARY KEY (room_id, member_id)
-      );
     `);
   }
 
@@ -60,28 +46,28 @@ export class SqliteStore implements Store {
 
   save(msg: SkynetMessage): void {
     this.db.prepare(`
-      INSERT OR REPLACE INTO messages (id, type, "from", "to", room_id, timestamp, payload, reply_to)
+      INSERT OR REPLACE INTO messages (id, type, "from", "to", timestamp, payload, reply_to, mentions)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       msg.id,
       msg.type,
       msg.from,
       msg.to,
-      msg.roomId,
       msg.timestamp,
       JSON.stringify(msg.payload),
       msg.replyTo ?? null,
+      msg.mentions && msg.mentions.length > 0 ? JSON.stringify(msg.mentions) : null,
     );
   }
 
-  getByRoom(roomId: string, limit: number = 100, before?: number): SkynetMessage[] {
+  getMessages(limit: number = 100, before?: number): SkynetMessage[] {
     const rows = before
       ? this.db.prepare(`
-          SELECT * FROM messages WHERE room_id = ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?
-        `).all(roomId, before, limit)
+          SELECT * FROM messages WHERE timestamp < ? ORDER BY timestamp DESC LIMIT ?
+        `).all(before, limit)
       : this.db.prepare(`
-          SELECT * FROM messages WHERE room_id = ? ORDER BY timestamp DESC LIMIT ?
-        `).all(roomId, limit);
+          SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?
+        `).all(limit);
 
     return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
   }
@@ -89,35 +75,6 @@ export class SqliteStore implements Store {
   getById(id: string): SkynetMessage | undefined {
     const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as Record<string, unknown> | undefined;
     return row ? this.rowToMessage(row) : undefined;
-  }
-
-  // ── Rooms ──
-
-  saveRoom(room: { id: string; name: string }): void {
-    this.db.prepare(
-      'INSERT OR IGNORE INTO rooms (id, name, created_at) VALUES (?, ?, ?)',
-    ).run(room.id, room.name, Date.now());
-  }
-
-  deleteRoom(roomId: string): void {
-    this.db.prepare('DELETE FROM room_members WHERE room_id = ?').run(roomId);
-    this.db.prepare('DELETE FROM rooms WHERE id = ?').run(roomId);
-  }
-
-  listRooms(): PersistedRoom[] {
-    const rows = this.db.prepare('SELECT id, name, created_at FROM rooms ORDER BY created_at').all();
-    return (rows as Array<{ id: string; name: string; created_at: number }>).map((r) => ({
-      id: r.id,
-      name: r.name,
-      createdAt: r.created_at,
-    }));
-  }
-
-  getRoomByName(name: string): PersistedRoom | undefined {
-    const row = this.db.prepare('SELECT id, name, created_at FROM rooms WHERE name = ?').get(name) as
-      | { id: string; name: string; created_at: number }
-      | undefined;
-    return row ? { id: row.id, name: row.name, createdAt: row.created_at } : undefined;
   }
 
   // ── Agents ──
@@ -160,35 +117,9 @@ export class SqliteStore implements Store {
     return row ? this.rowToHuman(row) : undefined;
   }
 
-  // ── Room Membership ──
-
-  addRoomMember(roomId: string, memberId: string, memberType: MemberType): void {
-    this.db.prepare(
-      'INSERT OR IGNORE INTO room_members (room_id, member_id, member_type, joined_at) VALUES (?, ?, ?, ?)',
-    ).run(roomId, memberId, memberType, Date.now());
-  }
-
-  removeRoomMember(roomId: string, memberId: string): void {
-    this.db.prepare('DELETE FROM room_members WHERE room_id = ? AND member_id = ?').run(roomId, memberId);
-  }
-
-  getRoomMembers(roomId: string): RoomMembership[] {
-    const rows = this.db.prepare(
-      'SELECT room_id, member_id, member_type, joined_at FROM room_members WHERE room_id = ? ORDER BY joined_at',
-    ).all(roomId);
-    return (rows as Array<{ room_id: string; member_id: string; member_type: string; joined_at: number }>).map((r) => ({
-      roomId: r.room_id,
-      memberId: r.member_id,
-      memberType: r.member_type as MemberType,
-      joinedAt: r.joined_at,
-    }));
-  }
-
   // ── Name Uniqueness ──
 
   checkNameUnique(name: string): boolean {
-    const roomRow = this.db.prepare('SELECT 1 FROM rooms WHERE name = ?').get(name);
-    if (roomRow) return false;
     const agentRow = this.db.prepare('SELECT 1 FROM agents WHERE name = ?').get(name);
     if (agentRow) return false;
     const humanRow = this.db.prepare('SELECT 1 FROM humans WHERE name = ?').get(name);
@@ -204,10 +135,10 @@ export class SqliteStore implements Store {
       type: row.type as SkynetMessage['type'],
       from: row.from as string,
       to: (row.to as string) || null,
-      roomId: row.room_id as string,
       timestamp: row.timestamp as number,
       payload: JSON.parse(row.payload as string),
       replyTo: (row.reply_to as string) || undefined,
+      mentions: row.mentions ? JSON.parse(row.mentions as string) as string[] : undefined,
     };
   }
 

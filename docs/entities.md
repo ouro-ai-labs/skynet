@@ -2,11 +2,11 @@
 
 ## Overview
 
-Skynet uses a hierarchical entity model: **Workspace/Server > Room, Agent, Human**. Each workspace is an isolated unit with its own database, configuration, and entities.
+Skynet uses a simple two-level entity model: **Workspace > Agent, Human**. Each workspace is an isolated unit with its own database, configuration, and entities. There are no rooms — agents and humans communicate directly within the workspace.
 
 ## Entity Types
 
-### Workspace/Server
+### Workspace
 
 The top-level isolation unit. Each workspace has:
 - A UUID identifier
@@ -15,32 +15,25 @@ The top-level isolation unit. Each workspace has:
 - Its own SQLite database (`data.db`)
 - Agent directories with profiles and work dirs
 
-### Room
-
-A communication channel within a workspace.
-- UUID + unique name (auto-generated UUID, user-provided name)
-- Members (agents and humans) join/leave rooms
-- Messages are scoped to rooms
-
 ### Agent
 
 An AI agent instance within a workspace.
 - UUID + unique name
 - Type: `claude-code`, `gemini-cli`, `codex-cli`, `generic`
 - Optional role and persona description
-- Can join multiple rooms
+- Automatically joins the workspace upon connection
 - Has a local work directory and profile
 
 ### Human
 
 A human participant within a workspace.
 - UUID + unique name
-- Can join multiple rooms
+- Automatically joins the workspace upon connection
 - Interacts via the chat TUI
 
 ## Name Uniqueness
 
-Names are unique **per workspace** across all entity types. A room, agent, and human cannot share the same name within a workspace. This is enforced at the application level via `checkNameUnique()`.
+Names are unique **per workspace** across all entity types. An agent and a human cannot share the same name within a workspace. This is enforced at the application level via `checkNameUnique()`.
 
 ## Directory Structure
 
@@ -48,21 +41,13 @@ Names are unique **per workspace** across all entity types. A room, agent, and h
 ~/.skynet/
   servers.json                    # Registry: [{id, name, host, port}]
   {workspace_uuid}/
-    config.json                   # {host, port}
-    data.db                       # SQLite: messages, rooms, agents, humans, room_members
+    data.db                       # SQLite: messages, agents, humans
     {agent_uuid}/
       profile.md                  # Agent name, type, role, persona
       work/                       # Agent working directory
 ```
 
 ## Database Schema
-
-### rooms
-| Column     | Type    | Constraints          |
-|------------|---------|----------------------|
-| id         | TEXT    | PRIMARY KEY          |
-| name       | TEXT    | UNIQUE NOT NULL      |
-| created_at | INTEGER | NOT NULL             |
 
 ### agents
 | Column     | Type    | Constraints          |
@@ -81,117 +66,94 @@ Names are unique **per workspace** across all entity types. A room, agent, and h
 | name       | TEXT    | UNIQUE NOT NULL      |
 | created_at | INTEGER | NOT NULL             |
 
-### room_members
-| Column      | Type    | Constraints                          |
-|-------------|---------|--------------------------------------|
-| room_id     | TEXT    | NOT NULL, FK rooms(id)               |
-| member_id   | TEXT    | NOT NULL                             |
-| member_type | TEXT    | NOT NULL ('agent' or 'human')        |
-| joined_at   | INTEGER | NOT NULL                             |
-| PRIMARY KEY | (room_id, member_id)                          |
-
 ### messages
-Unchanged from previous schema. See `docs/protocol.md`.
+| Column    | Type    | Constraints     |
+|-----------|---------|-----------------|
+| id        | TEXT    | PRIMARY KEY     |
+| type      | TEXT    | NOT NULL        |
+| from      | TEXT    | NOT NULL        |
+| to        | TEXT    |                 |
+| timestamp | INTEGER | NOT NULL        |
+| payload   | TEXT    | NOT NULL (JSON) |
+| reply_to  | TEXT    |                 |
+| mentions  | TEXT    | (JSON array)    |
 
 ## REST API
 
 All endpoints are served by the workspace's server instance.
 
-### Rooms
-| Method | Path                              | Description                    |
-|--------|-----------------------------------|--------------------------------|
-| POST   | `/api/rooms`                      | Create room `{name}`           |
-| GET    | `/api/rooms`                      | List all rooms                 |
-| DELETE | `/api/rooms/:roomId`              | Destroy room                   |
-| GET    | `/api/rooms/:roomId/members`      | Get connected WebSocket members|
-| GET    | `/api/rooms/:roomId/messages`     | Get room messages              |
-| GET    | `/api/rooms/:roomId/registered-members` | Get DB-registered members |
+### Members
+| Method | Path             | Description                     |
+|--------|------------------|---------------------------------|
+| GET    | `/api/members`   | Get connected WebSocket members |
+
+### Messages
+| Method | Path             | Description                                          |
+|--------|------------------|------------------------------------------------------|
+| GET    | `/api/messages`  | Get messages (`?limit=100&before=timestamp`)         |
 
 ### Agents
-| Method | Path                              | Description              |
-|--------|-----------------------------------|--------------------------|
-| POST   | `/api/agents`                     | Create `{name, type, role?, persona?}` |
-| GET    | `/api/agents`                     | List all agents          |
-| GET    | `/api/agents/:id`                 | Get agent by UUID or name|
-| POST   | `/api/agents/:id/join/:roomId`    | Agent joins room         |
-| POST   | `/api/agents/:id/leave/:roomId`   | Agent leaves room        |
+| Method | Path              | Description                              |
+|--------|-------------------|------------------------------------------|
+| POST   | `/api/agents`     | Create `{name, type, role?, persona?}`   |
+| GET    | `/api/agents`     | List all agents                          |
+| GET    | `/api/agents/:id` | Get agent by UUID or name                |
 
 ### Humans
-| Method | Path                              | Description              |
-|--------|-----------------------------------|--------------------------|
-| POST   | `/api/humans`                     | Create `{name}`          |
-| GET    | `/api/humans`                     | List all humans          |
-| GET    | `/api/humans/:id`                 | Get human by UUID or name|
-| POST   | `/api/humans/:id/join/:roomId`    | Human joins room         |
-| POST   | `/api/humans/:id/leave/:roomId`   | Human leaves room        |
+| Method | Path              | Description              |
+|--------|-------------------|--------------------------|
+| POST   | `/api/humans`     | Create `{name}`          |
+| GET    | `/api/humans`     | List all humans          |
+| GET    | `/api/humans/:id` | Get human by UUID or name|
 
 ### Names
 | Method | Path                       | Description                       |
 |--------|----------------------------|-----------------------------------|
 | GET    | `/api/names/check?name=x`  | Check name availability           |
 
-Room IDs in join/leave endpoints accept either UUID or name.
-
 ## CLI Commands
 
-### Server Management
+### Workspace Management
 ```bash
-skynet server new          # Create workspace (interactive: name, host, port)
-skynet server list         # List all workspaces
-skynet server              # Select and start a server
-skynet server start [id]   # Start a specific server
-```
-
-### Room Management
-```bash
-skynet room new   [--server <id>]  # Create room (interactive name prompt)
-skynet room list  [--server <id>]  # List all rooms
+skynet workspace new          # Create workspace (interactive or --name/--host/--port)
+skynet workspace list         # List all workspaces
+skynet workspace              # Start the only workspace (errors if multiple exist)
+skynet workspace start [id]   # Start a specific workspace by name or UUID
 ```
 
 ### Agent Management
 ```bash
-skynet agent new   [--server <id>]              # Create agent (interactive)
-skynet agent list  [--server <id>]              # List agents
-skynet agent join <agent> <room> [--server <id>] # Agent joins room
-skynet agent leave <agent> <room> [--server <id>] # Agent leaves room
-skynet agent       [--server <id>]              # Select agent, start idle
+skynet agent new   [--workspace <id>]  # Create agent (interactive)
+skynet agent list  [--workspace <id>]  # List agents
+skynet agent       [--workspace <id>]  # Select agent and start it
 ```
 
 ### Human Management
 ```bash
-skynet human new   [--server <id>]               # Create human (interactive)
-skynet human list  [--server <id>]               # List humans
-skynet human join <human> <room> [--server <id>]  # Human joins room
-skynet human leave <human> <room> [--server <id>] # Human leaves room
-skynet human       [--server <id>]               # Select human, start chat TUI
+skynet human new   [--workspace <id>]  # Create human (interactive)
+skynet human list  [--workspace <id>]  # List humans
+skynet human       [--workspace <id>]  # Select human, start chat TUI
 ```
 
 ### Status
 ```bash
-skynet status [room-id] [--server <id>]  # Show server/room status
+skynet status [--workspace <id>]  # Show workspace status
 ```
 
-All commands that need a server context use `--server <uuid|name>`. If omitted, a single-server workspace is auto-selected; multiple workspaces trigger an interactive prompt.
+All commands that need a workspace context use `--workspace <uuid|name>`. If omitted and only one workspace exists, it is auto-selected. If multiple workspaces exist and `--workspace` is not specified, the command errors out.
 
 ## Chat TUI Slash Commands
 
 Within the chat TUI, these management commands are available:
 
 ```
-/room list                     List rooms
-/room new <name>               Create a room
 /agent list                    List agents
-/agent <name> join <room>      Add agent to room
-/agent <name> leave <room>     Remove agent from room
 /human list                    List humans
-/human <name> join <room>      Add human to room
-/human <name> leave <room>     Remove human from room
 ```
 
 ## Entity Lifecycle
 
-1. **Create workspace**: `skynet server new` - creates config, registers in `servers.json`
-2. **Start server**: `skynet server` - starts the WebSocket server with the workspace's DB
-3. **Create entities**: `skynet room/agent/human new` - requires running server, goes through REST API
-4. **Join rooms**: `skynet agent/human join <entity> <room>` - registers membership in DB
-5. **Start participants**: `skynet agent` or `skynet human` - starts in idle state, use join commands to connect to rooms
+1. **Create workspace**: `skynet workspace new` — creates config, registers in `servers.json`
+2. **Start workspace**: `skynet workspace start` — starts the WebSocket server with the workspace's DB
+3. **Create entities**: `skynet agent/human new --workspace <id>` — requires running server, goes through REST API
+4. **Start participants**: `skynet agent --workspace <id>` or `skynet human --workspace <id>` — connects to the workspace automatically

@@ -16,7 +16,6 @@ function makeMsg(overrides: Partial<{ text: string; from: string }> = {}) {
     type: MessageType.CHAT as const,
     from: overrides.from ?? 'human-123',
     to: null,
-    roomId: 'room-1',
     timestamp: Date.now(),
     payload: { text: overrides.text ?? 'hello' },
   };
@@ -64,25 +63,6 @@ describe('ClaudeCodeAdapter session continuity', () => {
     expect(secondArgs).toContain('--resume');
     expect(secondArgs).toContain(sessionId);
     expect(secondArgs).not.toContain('--session-id');
-  });
-
-  it('setRoomId resets session so next call uses --session-id again', async () => {
-    const { execa } = await import('execa');
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
-
-    await adapter.handleMessage(makeMsg({ text: 'first' }));
-    const firstArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
-    const firstSessionId = firstArgs[firstArgs.indexOf('--session-id') + 1];
-
-    adapter.setRoomId('new-room');
-
-    await adapter.handleMessage(makeMsg({ text: 'after room change' }));
-    const secondArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1] as string[];
-    expect(secondArgs).toContain('--session-id');
-    expect(secondArgs).not.toContain('--resume');
-    // New session ID should differ
-    const newSessionId = secondArgs[secondArgs.indexOf('--session-id') + 1];
-    expect(newSessionId).not.toBe(firstSessionId);
   });
 });
 
@@ -177,15 +157,6 @@ describe('ClaudeCodeAdapter quickReply (session fork)', () => {
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
     await adapter.handleMessage(makeMsg());
     expect(adapter.supportsQuickReply()).toBe(true);
-  });
-
-  it('supportsQuickReply resets to false after setRoomId', async () => {
-    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
-    await adapter.handleMessage(makeMsg());
-    expect(adapter.supportsQuickReply()).toBe(true);
-
-    adapter.setRoomId('new-room');
-    expect(adapter.supportsQuickReply()).toBe(false);
   });
 
   it('quickReply uses --resume and --fork-session with correct session ID', async () => {

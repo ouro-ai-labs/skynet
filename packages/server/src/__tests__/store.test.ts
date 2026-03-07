@@ -15,7 +15,7 @@ describe('SqliteStore', () => {
   });
 
   it('saves and retrieves a message by id', () => {
-    const msg = createChatMessage('alice', 'room-1', 'hello');
+    const msg = createChatMessage('alice', 'hello');
     store.save(msg);
 
     const retrieved = store.getById(msg.id);
@@ -29,12 +29,11 @@ describe('SqliteStore', () => {
     expect(store.getById('non-existent')).toBeUndefined();
   });
 
-  it('retrieves messages by room', () => {
-    store.save(createChatMessage('alice', 'room-1', 'msg 1'));
-    store.save(createChatMessage('bob', 'room-1', 'msg 2'));
-    store.save(createChatMessage('charlie', 'room-2', 'msg in other room'));
+  it('retrieves messages', () => {
+    store.save(createChatMessage('alice', 'msg 1'));
+    store.save(createChatMessage('bob', 'msg 2'));
 
-    const messages = store.getByRoom('room-1');
+    const messages = store.getMessages();
     expect(messages).toHaveLength(2);
     expect(messages[0].from).toBe('alice');
     expect(messages[1].from).toBe('bob');
@@ -42,42 +41,38 @@ describe('SqliteStore', () => {
 
   it('respects limit parameter', () => {
     for (let i = 0; i < 10; i++) {
-      store.save(createChatMessage('alice', 'room-1', `msg ${i}`));
+      store.save(createChatMessage('alice', `msg ${i}`));
     }
 
-    const messages = store.getByRoom('room-1', 3);
+    const messages = store.getMessages(3);
     expect(messages).toHaveLength(3);
   });
 
   it('supports before parameter for pagination', () => {
-    const msgs = [];
     for (let i = 0; i < 5; i++) {
       const msg = createMessage({
         type: MessageType.CHAT,
         from: 'alice',
         to: null,
-        roomId: 'room-1',
         timestamp: 1000 + i,
         payload: { text: `msg ${i}` },
       });
       store.save(msg);
-      msgs.push(msg);
     }
 
-    const before = store.getByRoom('room-1', 10, 1003);
+    const before = store.getMessages(10, 1003);
     expect(before).toHaveLength(3);
     expect((before[0].payload as { text: string }).text).toBe('msg 0');
   });
 
   it('handles messages with replyTo', () => {
-    const original = createChatMessage('alice', 'room-1', 'original');
+    const original = createChatMessage('alice', 'original');
     store.save(original);
 
     const reply = createMessage({
       type: MessageType.CHAT,
       from: 'bob',
       to: null,
-      roomId: 'room-1',
       payload: { text: 'reply' },
       replyTo: original.id,
     });
@@ -88,72 +83,54 @@ describe('SqliteStore', () => {
   });
 
   it('handles DM messages with to field', () => {
-    const dm = createChatMessage('alice', 'room-1', 'private', 'bob');
+    const dm = createChatMessage('alice', 'private', 'bob');
     store.save(dm);
 
     const retrieved = store.getById(dm.id);
     expect(retrieved!.to).toBe('bob');
   });
-});
 
-describe('SqliteStore room persistence', () => {
-  let store: Store;
+  it('handles messages with mentions', () => {
+    const msg = createChatMessage('alice', 'hey @bob @charlie', null, ['bob-id', 'charlie-id']);
+    store.save(msg);
 
-  beforeEach(() => {
-    store = new SqliteStore(':memory:');
+    const retrieved = store.getById(msg.id);
+    expect(retrieved).toBeDefined();
+    expect(retrieved!.mentions).toEqual(['bob-id', 'charlie-id']);
   });
 
-  afterEach(() => {
-    store.close();
+  it('idempotent save (INSERT OR REPLACE)', () => {
+    const msg = createChatMessage('alice', 'original');
+    store.save(msg);
+    store.save({ ...msg, payload: { text: 'updated' } });
+
+    const retrieved = store.getById(msg.id);
+    expect((retrieved!.payload as { text: string }).text).toBe('updated');
+
+    const all = store.getMessages();
+    expect(all).toHaveLength(1);
   });
 
-  it('saves and lists rooms', () => {
-    store.saveRoom({ id: 'room-a', name: 'Room A' });
-    store.saveRoom({ id: 'room-b', name: 'Room B' });
-
-    const rooms = store.listRooms();
-    expect(rooms).toHaveLength(2);
-    expect(rooms.map((r) => r.id)).toEqual(['room-a', 'room-b']);
-    expect(rooms[0].name).toBe('Room A');
-    expect(rooms[0].createdAt).toBeGreaterThan(0);
+  it('getMessages returns empty when no messages', () => {
+    expect(store.getMessages()).toEqual([]);
   });
 
-  it('ignores duplicate room saves', () => {
-    store.saveRoom({ id: 'room-a', name: 'Room A' });
-    store.saveRoom({ id: 'room-a', name: 'Room A' });
+  it('getMessages returns in chronological order', () => {
+    for (let i = 0; i < 5; i++) {
+      const msg = createMessage({
+        type: MessageType.CHAT,
+        from: 'alice',
+        to: null,
+        timestamp: 1000 + i,
+        payload: { text: `msg ${i}` },
+      });
+      store.save(msg);
+    }
 
-    const rooms = store.listRooms();
-    expect(rooms).toHaveLength(1);
-  });
-
-  it('deletes a room', () => {
-    store.saveRoom({ id: 'room-a', name: 'Room A' });
-    store.saveRoom({ id: 'room-b', name: 'Room B' });
-    store.deleteRoom('room-a');
-
-    const rooms = store.listRooms();
-    expect(rooms).toHaveLength(1);
-    expect(rooms[0].id).toBe('room-b');
-  });
-
-  it('returns empty list when no rooms', () => {
-    expect(store.listRooms()).toEqual([]);
-  });
-
-  it('delete non-existent room is a no-op', () => {
-    store.deleteRoom('ghost');
-    expect(store.listRooms()).toEqual([]);
-  });
-
-  it('gets room by name', () => {
-    store.saveRoom({ id: 'room-a', name: 'Room A' });
-    const room = store.getRoomByName('Room A');
-    expect(room).toBeDefined();
-    expect(room!.id).toBe('room-a');
-  });
-
-  it('returns undefined for non-existent room name', () => {
-    expect(store.getRoomByName('ghost')).toBeUndefined();
+    const messages = store.getMessages();
+    for (let i = 1; i < messages.length; i++) {
+      expect(messages[i].timestamp).toBeGreaterThanOrEqual(messages[i - 1].timestamp);
+    }
   });
 });
 
@@ -238,65 +215,6 @@ describe('SqliteStore humans', () => {
   });
 });
 
-describe('SqliteStore room membership', () => {
-  let store: Store;
-
-  beforeEach(() => {
-    store = new SqliteStore(':memory:');
-  });
-
-  afterEach(() => {
-    store.close();
-  });
-
-  it('adds and retrieves room members', () => {
-    store.saveRoom({ id: 'room-1', name: 'Room 1' });
-    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
-    store.saveHuman({ id: 'human-1', name: 'Alice', createdAt: Date.now() });
-
-    store.addRoomMember('room-1', 'agent-1', 'agent');
-    store.addRoomMember('room-1', 'human-1', 'human');
-
-    const members = store.getRoomMembers('room-1');
-    expect(members).toHaveLength(2);
-    expect(members[0].memberId).toBe('agent-1');
-    expect(members[0].memberType).toBe('agent');
-    expect(members[1].memberId).toBe('human-1');
-    expect(members[1].memberType).toBe('human');
-  });
-
-  it('removes a room member', () => {
-    store.saveRoom({ id: 'room-1', name: 'Room 1' });
-    store.addRoomMember('room-1', 'agent-1', 'agent');
-    store.addRoomMember('room-1', 'human-1', 'human');
-
-    store.removeRoomMember('room-1', 'agent-1');
-
-    const members = store.getRoomMembers('room-1');
-    expect(members).toHaveLength(1);
-    expect(members[0].memberId).toBe('human-1');
-  });
-
-  it('deleting room cleans up members', () => {
-    store.saveRoom({ id: 'room-1', name: 'Room 1' });
-    store.addRoomMember('room-1', 'agent-1', 'agent');
-
-    store.deleteRoom('room-1');
-
-    const members = store.getRoomMembers('room-1');
-    expect(members).toHaveLength(0);
-  });
-
-  it('ignores duplicate member adds', () => {
-    store.saveRoom({ id: 'room-1', name: 'Room 1' });
-    store.addRoomMember('room-1', 'agent-1', 'agent');
-    store.addRoomMember('room-1', 'agent-1', 'agent');
-
-    const members = store.getRoomMembers('room-1');
-    expect(members).toHaveLength(1);
-  });
-});
-
 describe('SqliteStore name uniqueness', () => {
   let store: Store;
 
@@ -312,11 +230,6 @@ describe('SqliteStore name uniqueness', () => {
     expect(store.checkNameUnique('fresh-name')).toBe(true);
   });
 
-  it('returns false when name is used by a room', () => {
-    store.saveRoom({ id: 'room-1', name: 'taken' });
-    expect(store.checkNameUnique('taken')).toBe(false);
-  });
-
   it('returns false when name is used by an agent', () => {
     store.saveAgent({ id: 'agent-1', name: 'taken', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
     expect(store.checkNameUnique('taken')).toBe(false);
@@ -325,11 +238,5 @@ describe('SqliteStore name uniqueness', () => {
   it('returns false when name is used by a human', () => {
     store.saveHuman({ id: 'human-1', name: 'taken', createdAt: Date.now() });
     expect(store.checkNameUnique('taken')).toBe(false);
-  });
-
-  it('enforces uniqueness across entity types', () => {
-    store.saveRoom({ id: 'room-1', name: 'shared-name' });
-    expect(store.checkNameUnique('shared-name')).toBe(false);
-    // Even though no agent or human uses it, the room does
   });
 });
