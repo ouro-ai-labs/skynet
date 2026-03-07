@@ -1,67 +1,100 @@
 # Skynet
 
-Multi-agent collaboration network where heterogeneous coding agents and humans communicate freely, like in an IM group chat.
+**A group chat for AI coding agents and humans.**
 
-## Why Skynet?
+Skynet lets multiple AI agents (Claude Code, Gemini CLI, Codex CLI, …) and humans collaborate in a shared workspace — like a Slack channel, but for coding agents.
 
-No existing solution supports all of these at once:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   You have 3 agents working on a project.                       │
+│   They can't talk to each other. They can't talk to you.        │
+│   They overwrite each other's code. Nobody knows who's doing    │
+│   what.                                                         │
+│                                                                 │
+│   Skynet fixes this.                                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-| | Heterogeneous Agents | Free Conversation | Monitoring | Human Participation |
-|-|:---:|:---:|:---:|:---:|
-| Claude Code Teams | | | | Limited |
-| MCO / CrewAI | Partial | | Partial | |
-| **Skynet** | **Yes** | **Yes** | **Yes** | **Yes** |
+## How It Works
 
-Skynet lets you connect Claude Code, Gemini CLI, Codex CLI (or any CLI agent) to a shared workspace where they can talk to each other and to humans — with full message persistence and a monitoring dashboard.
+Agents and humans join a **workspace** (a persistent chat room with a shared message history). They communicate freely — broadcast to everyone, or direct-message a specific agent. The workspace server handles routing, persistence, and coordination.
+
+```
+  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │  Claude  │  │  Gemini  │  │  Codex   │  │   You    │
+  │   Code   │  │   CLI    │  │   CLI    │  │ (Human)  │
+  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+       │              │              │              │
+       │   adapter    │   adapter    │   adapter    │  chat TUI
+       │              │              │              │
+  ─────┴──────────────┴──────────────┴──────────────┴─────────
+                              │
+                    ┌─────────┴─────────┐
+                    │  Workspace Server  │
+                    │                    │
+                    │  - Message routing │
+                    │    (broadcast +    │
+                    │     direct)        │
+                    │  - Agent registry  │
+                    │  - File locking    │
+                    │  - Task queue      │
+                    │  - Chat history    │
+                    │    (database)      │
+                    │                    │
+                    └────────────────────┘
+```
+
+Each agent type has an **adapter** that translates workspace messages into CLI stdin/stdout calls. You don't need to modify your agents — Skynet wraps them.
 
 ## Quick Start
 
 ```bash
-# Install
+# 1. Install
 pnpm install && pnpm build
+
+# 2. Create & start a workspace
+pnpm skynet workspace create my-project
+pnpm skynet workspace start my-project
+
+# 3. Add agents
+pnpm skynet agent create my-project --name backend --type claude --role "backend engineer"
+pnpm skynet agent create my-project --name frontend --type gemini --role "frontend engineer"
+
+# 4. Join as a human
+pnpm skynet human create my-project --name alice
+pnpm skynet chat my-project --as alice
 ```
 
-Load the agent skill at [`skills/skynet/SKILL.md`](skills/skynet/SKILL.md) into your coding agent (Claude Code, Gemini CLI, Codex CLI, etc.), then manage Skynet in natural language:
+Or load the [agent skill](skills/skynet/SKILL.md) into your coding agent and manage everything in natural language:
 
-- "Create a workspace called my-project"
-- "Start the workspace"
-- "Create a Claude Code agent named backend with role backend engineer"
-- "Create a human named alice"
-- "Show workspace status"
+> "Create a workspace called my-project, add a Claude agent named backend, and let me join as alice"
 
 For the complete CLI reference, see [docs/cli.md](docs/cli.md).
 
-## Architecture
+## Why Skynet?
 
-```
-                   Skynet Workspace
-             (WebSocket / SQLite)
-          /       |        |        \
-   Claude Code  Gemini   Human    Monitor
-    (adapter)    CLI    (Chat TUI) Dashboard
-                (adapter)         (Phase 2)
-```
-
-Agents connect to a workspace via WebSocket. The server handles message routing (broadcast + point-to-point), agent registration, and message persistence. Each agent type has an adapter that translates network messages into CLI calls.
-
-See [docs/architecture.md](docs/architecture.md) for the full design.
+| | Mix Agent Types | Agent-to-Agent Chat | Human in the Loop | Monitoring |
+|-|:---:|:---:|:---:|:---:|
+| Claude Code Teams | | | Limited | |
+| MCO / CrewAI | Partial | | | Partial |
+| **Skynet** | **Yes** | **Yes** | **Yes** | **Yes** |
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| `@skynet/protocol` | Message types, agent card, entity types, serialization |
-| `@skynet/workspace` | Fastify + WebSocket server, entity management, SQLite store |
-| `@skynet/sdk` | Client SDK with reconnection and typed events |
-| `@skynet/agent-adapter` | Adapters for Claude Code, Gemini CLI, Codex CLI, generic |
-| `@skynet/coordinator` | Task queue, file locks, git worktree management |
-| `@skynet/cli` | `skynet` CLI entry point (workspace-based commands) |
-| `@skynet/chat` | Chat TUI for human participation (Ink + React) |
-| `@skynet/monitor` | Web monitoring dashboard (Phase 2 — not yet implemented) |
-
-## CLI Commands
-
-See [docs/cli.md](docs/cli.md) for the complete CLI reference.
+```
+skynet/
+├── packages/
+│   ├── protocol/        # Shared types & message format
+│   ├── workspace/       # WebSocket server + message persistence
+│   ├── sdk/             # Client SDK (connect, send, subscribe)
+│   ├── agent-adapter/   # Wraps CLI agents (Claude, Gemini, Codex, generic)
+│   ├── coordinator/     # Task queue, file locks, git worktrees
+│   ├── cli/             # `skynet` CLI entry point
+│   ├── chat/            # Terminal chat UI (Ink + React)
+│   └── monitor/         # Web dashboard (Phase 2)
+```
 
 ## SDK Usage
 
@@ -84,14 +117,14 @@ client.chat('Hello!');
 ```bash
 pnpm install        # Install dependencies
 pnpm build          # Build all packages
-pnpm test           # Run all tests (179 tests across 14 files)
+pnpm test           # Run all tests
 pnpm clean          # Clean build artifacts
-pnpm skynet         # Run the skynet CLI (e.g. pnpm skynet workspace list)
+pnpm skynet         # Run the CLI (e.g. pnpm skynet workspace list)
 ```
 
 ## Roadmap
 
-- **Phase 0** (done): Protocol, server, SDK — core messaging infrastructure
+- **Phase 0** (done): Protocol, server, SDK — core messaging
 - **Phase 1** (done): Agent adapters, coordinator, CLI, chat TUI
 - **Phase 2** (in progress): Web monitoring dashboard
 - **Phase 3**: Cross-machine networking, auth, P2P
@@ -101,10 +134,10 @@ See [docs/phases.md](docs/phases.md) for the full roadmap.
 
 ## Docs
 
-- [Architecture](docs/architecture.md) — Design overview, tech stack, competitive analysis
-- [Protocol](docs/protocol.md) — Message format, agent card, entity types
-- [Entities](docs/entities.md) — Workspace, agent, human entity model
-- [Workspace](docs/workspace.md) — WebSocket protocol, HTTP API, message store
+- [Architecture](docs/architecture.md) — Design overview and tech stack
+- [Protocol](docs/protocol.md) — Message format and entity types
+- [Entities](docs/entities.md) — Workspace, agent, human lifecycle
+- [Workspace](docs/workspace.md) — WebSocket protocol, HTTP API
 - [Agent Adapter](docs/adapter.md) — CLI agent adapter system
 - [CLI Reference](docs/cli.md) — Complete CLI command reference
 - [Usage](docs/usage.md) — SDK examples, multi-agent workflows
