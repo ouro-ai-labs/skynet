@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { SkynetServer } from '../server.js';
+import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet/sdk';
 import { AgentType, type SkynetMessage } from '@skynet/protocol';
@@ -24,10 +24,10 @@ function sleep(ms: number) {
 }
 
 describe('Server integration', () => {
-  let server: SkynetServer;
+  let server: SkynetWorkspace;
 
   beforeAll(async () => {
-    server = new SkynetServer({ port: PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:') });
     await server.start();
   });
 
@@ -260,11 +260,11 @@ describe('Server integration', () => {
 });
 
 describe('Server HTTP API', () => {
-  let server: SkynetServer;
+  let server: SkynetWorkspace;
   const API_PORT = 4200 + Math.floor(Math.random() * 100) + 100;
 
   beforeAll(async () => {
-    server = new SkynetServer({ port: API_PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: API_PORT, store: new SqliteStore(':memory:') });
     await server.start();
   });
 

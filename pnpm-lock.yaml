@@ -33,9 +33,9 @@ importers:
         specifier: ^9.0.0
         version: 9.6.1
     devDependencies:
-      '@skynet/server':
+      '@skynet/workspace':
         specifier: workspace:*
-        version: link:../server
+        version: link:../workspace
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13
@@ -100,9 +100,9 @@ importers:
       '@skynet/sdk':
         specifier: workspace:*
         version: link:../sdk
-      '@skynet/server':
+      '@skynet/workspace':
         specifier: workspace:*
-        version: link:../server
+        version: link:../workspace
       chalk:
         specifier: ^5.4.0
         version: 5.6.2
@@ -166,7 +166,7 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/server:
+  packages/workspace:
     dependencies:
       '@fastify/websocket':
         specifier: ^11.0.0

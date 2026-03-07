@@ -40,7 +40,7 @@ pnpm test
 This is a pnpm workspaces + turborepo monorepo. Packages live under `packages/`:
 
 - `packages/protocol` — Message type definitions and serialization
-- `packages/server` — WebSocket server, room management, message routing
+- `packages/workspace` — WebSocket server, member management, message routing
 - `packages/sdk` — Client SDK for connecting to the server
 - `packages/agent-adapter` — Agent adapters (Claude Code, Gemini CLI, Codex CLI, generic)
 - `packages/coordinator` — Task assignment, file locks, git worktree management
@@ -55,7 +55,7 @@ See `docs/architecture.md` for the full architecture and `docs/phases.md` for th
 If you modify code under these paths, also read the matching docs first:
 
 - `packages/protocol` → `docs/protocol.md` (message types, entity types, backward compatibility)
-- `packages/server` → `docs/workspace.md` (WebSocket protocol, HTTP API, entity management)
+- `packages/workspace` → `docs/workspace.md` (WebSocket protocol, HTTP API, entity management)
 - `packages/sdk` → `docs/usage.md` (client SDK usage, reconnection, error handling)
 - `packages/agent-adapter` → `docs/adapter.md` (adapter contracts, CLI process management)
 - Entity model → `docs/entities.md` (workspace, agent, human lifecycle)
