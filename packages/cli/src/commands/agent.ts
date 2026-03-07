@@ -7,6 +7,53 @@ import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet/agent
 import { getWorkspaceDir } from '../config.js';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
+async function fetchAgents(url: string): Promise<AgentCard[]> {
+  try {
+    const res = await fetch(`${url}/api/agents`);
+    return await res.json() as AgentCard[];
+  } catch {
+    console.error(`Failed to connect to workspace at ${url}`);
+    process.exit(1);
+  }
+}
+
+function resolveAgent(agents: AgentCard[], nameOrId: string): AgentCard {
+  const match = agents.find((a) => a.id === nameOrId || a.name === nameOrId);
+  if (!match) {
+    console.error(`Agent '${nameOrId}' not found. Run 'skynet agent list' to see available agents.`);
+    process.exit(1);
+  }
+  return match;
+}
+
+async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl: string): Promise<void> {
+  const wsDir = getWorkspaceDir(workspaceId);
+  const workDir = join(wsDir, agentProfile.id, 'work');
+
+  const adapter = createAdapter(agentProfile.type as AgentType, workDir);
+  const runner = new AgentRunner({
+    serverUrl,
+    adapter,
+    agentName: agentProfile.name,
+    role: agentProfile.role,
+    persona: agentProfile.persona,
+    projectRoot: workDir,
+  });
+
+  process.on('SIGINT', async () => {
+    console.log('\nDisconnecting agent...');
+    await runner.stop();
+    process.exit(0);
+  });
+
+  await runner.start();
+  console.log(`Agent "${agentProfile.name}" connected to workspace.`);
+  console.log('Press Ctrl+C to stop.');
+
+  // Keep process alive
+  await new Promise(() => {});
+}
+
 export function registerAgentCommand(program: Command): void {
   const agent = program
     .command('agent')
@@ -18,15 +65,7 @@ export function registerAgentCommand(program: Command): void {
       // Bare `skynet agent`: select workspace → select agent → start
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
-
-      let agents: AgentCard[];
-      try {
-        const res = await fetch(`${url}/api/agents`);
-        agents = await res.json() as AgentCard[];
-      } catch {
-        console.error(`Failed to connect to workspace at ${url}`);
-        process.exit(1);
-      }
+      const agents = await fetchAgents(url);
 
       if (agents.length === 0) {
         console.error('No agents registered. Run \'skynet agent new\' to create one.');
@@ -44,32 +83,19 @@ export function registerAgentCommand(program: Command): void {
         })),
       }]);
 
-      const agentProfile = selected as AgentCard;
-      const wsDir = getWorkspaceDir(workspace.id);
-      const workDir = join(wsDir, agentProfile.id, 'work');
+      await runAgent(selected as AgentCard, workspace.id, url);
+    });
 
-      const adapter = createAdapter(agentProfile.type as AgentType, workDir);
-      const runner = new AgentRunner({
-        serverUrl: url,
-        adapter,
-        agentName: agentProfile.name,
-        role: agentProfile.role,
-        persona: agentProfile.persona,
-        projectRoot: workDir,
-      });
-
-      process.on('SIGINT', async () => {
-        console.log('\nDisconnecting agent...');
-        await runner.stop();
-        process.exit(0);
-      });
-
-      await runner.start();
-      console.log(`Agent "${agentProfile.name}" connected to workspace.`);
-      console.log('Press Ctrl+C to stop.');
-
-      // Keep process alive
-      await new Promise(() => {});
+  agent
+    .command('start <name-or-id>')
+    .description('Start an agent by name or UUID')
+    .option('--workspace <id>', 'Workspace UUID')
+    .action(async (nameOrId: string, opts: { workspace?: string }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+      const agents = await fetchAgents(url);
+      const agentProfile = resolveAgent(agents, nameOrId);
+      await runAgent(agentProfile, workspace.id, url);
     });
 
   agent

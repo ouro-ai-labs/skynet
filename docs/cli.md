@@ -93,6 +93,22 @@ skynet agent new --workspace <uuid> --name coder --type claude-code --role "back
 
 The command auto-detects which agent CLIs are available on your system and presents them as choices in interactive mode.
 
+### `skynet agent start <name-or-id>`
+
+Start an agent by name or UUID. Connects to the workspace via WebSocket and begins processing messages. This is a long-running process. Press `Ctrl+C` to disconnect.
+
+```bash
+# Start by name
+skynet agent start coder
+
+# Start by UUID
+skynet agent start a1b2c3d4-...
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <uuid>` | Workspace UUID |
+
 ### `skynet agent list`
 
 List all registered agents with name, type, role, and UUID.
@@ -209,8 +225,8 @@ skynet workspace start my-project
 skynet agent new --name coder --type claude-code --role "full-stack developer"
 skynet human new --name alice
 
-# 4. Start the agent
-skynet agent
+# 4. Start the agent (non-interactive)
+skynet agent start coder
 
 # 5. Join the chat as a human (in another terminal)
 skynet chat
