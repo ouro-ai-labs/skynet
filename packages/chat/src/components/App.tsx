@@ -150,6 +150,15 @@ export function App({ options }: AppProps): React.ReactElement {
     return items;
   }, [state.messages, state.systemMessages, state.members, agentId, memberListCounter, commandOutputs]);
 
+  const typingNames = useMemo(() => {
+    const names: string[] = [];
+    for (const [id] of state.typingAgents) {
+      const card = state.members.get(id);
+      if (card) names.push(card.name);
+    }
+    return names;
+  }, [state.typingAgents, state.members]);
+
   // Loading state
   if (state.connecting) {
     return (
@@ -168,15 +177,6 @@ export function App({ options }: AppProps): React.ReactElement {
       </Box>
     );
   }
-
-  const typingNames = useMemo(() => {
-    const names: string[] = [];
-    for (const [id] of state.typingAgents) {
-      const card = state.members.get(id);
-      if (card) names.push(card.name);
-    }
-    return names;
-  }, [state.typingAgents, state.members]);
 
   const statusLine = `${state.connected ? '\u25CF' : '\u25CB'} workspace \u00B7 ${state.members.size} members`;
 
