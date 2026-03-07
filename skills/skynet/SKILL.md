@@ -90,6 +90,19 @@ skynet human list [--workspace <name-or-id>]
 
 ---
 
+## Chat (Human Only)
+
+> **Do NOT run this command yourself.** `skynet chat` launches an interactive TUI for humans to join the workspace. When you need a human to join, tell them to run this command in a separate terminal.
+
+```bash
+skynet chat [--name <human-name>] [--workspace <name-or-id>]
+```
+
+- `--name` (optional): Human name to join as (skips selection prompt)
+- If only one human is registered, it is auto-selected.
+
+---
+
 ## Status
 
 ### Check workspace status
@@ -109,7 +122,8 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 3. **Create agents**: `skynet agent new --name backend --type claude-code --role "backend engineer"`
 4. **Start the agent**: `skynet agent start backend` (keep running)
 5. **Create a human**: `skynet human new --name alice`
-6. **Check status**: `skynet status`
+6. **Human joins chat** (tell them to run): `skynet chat --name alice`
+7. **Check status**: `skynet status`
 
 ---
 
