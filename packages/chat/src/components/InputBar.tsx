@@ -5,6 +5,8 @@ import {
   inputReducer,
   initialInputState,
   getMentionContext,
+  getCommandContext,
+  SLASH_COMMANDS,
 } from '../inputState.js';
 
 interface InputBarProps {
@@ -16,7 +18,7 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
   const [state, dispatch] = useReducer(inputReducer, initialInputState);
   const historyRef = useRef<string[]>([]);
 
-  const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex } = state;
+  const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex, commandFilter, commandSelectedIndex } = state;
 
   const mentionCandidates = mentionFilter !== null
     ? [
@@ -26,23 +28,39 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
       ].slice(0, 8)
     : [];
 
-  const setValueAndMention = useCallback((newValue: string, newCursorPos: number) => {
+  const commandCandidates = commandFilter !== null
+    ? SLASH_COMMANDS.filter((cmd) => cmd.name.slice(1).startsWith(commandFilter))
+    : [];
+
+  const setValueAndAutocomplete = useCallback((newValue: string, newCursorPos: number) => {
     dispatch({ type: 'SET_VALUE', value: newValue, cursorPos: newCursorPos });
-    const ctx = getMentionContext(newValue, newCursorPos);
-    if (ctx) {
-      dispatch({ type: 'SET_MENTION', filter: ctx.filter, start: ctx.start, selectedIndex: 0 });
+    const mentionCtx = getMentionContext(newValue, newCursorPos);
+    if (mentionCtx) {
+      dispatch({ type: 'SET_MENTION', filter: mentionCtx.filter, start: mentionCtx.start, selectedIndex: 0 });
     } else {
       dispatch({ type: 'SET_MENTION', filter: null, start: 0, selectedIndex: 0 });
     }
+    const cmdCtx = getCommandContext(newValue, newCursorPos);
+    if (cmdCtx) {
+      dispatch({ type: 'SET_COMMAND', filter: cmdCtx.filter, selectedIndex: 0 });
+    } else {
+      dispatch({ type: 'SET_COMMAND', filter: null, selectedIndex: 0 });
+    }
   }, []);
 
-  const setCursorAndMention = useCallback((newPos: number) => {
+  const setCursorAndAutocomplete = useCallback((newPos: number) => {
     dispatch({ type: 'SET_CURSOR', cursorPos: newPos });
-    const ctx = getMentionContext(value, newPos);
-    if (ctx) {
-      dispatch({ type: 'SET_MENTION', filter: ctx.filter, start: ctx.start, selectedIndex: 0 });
+    const mentionCtx = getMentionContext(value, newPos);
+    if (mentionCtx) {
+      dispatch({ type: 'SET_MENTION', filter: mentionCtx.filter, start: mentionCtx.start, selectedIndex: 0 });
     } else {
       dispatch({ type: 'SET_MENTION', filter: null, start: 0, selectedIndex: 0 });
+    }
+    const cmdCtx = getCommandContext(value, newPos);
+    if (cmdCtx) {
+      dispatch({ type: 'SET_COMMAND', filter: cmdCtx.filter, selectedIndex: 0 });
+    } else {
+      dispatch({ type: 'SET_COMMAND', filter: null, selectedIndex: 0 });
     }
   }, [value]);
 
@@ -54,13 +72,24 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     const completed = `@${selected.name} `;
     const newValue = before + completed + after;
     const newCursor = before.length + completed.length;
-    setValueAndMention(newValue, newCursor);
-  }, [mentionCandidates, mentionSelectedIndex, value, mentionStart, cursorPos, setValueAndMention]);
+    setValueAndAutocomplete(newValue, newCursor);
+  }, [mentionCandidates, mentionSelectedIndex, value, mentionStart, cursorPos, setValueAndAutocomplete]);
+
+  const acceptCommand = useCallback(() => {
+    const selected = commandCandidates[commandSelectedIndex];
+    if (!selected) return;
+    const newValue = selected.name;
+    const newCursor = newValue.length;
+    setValueAndAutocomplete(newValue, newCursor);
+  }, [commandCandidates, commandSelectedIndex, setValueAndAutocomplete]);
 
   useInput((input, key) => {
     if (key.escape) {
       if (mentionFilter !== null) {
         dispatch({ type: 'SET_MENTION', filter: null, start: 0, selectedIndex: 0 });
+      }
+      if (commandFilter !== null) {
+        dispatch({ type: 'SET_COMMAND', filter: null, selectedIndex: 0 });
       }
       return;
     }
@@ -70,9 +99,18 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
       return;
     }
 
+    if (key.tab && commandFilter !== null && commandCandidates.length > 0) {
+      acceptCommand();
+      return;
+    }
+
     if (key.return) {
       if (mentionFilter !== null && mentionCandidates.length > 0) {
         acceptMention();
+        return;
+      }
+      if (commandFilter !== null && commandCandidates.length > 0) {
+        acceptCommand();
         return;
       }
       if (value.trim()) {
@@ -84,6 +122,13 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     }
 
     if (key.upArrow) {
+      if (commandFilter !== null && commandCandidates.length > 0) {
+        dispatch({
+          type: 'SET_COMMAND_SELECTED',
+          index: (commandSelectedIndex - 1 + commandCandidates.length) % commandCandidates.length,
+        });
+        return;
+      }
       if (mentionFilter !== null && mentionCandidates.length > 0) {
         dispatch({
           type: 'SET_MENTION_SELECTED',
@@ -102,6 +147,13 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     }
 
     if (key.downArrow) {
+      if (commandFilter !== null && commandCandidates.length > 0) {
+        dispatch({
+          type: 'SET_COMMAND_SELECTED',
+          index: (commandSelectedIndex + 1) % commandCandidates.length,
+        });
+        return;
+      }
       if (mentionFilter !== null && mentionCandidates.length > 0) {
         dispatch({
           type: 'SET_MENTION_SELECTED',
@@ -124,28 +176,28 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     if (key.backspace || key.delete) {
       if (cursorPos > 0) {
         const newValue = value.slice(0, cursorPos - 1) + value.slice(cursorPos);
-        setValueAndMention(newValue, cursorPos - 1);
+        setValueAndAutocomplete(newValue, cursorPos - 1);
       }
       return;
     }
 
     if (key.leftArrow) {
-      setCursorAndMention(Math.max(0, cursorPos - 1));
+      setCursorAndAutocomplete(Math.max(0, cursorPos - 1));
       return;
     }
 
     if (key.rightArrow) {
-      setCursorAndMention(Math.min(value.length, cursorPos + 1));
+      setCursorAndAutocomplete(Math.min(value.length, cursorPos + 1));
       return;
     }
 
     if (key.ctrl && input === 'a') {
-      setCursorAndMention(0);
+      setCursorAndAutocomplete(0);
       return;
     }
 
     if (key.ctrl && input === 'e') {
-      setCursorAndMention(value.length);
+      setCursorAndAutocomplete(value.length);
       return;
     }
 
@@ -158,14 +210,14 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
       const before = value.slice(0, cursorPos);
       const after = value.slice(cursorPos);
       const trimmed = before.replace(/\S+\s*$/, '');
-      setValueAndMention(trimmed + after, trimmed.length);
+      setValueAndAutocomplete(trimmed + after, trimmed.length);
       return;
     }
 
     if (input && !key.ctrl && !key.meta && !key.tab) {
       const newValue = value.slice(0, cursorPos) + input + value.slice(cursorPos);
       const newCursor = cursorPos + input.length;
-      setValueAndMention(newValue, newCursor);
+      setValueAndAutocomplete(newValue, newCursor);
     }
   });
 
@@ -175,6 +227,27 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
 
   return (
     <Box flexDirection="column">
+      {commandFilter !== null && commandCandidates.length > 0 && (
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor="yellow"
+          paddingX={1}
+          marginLeft={2}
+        >
+          {commandCandidates.map((cmd, i) => (
+            <Text key={cmd.name}>
+              {i === commandSelectedIndex ? (
+                <Text color="yellow" bold>{`> ${cmd.name}`}</Text>
+              ) : (
+                <Text dimColor>{`  ${cmd.name}`}</Text>
+              )}
+              <Text dimColor>{`  ${cmd.description}`}</Text>
+            </Text>
+          ))}
+          <Text dimColor>Tab/Enter to select, Esc to dismiss</Text>
+        </Box>
+      )}
       {mentionFilter !== null && mentionCandidates.length > 0 && (
         <Box
           flexDirection="column"

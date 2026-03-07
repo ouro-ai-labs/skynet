@@ -3,6 +3,8 @@ import {
   inputReducer,
   initialInputState,
   getMentionContext,
+  getCommandContext,
+  SLASH_COMMANDS,
   type InputState,
 } from '../inputState.js';
 
@@ -60,6 +62,8 @@ describe('inputReducer', () => {
       mentionFilter: 'al',
       mentionStart: 0,
       mentionSelectedIndex: 1,
+      commandFilter: null,
+      commandSelectedIndex: 0,
     };
     const next = inputReducer(state, { type: 'RESET' });
     expect(next).toEqual(initialInputState);
@@ -97,5 +101,59 @@ describe('inputReducer', () => {
     };
     const next = inputReducer(state, { type: 'SET_MENTION_SELECTED', index: 2 });
     expect(next.mentionSelectedIndex).toBe(2);
+  });
+
+  it('SET_COMMAND updates command state', () => {
+    const next = inputReducer(initialInputState, {
+      type: 'SET_COMMAND',
+      filter: 'he',
+      selectedIndex: 0,
+    });
+    expect(next.commandFilter).toBe('he');
+    expect(next.commandSelectedIndex).toBe(0);
+  });
+
+  it('SET_COMMAND_SELECTED updates command selected index', () => {
+    const state: InputState = {
+      ...initialInputState,
+      commandFilter: 'h',
+      commandSelectedIndex: 0,
+    };
+    const next = inputReducer(state, { type: 'SET_COMMAND_SELECTED', index: 1 });
+    expect(next.commandSelectedIndex).toBe(1);
+  });
+});
+
+describe('getCommandContext', () => {
+  it('returns null when input does not start with /', () => {
+    expect(getCommandContext('hello', 5)).toBeNull();
+  });
+
+  it('returns filter for / at start', () => {
+    expect(getCommandContext('/', 1)).toEqual({ filter: '' });
+  });
+
+  it('returns filter for partial command', () => {
+    expect(getCommandContext('/he', 3)).toEqual({ filter: 'he' });
+  });
+
+  it('returns filter for multi-word partial command', () => {
+    expect(getCommandContext('/agent ', 7)).toEqual({ filter: 'agent ' });
+  });
+
+  it('returns null when exact command is fully typed', () => {
+    expect(getCommandContext('/help', 5)).toBeNull();
+  });
+
+  it('returns null when exact multi-word command is fully typed', () => {
+    expect(getCommandContext('/agent list', 11)).toBeNull();
+  });
+
+  it('returns null when input does not match any command', () => {
+    expect(getCommandContext('/xyz', 4)).toBeNull();
+  });
+
+  it('returns null when input has extra content after a complete command', () => {
+    expect(getCommandContext('/help foo', 9)).toBeNull();
   });
 });
