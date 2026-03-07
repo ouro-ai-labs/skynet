@@ -7,6 +7,7 @@ import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet/protocol';
 import { AgentRunner } from '../agent-runner.js';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 import { AgentType } from '@skynet/protocol';
+import { buildSkynetIntro } from '../skynet-intro.js';
 
 // ── Mocks ──
 
@@ -130,6 +131,160 @@ function getClient(runner: AgentRunner): MockClient {
 }
 
 // ── Tests ──
+
+describe('buildSkynetIntro', () => {
+  it('includes agent name in identity statement', () => {
+    const intro = buildSkynetIntro('bob');
+    expect(intro).toContain('You are **bob**');
+    expect(intro).toContain('@bob');
+    expect(intro).toContain('Never @mention yourself');
+  });
+
+  it('includes messaging rules', () => {
+    const intro = buildSkynetIntro('alice');
+    expect(intro).toContain('Messaging Rules');
+    expect(intro).toContain('NO_REPLY');
+  });
+});
+
+describe('AgentRunner system prompt identity', () => {
+  it('injects agent name into adapter persona', async () => {
+    const adapter = new FakeAdapter();
+    new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentName: 'test-bot',
+    });
+
+    expect(adapter.persona).toContain('You are **test-bot**');
+    expect(adapter.persona).toContain('@test-bot');
+  });
+
+  it('combines role, persona, and identity into adapter persona', async () => {
+    const adapter = new FakeAdapter();
+    new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentName: 'my-agent',
+      role: 'backend engineer',
+      persona: 'Expert in Node.js.',
+    });
+
+    expect(adapter.persona).toContain('You are a backend engineer.');
+    expect(adapter.persona).toContain('Expert in Node.js.');
+    expect(adapter.persona).toContain('You are **my-agent**');
+  });
+});
+
+describe('AgentRunner pending notices', () => {
+  let adapter: FakeAdapter;
+  let runner: AgentRunner;
+
+  beforeEach(async () => {
+    adapter = new FakeAdapter();
+    runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentName: 'test-agent',
+    });
+    await runner.start();
+  });
+
+  it('piggybacks join notice onto next message', async () => {
+    const client = getClient(runner);
+
+    // Simulate a new agent joining
+    client.emit('agent-join', {
+      id: 'join-msg',
+      type: 'agent.join',
+      from: 'server',
+      to: null,
+      timestamp: Date.now(),
+      payload: { agent: { id: 'new-1', name: 'newcomer', type: 'claude-code' } },
+    });
+
+    // Send a chat message — should include the join notice
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+    const receivedText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
+    expect(receivedText).toContain('[System] newcomer has joined the workspace.');
+    expect(receivedText).toContain('hello');
+  });
+
+  it('piggybacks leave notice onto next message', async () => {
+    const client = getClient(runner);
+
+    // First register the agent in member names
+    client.emit('agent-join', {
+      id: 'join-msg-2',
+      type: 'agent.join',
+      from: 'server',
+      to: null,
+      timestamp: Date.now(),
+      payload: { agent: { id: 'leaving-1', name: 'leaver', type: 'claude-code' } },
+    });
+
+    // Clear the join notice by processing a message
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Now simulate leave
+    client.emit('agent-leave', {
+      id: 'leave-msg',
+      type: 'agent.leave',
+      from: 'server',
+      to: null,
+      timestamp: Date.now(),
+      payload: { agentId: 'leaving-1' },
+    });
+
+    // Send another message — should include the leave notice
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'second', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(adapter.handleMessageCalls).toHaveLength(2);
+    const receivedText = (adapter.handleMessageCalls[1].payload as { text: string }).text;
+    expect(receivedText).toContain('[System] leaver has left the workspace.');
+    expect(receivedText).toContain('second');
+  });
+
+  it('no notices means original message text is unchanged', async () => {
+    const client = getClient(runner);
+
+    const msg = makeChatMsg({ from: 'user-a', text: 'clean message', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    const receivedText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
+    expect(receivedText).toBe('clean message');
+  });
+
+  it('clears notices generated during start()', async () => {
+    // Create a fresh runner and simulate join events during connection
+    const freshAdapter = new FakeAdapter();
+    const freshRunner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter: freshAdapter,
+      agentName: 'fresh-agent',
+    });
+
+    // start() clears notices, so any join events from initial state won't leak
+    await freshRunner.start();
+
+    const client = getClient(freshRunner);
+    const msg = makeChatMsg({ from: 'user-a', text: 'after start', mentions: [freshRunner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    const receivedText = (freshAdapter.handleMessageCalls[0].payload as { text: string }).text;
+    expect(receivedText).toBe('after start');
+  });
+});
 
 describe('AgentRunner agentId', () => {
   it('uses provided agentId instead of generating a new one', async () => {
