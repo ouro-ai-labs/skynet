@@ -56,7 +56,7 @@ export function registerHumanCommand(program: Command): void {
   human
     .command('delete <id>')
     .description('Delete a human by UUID')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .option('--force', 'Skip confirmation prompt')
     .action(async (humanId: string, opts: { workspace?: string; force?: boolean }) => {
       const workspace = selectWorkspace(opts);

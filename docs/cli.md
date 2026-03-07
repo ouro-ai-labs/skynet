@@ -59,6 +59,22 @@ skynet workspace start
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID (alternative to positional arg) |
 
+### `skynet workspace delete <id>`
+
+Delete a workspace and all its data (agents, messages, config) by UUID. Prompts for confirmation unless `--force` is passed.
+
+```bash
+# With confirmation prompt
+skynet workspace delete e68fa4c2-37d6-40e0-b62b-1c572a5e4489
+
+# Skip confirmation
+skynet workspace delete e68fa4c2-37d6-40e0-b62b-1c572a5e4489 --force
+```
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Skip confirmation prompt |
+
 ### `skynet workspace` (bare)
 
 Shortcut: starts the workspace if only one exists. Errors if zero or multiple workspaces are configured.
@@ -121,6 +137,22 @@ skynet agent list --workspace <name-or-id>
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID |
 
+### `skynet agent delete <id>`
+
+Delete an agent by UUID. Requires a running workspace server. Prompts for confirmation unless `--force` is passed. Returns an error if the agent is currently connected.
+
+```bash
+skynet agent delete a1b2c3d4-... --workspace <name-or-id>
+
+# Skip confirmation
+skynet agent delete a1b2c3d4-... --force
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+| `--force` | Skip confirmation prompt |
+
 ### `skynet agent` (bare)
 
 Interactive shortcut: select a registered agent and start it (connects to the workspace via WebSocket). Press `Ctrl+C` to disconnect.
@@ -165,6 +197,22 @@ skynet human list --workspace <name-or-id>
 | Flag | Description |
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID |
+
+### `skynet human delete <id>`
+
+Delete a human by UUID. Requires a running workspace server. Prompts for confirmation unless `--force` is passed. Returns an error if the human is currently connected.
+
+```bash
+skynet human delete a1b2c3d4-... --workspace <name-or-id>
+
+# Skip confirmation
+skynet human delete a1b2c3d4-... --force
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+| `--force` | Skip confirmation prompt |
 
 ---
 

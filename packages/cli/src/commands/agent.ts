@@ -199,7 +199,7 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('delete <id>')
     .description('Delete an agent by UUID')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .option('--force', 'Skip confirmation prompt')
     .action(async (agentId: string, opts: { workspace?: string; force?: boolean }) => {
       const workspace = selectWorkspace(opts);
