@@ -26,12 +26,14 @@ Main server entry point, built on Fastify + `@fastify/websocket`.
 | `port` | `4117` | Listen port |
 | `host` | `0.0.0.0` | Listen address |
 | `store` | — | `SqliteStore` instance for persistence |
+| `disconnectGraceMs` | `300000` (5 min) | Grace period before broadcasting `AGENT_LEAVE` after socket close |
 
 **Internal State**:
 
 - `memberManager: MemberManager` — Workspace member registry
 - `store: SqliteStore` — Message + entity persistence
 - `socketAgentMap: WeakMap<WebSocket, string>` — Socket-to-agentId mapping; WeakMap prevents memory leaks
+- `pendingLeaves: Map<string, Timer>` — Deferred leave timers, cancelled if agent reconnects within grace period
 
 **Lifecycle**: `start()` boots the server, `stop()` shuts down server + database.
 
@@ -111,11 +113,12 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 <- {event: "workspace.state", data: {members: AgentCard[], recentMessages: SkynetMessage[]}}
 ```
 
-1. Adds agent to workspace via `MemberManager`
-2. Establishes socket-to-agent mapping
-3. Returns current member list + last 50 messages to the joining agent
-4. Broadcasts `AGENT_JOIN` message to other members
-5. Persists the join message
+1. Detects reconnection: checks for pending leave timer or existing member with same agent ID
+2. If reconnecting: cancels pending leave timer, closes stale socket if still open
+3. Adds/updates agent in workspace via `MemberManager`
+4. Establishes socket-to-agent mapping
+5. Returns current member list + last 50 messages to the (re)connecting agent
+6. **Only for new members**: broadcasts `AGENT_JOIN` message and persists it. Reconnections are silent — no duplicate join/leave events are broadcast
 
 ### SEND
 
@@ -139,14 +142,17 @@ Updates the agent's status in the workspace (idle / busy / offline).
 
 ### LEAVE / Disconnect
 
-```
--> {action: "leave"} or WebSocket close event
-```
+There are two disconnect paths:
 
-1. Remove member from workspace
-2. Create and persist `AGENT_LEAVE` message
-3. Broadcast to remaining members
-4. Clean up socket mapping
+**Explicit LEAVE** (`{action: "leave"}`):
+- Immediate departure, no grace period
+- Member is removed, `AGENT_LEAVE` is broadcast and persisted right away
+
+**Socket close** (network drop, process crash):
+- Deferred departure with configurable grace period (`disconnectGraceMs`, default 5 minutes)
+- A pending leave timer starts; if the agent reconnects within the grace period, the timer is cancelled and no `AGENT_LEAVE` is broadcast
+- If the grace period expires without reconnection, the leave is committed: member is removed, `AGENT_LEAVE` is broadcast and persisted
+- During server shutdown (`stop()`), all pending leave timers are cancelled and no further leave processing occurs
 
 ## HTTP API
 
@@ -192,7 +198,7 @@ Client A                  Server                    Client B
    |                        |                          |
    |-- JOIN --------------->|                          |
    |<-- workspace.state ----|                          |
-   |                        |-- AGENT_JOIN broadcast ->|
+   |                        |-- AGENT_JOIN broadcast ->|  (new member only)
    |                        |                          |
    |-- SEND (broadcast) --->|                          |
    |<-- msg (echo back) ----|-- msg ------------------>|
@@ -200,8 +206,14 @@ Client A                  Server                    Client B
    |-- SEND (to: B) ------->|                          |
    |<-- msg (confirm) ------|-- msg (point-to-point) ->|
    |                        |                          |
-   |        [disconnect]    |                          |
-   |                        |-- AGENT_LEAVE broadcast ->|
+   |    [socket close]      |                          |
+   |                        |  (grace period starts)   |
+   |                        |                          |
+   |-- JOIN (reconnect) --->|                          |  (silent, no broadcast)
+   |<-- workspace.state ----|                          |
+   |                        |                          |
+   |-- LEAVE -------------->|                          |
+   |                        |-- AGENT_LEAVE broadcast ->|  (immediate)
 ```
 
 ## Design Decisions
@@ -213,6 +225,9 @@ Client A                  Server                    Client B
 5. **Synchronous SQLite** — better-sqlite3 is synchronous; simple and direct, blocks the event loop but acceptable at current message volumes
 6. **Cross-entity name uniqueness** — Agent and human names must be unique within a workspace to avoid ambiguity in @-mentions and CLI commands
 7. **No rooms** — Workspaces are naturally isolated; a flat member model is simpler than nested rooms
+8. **Disconnect grace period** — Network flapping (brief disconnects from WiFi changes, process restarts, etc.) should not spam join/leave events. A 5-minute default grace period allows agents to reconnect silently without other members noticing the interruption
+9. **Explicit LEAVE vs socket close** — Intentional departures (`LEAVE` action) bypass the grace period for immediate removal. Unintentional disconnects (socket close) use the grace period to allow reconnection
+10. **Silent reconnection** — When an agent reconnects within the grace period, the server sends `workspace.state` to the reconnecting agent but does not broadcast `AGENT_JOIN` to others, preventing duplicate join/leave noise
 
 ## Not Yet Implemented
 

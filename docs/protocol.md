@@ -218,4 +218,16 @@ interface ServerEvent {
 }
 ```
 
+### Server Events
+
+The server sends events to clients as JSON: `{event: string, data: unknown}`.
+
+| Event | When | Data |
+|-------|------|------|
+| `workspace.state` | On every (re)connection | `{members: AgentCard[], recentMessages: SkynetMessage[]}` |
+| `heartbeat.ack` | After receiving a heartbeat | `{timestamp: number}` |
+| `error` | On invalid client action | `{message: string}` |
+
+**Note:** The `workspace.state` event is sent on every connection, including reconnections. The SDK emits a `workspace-state` event each time, allowing agents to refresh their local state (e.g., member name maps) after network interruptions.
+
 See [workspace.md](workspace.md) for the full WebSocket protocol details and message flow.

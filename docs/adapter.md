@@ -111,6 +111,36 @@ Defined in `src/agent-runner.ts`. The glue layer that connects adapters to the S
 5. Sets status to `busy` during processing, `idle` when done
 6. For task-type messages, sends an `in-progress` status update first, then reports `TaskResult` on completion
 
+**Message Deduplication:**
+
+AgentRunner maintains an in-memory `Set` of recently processed message IDs (bounded at 500 entries, FIFO eviction). Messages already in the set are silently dropped. This prevents duplicate handling during network reconnections when the server replays recent messages.
+
+**Fork Behavior (Handling Messages While Busy):**
+
+When the agent is busy processing a message, incoming messages are handled as follows:
+
+- **@mentioned messages** (where `msg.to === myId` or `msg.mentions` includes `myId`): if the adapter supports `quickReply()`, a forked reply is dispatched immediately. Maximum **1 concurrent fork** — additional @mentions are queued.
+- **Broadcast/system messages** (not directly targeting this agent): always queued for later processing.
+
+This prevents agents from missing urgent @mentions while working, without overwhelming the adapter with unlimited forks.
+
+**Batch Processing:**
+
+When the main processing thread finishes and multiple chat messages have accumulated in the queue, they are batched into a single adapter call. The combined prompt format is:
+
+```
+You have N unread messages. Please respond to all of them in a single reply:
+
+[sender-1]: message text
+[sender-2]: message text
+```
+
+If all messages are from the same sender, the response is sent as a DM. If from multiple senders, it is broadcast.
+
+**Member Name Tracking:**
+
+AgentRunner listens for `agent-join`, `agent-leave`, and `workspace-state` events to maintain a local `memberNames` map. This map is used to resolve `@name` mentions in outgoing responses to agent IDs, and to display human-readable sender names in prompts.
+
 ```ts
 const runner = new AgentRunner({
   serverUrl: 'ws://localhost:3000',
