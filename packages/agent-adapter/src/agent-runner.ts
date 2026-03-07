@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { Logger } from '@skynet/logger';
 import {
   type AgentCard,
   type AgentJoinPayload,
@@ -27,6 +28,8 @@ export interface AgentRunnerOptions {
   projectRoot?: string;
   /** Path to a JSON file for persisting agent state (e.g. lastSeenTimestamp). */
   statePath?: string;
+  /** Log file path. When set, agent logs are written to this file. */
+  logFile?: string;
 }
 
 /** Max number of message IDs to track for deduplication. */
@@ -35,6 +38,7 @@ const DEDUP_MAX_SIZE = 500;
 export class AgentRunner {
   private client: SkynetClient;
   private adapter: AgentAdapter;
+  private logger: Logger;
   private processing = false;
   private forkInProgress = false;
   private messageQueue: SkynetMessage[] = [];
@@ -63,6 +67,11 @@ export class AgentRunner {
     });
 
     this.adapter = options.adapter;
+    this.logger = new Logger(`agent:${agentCard.name}`, {
+      filePath: options.logFile,
+      level: 'debug',
+      console: false,
+    });
 
     // Build system prompt for injection (persona + skynet skill)
     const parts: string[] = [];
@@ -73,7 +82,9 @@ export class AgentRunner {
   }
 
   async start(): Promise<WorkspaceState> {
+    this.logger.info(`Connecting to ${this.options.serverUrl}`);
     const state = await this.client.connect();
+    this.logger.info(`Connected, ${state.members.length} members online`);
 
     // Build initial member name map from workspace state
     for (const member of state.members) {
@@ -104,8 +115,10 @@ export class AgentRunner {
   }
 
   async stop(): Promise<void> {
+    this.logger.info('Stopping agent');
     await this.adapter.dispose();
     await this.client.close();
+    this.logger.close();
   }
 
   get agentId(): string {
@@ -174,7 +187,7 @@ export class AgentRunner {
       }
     } catch (err) {
       // Fork failed — fall back to normal queue so the message is not lost
-      console.error('[AgentRunner] Fork reply failed, queueing message:', err);
+      this.logger.error('Fork reply failed, queueing message:', err);
       this.messageQueue.push(msg);
     } finally {
       this.forkInProgress = false;
@@ -194,7 +207,7 @@ export class AgentRunner {
           await this.handleTask(msg);
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err);
-          console.error(`[AgentRunner] Error processing task from ${msg.from}:`, err);
+          this.logger.error(`Error processing task from ${msg.from}:`, err);
           this.client.chat(`Error processing task: ${errorMsg}`, msg.from);
         }
         continue;
@@ -227,7 +240,7 @@ export class AgentRunner {
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[AgentRunner] Error processing messages:`, err);
+        this.logger.error('Error processing messages:', err);
         this.client.chat(`Error processing messages: ${errorMsg}`, chatBatch[0].from);
       }
     }

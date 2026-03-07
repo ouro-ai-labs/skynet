@@ -1,5 +1,5 @@
 {
-  "name": "@skynet/agent-adapter",
+  "name": "@skynet/logger",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -10,14 +10,7 @@
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@skynet/logger": "workspace:*",
-    "@skynet/protocol": "workspace:*",
-    "@skynet/sdk": "workspace:*",
-    "execa": "^9.0.0"
-  },
   "devDependencies": {
-    "@skynet/workspace": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   }

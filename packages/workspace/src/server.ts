@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import type { WebSocket, RawData } from 'ws';
+import { Logger } from '@skynet/logger';
 import {
   type SkynetMessage,
   type AgentCard,
@@ -28,12 +29,15 @@ export interface SkynetWorkspaceOptions {
   disconnectGraceMs?: number;
   /** Max number of recent mentioned/DM messages to include in workspace.state. Default: 3. */
   recentMentionsLimit?: number;
+  /** Log file path. When set, server logs are written to this file. */
+  logFile?: string;
 }
 
 export class SkynetWorkspace {
   private fastify = Fastify({ logger: true });
   private members = new MemberManager();
   private store: Store;
+  private logger: Logger;
   private socketAgentMap = new WeakMap<WebSocket, string>();
   /** Pending leave timers — cancelled if agent reconnects within grace period. */
   private pendingLeaves = new Map<string, ReturnType<typeof setTimeout>>();
@@ -45,6 +49,11 @@ export class SkynetWorkspace {
     this.store = options.store;
     this.disconnectGraceMs = options.disconnectGraceMs ?? 300000;
     this.recentMentionsLimit = options.recentMentionsLimit ?? 3;
+    this.logger = new Logger('workspace', {
+      filePath: options.logFile,
+      level: 'debug',
+      console: false,
+    });
   }
 
   async start(): Promise<void> {
@@ -60,6 +69,7 @@ export class SkynetWorkspace {
     const port = this.options.port ?? 4117;
     const host = this.options.host ?? '0.0.0.0';
     await this.fastify.listen({ port, host });
+    this.logger.info(`Server started on ${host}:${port}`);
   }
 
   private registerHealthRoutes(): void {
@@ -204,6 +214,7 @@ export class SkynetWorkspace {
         const envelope = JSON.parse(raw.toString());
         this.handleClientAction(socket, envelope);
       } catch (err) {
+        this.logger.warn('Invalid message from client', err);
         socket.send(JSON.stringify({ event: 'error', data: { message: 'Invalid message format' } }));
       }
     });
@@ -253,6 +264,7 @@ export class SkynetWorkspace {
 
     this.members.join(req.agent, socket);
     this.socketAgentMap.set(socket, agentId);
+    this.logger.info(`Agent joined: ${req.agent.name} (${agentId})${isReconnect ? ' [reconnect]' : ''}`);
 
     // Always send workspace state to the (re)connecting agent.
     // Only include recent messages that mention or are addressed to this agent,
@@ -293,6 +305,7 @@ export class SkynetWorkspace {
     });
 
     this.store.save(fullMsg);
+    this.logger.debug(`Message from=${agentId} to=${fullMsg.to ?? 'broadcast'} type=${fullMsg.type}`);
 
     const delivered = new Set<string>();
 
@@ -386,6 +399,7 @@ export class SkynetWorkspace {
     }
 
     this.members.leave(agentId);
+    this.logger.info(`Agent left: ${agentId}${force ? ' [explicit]' : ' [grace timeout]'}`);
 
     const leaveMsg = createMessage({
       type: MessageType.AGENT_LEAVE,
@@ -405,5 +419,7 @@ export class SkynetWorkspace {
     this.pendingLeaves.clear();
     await this.fastify.close();
     this.store.close();
+    this.logger.info('Server stopped');
+    this.logger.close();
   }
 }

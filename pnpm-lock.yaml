@@ -23,6 +23,9 @@ importers:
 
   packages/agent-adapter:
     dependencies:
+      '@skynet/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@skynet/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -94,6 +97,9 @@ importers:
       '@skynet/coordinator':
         specifier: workspace:*
         version: link:../coordinator
+      '@skynet/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@skynet/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -128,6 +134,15 @@ importers:
       execa:
         specifier: ^9.0.0
         version: 9.6.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.13
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/logger:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -171,6 +186,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.0
         version: 11.2.0
+      '@skynet/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@skynet/protocol':
         specifier: workspace:*
         version: link:../protocol

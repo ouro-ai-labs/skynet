@@ -16,9 +16,10 @@ import {
 async function startServer(workspace: WorkspaceEntry): Promise<void> {
   const wsDir = getWorkspaceDir(workspace.id);
   const dbPath = join(wsDir, 'data.db');
+  const logFile = join(wsDir, 'logs', 'server.log');
 
   const store = new SqliteStore(dbPath);
-  const srv = new SkynetWorkspace({ port: workspace.port, host: workspace.host, store });
+  const srv = new SkynetWorkspace({ port: workspace.port, host: workspace.host, store, logFile });
 
   process.on('SIGINT', async () => {
     console.log('\nShutting down...');
@@ -29,6 +30,7 @@ async function startServer(workspace: WorkspaceEntry): Promise<void> {
   await srv.start();
   console.log(`Skynet workspace "${workspace.name}" running on ${workspace.host}:${workspace.port}`);
   console.log(`Database: ${dbPath}`);
+  console.log(`Logs: ${logFile}`);
 }
 
 export function registerWorkspaceCommand(program: Command): void {

@@ -151,6 +151,15 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 
 ---
 
+## Logs
+
+All runtime logs are written to `~/.skynet/<workspace-uuid>/logs/`:
+
+- **Server log**: `~/.skynet/<workspace-uuid>/logs/server.log`
+- **Agent logs**: `~/.skynet/<workspace-uuid>/logs/<agent-uuid>.log`
+
+---
+
 ## Tips
 
 - Run `skynet status` to see who is currently connected.
