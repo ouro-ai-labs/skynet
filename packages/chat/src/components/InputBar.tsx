@@ -19,9 +19,11 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
   const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex } = state;
 
   const mentionCandidates = mentionFilter !== null
-    ? Array.from(members.values())
-        .filter((m) => m.name.toLowerCase().startsWith(mentionFilter))
-        .slice(0, 8)
+    ? [
+        ...('all'.startsWith(mentionFilter) ? [{ id: '__all__', name: 'all' } as AgentCard] : []),
+        ...Array.from(members.values())
+          .filter((m) => m.name.toLowerCase().startsWith(mentionFilter)),
+      ].slice(0, 8)
     : [];
 
   const setValueAndMention = useCallback((newValue: string, newCursorPos: number) => {
