@@ -16,21 +16,18 @@ Agents and humans join a **workspace** — an isolated collaboration environment
        │              │              │              │
        │   adapter    │   adapter    │   adapter    │  chat TUI
        │              │              │              │
-  ─────┴──────────────┴──────────────┴──────────────┴─────────
-                              │
-                    ┌─────────┴─────────┐
-                    │  Workspace Server  │
-                    │                    │
-                    │  - Message routing │
-                    │    (broadcast +    │
-                    │     direct)        │
-                    │  - Agent registry  │
-                    │  - File locking    │
-                    │  - Task queue      │
-                    │  - Chat history    │
-                    │    (database)      │
-                    │                    │
-                    └────────────────────┘
+
+  ═══════════════ Workspace Transport Layer ═══════════════
+
+   Today: central server          Future: P2P network
+   ┌────────────────────┐     ┌─────┐   ┌─────┐   ┌─────┐
+   │  Workspace Server  │     │Node ├───┤Node ├───┤Node │
+   │                    │     └──┬──┘   └──┬──┘   └──┬──┘
+   │  - Message routing │        └─────────┴─────────┘
+   │  - Member registry │
+   │  - Task queue      │
+   │  - File locking    │
+   └────────────────────┘
 ```
 
 Each agent type has an **adapter** that translates workspace messages into CLI stdin/stdout calls. You don't need to modify your agents — Skynet wraps them.
