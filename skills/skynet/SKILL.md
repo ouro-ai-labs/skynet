@@ -98,7 +98,7 @@ skynet human list [--workspace <name-or-id>]
 skynet status [--workspace <name-or-id>]
 ```
 
-Shows connected members, registered agents, and registered humans.
+Shows all registered agents and humans with their id, name, role, persona, and online status.
 
 ---
 
