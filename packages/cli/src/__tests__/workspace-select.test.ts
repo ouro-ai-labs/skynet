@@ -36,6 +36,16 @@ describe('selectWorkspace', () => {
     expect(result.name).toBe('test-ws');
   });
 
+  it('returns workspace when --workspace matches a name', () => {
+    ensureSkynetDir();
+    const id = randomUUID();
+    addWorkspace({ id, name: 'my-project', host: 'localhost', port: 4117 });
+
+    const result = selectWorkspace({ workspace: 'my-project' });
+    expect(result.id).toBe(id);
+    expect(result.name).toBe('my-project');
+  });
+
   it('returns the only workspace when no --workspace is given', () => {
     ensureSkynetDir();
     const id = randomUUID();
@@ -86,11 +96,11 @@ describe('Commander --workspace option passing to subcommands', () => {
       .command('agent')
       .enablePositionalOptions()
       .passThroughOptions()
-      .option('--workspace <id>', 'Workspace UUID');
+      .option('--workspace <name-or-id>', 'Workspace name or UUID');
 
     parent
       .command('new')
-      .option('--workspace <id>', 'Workspace UUID')
+      .option('--workspace <name-or-id>', 'Workspace name or UUID')
       .action((opts) => { capturedOpts = opts; });
 
     program.parse(['node', 'test', 'agent', 'new', '--workspace', 'abc-123']);
@@ -104,11 +114,11 @@ describe('Commander --workspace option passing to subcommands', () => {
 
     const parent = program
       .command('agent')
-      .option('--workspace <id>', 'Workspace UUID');
+      .option('--workspace <name-or-id>', 'Workspace name or UUID');
 
     parent
       .command('new')
-      .option('--workspace <id>', 'Workspace UUID')
+      .option('--workspace <name-or-id>', 'Workspace name or UUID')
       .action((opts) => { capturedOpts = opts; });
 
     program.parse(['node', 'test', 'agent', 'new', '--workspace', 'abc-123']);

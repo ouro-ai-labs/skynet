@@ -24,7 +24,7 @@ export function registerStatusCommand(program: Command): void {
   program
     .command('status')
     .description('Show Skynet workspace status')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);

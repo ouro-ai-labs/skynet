@@ -63,7 +63,7 @@ export function registerAgentCommand(program: Command): void {
     .description('Manage agents')
     .enablePositionalOptions()
     .passThroughOptions()
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .action(async (opts) => {
       // Bare `skynet agent`: select workspace → select agent → start
       const workspace = selectWorkspace(opts);
@@ -92,7 +92,7 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('start <name-or-id>')
     .description('Start an agent by name or UUID')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .action(async (nameOrId: string, opts: { workspace?: string }) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
@@ -104,7 +104,7 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('new')
     .description('Create a new agent')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .option('--name <name>', 'Agent name (skip interactive prompt)')
     .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, generic')
     .option('--role <role>', 'Agent role')
@@ -199,7 +199,7 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('list')
     .description('List all agents')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);

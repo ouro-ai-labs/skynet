@@ -7,7 +7,7 @@ export function registerChatCommand(program: Command): void {
   program
     .command('chat')
     .description('Start chat TUI as a human participant')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .option('--name <name>', 'Human name (skip selection prompt)')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);

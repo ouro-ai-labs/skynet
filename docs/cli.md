@@ -4,7 +4,7 @@ Complete reference for the `skynet` command-line interface.
 
 ## Global Behavior
 
-- **Workspace auto-selection**: when only one workspace exists, it is automatically selected. When multiple workspaces exist, you must pass `--workspace <uuid>`.
+- **Workspace auto-selection**: when only one workspace exists, it is automatically selected. When multiple workspaces exist, you must pass `--workspace <name-or-id>`.
 - **Interactive prompts**: most commands support both interactive mode (prompts for missing info) and non-interactive mode (pass all values as flags).
 - **Configuration**: workspace data is stored in `~/.skynet/` (override with `SKYNET_HOME` env var).
 
@@ -42,7 +42,7 @@ skynet workspace list
 
 ### `skynet workspace start [name-or-id]`
 
-Start a workspace server. Accepts a workspace name or UUID as a positional argument, or via `--workspace <uuid>`.
+Start a workspace server. Accepts a workspace name or UUID as a positional argument, or via `--workspace <name-or-id>`.
 
 ```bash
 # Start by name
@@ -57,7 +57,7 @@ skynet workspace start
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID (alternative to positional arg) |
+| `--workspace <name-or-id>` | Workspace name or UUID (alternative to positional arg) |
 
 ### `skynet workspace` (bare)
 
@@ -77,15 +77,15 @@ Register a new agent in the workspace. Interactive by default.
 
 ```bash
 # Interactive
-skynet agent new --workspace <uuid>
+skynet agent new --workspace <name-or-id>
 
 # Non-interactive
-skynet agent new --workspace <uuid> --name coder --type claude-code --role "backend developer"
+skynet agent new --workspace <name-or-id> --name coder --type claude-code --role "backend developer"
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Agent name |
 | `--type <type>` | Agent type: `claude-code`, `gemini-cli`, `codex-cli`, `generic` |
 | `--role <role>` | Agent role description (optional) |
@@ -107,31 +107,31 @@ skynet agent start a1b2c3d4-...
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 
 ### `skynet agent list`
 
 List all registered agents with name, type, role, and UUID.
 
 ```bash
-skynet agent list --workspace <uuid>
+skynet agent list --workspace <name-or-id>
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 
 ### `skynet agent` (bare)
 
 Interactive shortcut: select a registered agent and start it (connects to the workspace via WebSocket). Press `Ctrl+C` to disconnect.
 
 ```bash
-skynet agent --workspace <uuid>
+skynet agent --workspace <name-or-id>
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 
 ---
 
@@ -143,15 +143,15 @@ Register a new human profile in the workspace.
 
 ```bash
 # Interactive
-skynet human new --workspace <uuid>
+skynet human new --workspace <name-or-id>
 
 # Non-interactive
-skynet human new --workspace <uuid> --name alice
+skynet human new --workspace <name-or-id> --name alice
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Human name |
 
 ### `skynet human list`
@@ -159,12 +159,12 @@ skynet human new --workspace <uuid> --name alice
 List all registered humans with name and UUID.
 
 ```bash
-skynet human list --workspace <uuid>
+skynet human list --workspace <name-or-id>
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 
 ---
 
@@ -174,10 +174,10 @@ Launch the chat terminal UI to participate in the workspace as a human.
 
 ```bash
 # Auto-select human (when only one is registered)
-skynet chat --workspace <uuid>
+skynet chat --workspace <name-or-id>
 
 # Specify human by name
-skynet chat --workspace <uuid> --name alice
+skynet chat --workspace <name-or-id> --name alice
 
 # Auto-select workspace (when only one exists)
 skynet chat
@@ -185,7 +185,7 @@ skynet chat
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Human name (skip selection prompt) |
 
 When multiple humans are registered and `--name` is not provided, an interactive selection prompt is shown.
@@ -197,12 +197,12 @@ When multiple humans are registered and `--name` is not provided, an interactive
 Display connected members, registered agents, and registered humans for a workspace.
 
 ```bash
-skynet status --workspace <uuid>
+skynet status --workspace <name-or-id>
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <uuid>` | Workspace UUID |
+| `--workspace <name-or-id>` | Workspace name or UUID |
 
 Output includes:
 - Workspace name and server URL
