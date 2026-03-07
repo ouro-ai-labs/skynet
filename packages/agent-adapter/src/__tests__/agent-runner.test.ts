@@ -124,6 +124,32 @@ function getClient(runner: AgentRunner): MockClient {
 
 // ── Tests ──
 
+describe('AgentRunner agentId', () => {
+  it('uses provided agentId instead of generating a new one', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentId: 'registered-id-123',
+    });
+    await runner.start();
+
+    expect(runner.agentId).toBe('registered-id-123');
+  });
+
+  it('generates a random UUID when agentId is not provided', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+    });
+    await runner.start();
+
+    // Should be a valid UUID format
+    expect(runner.agentId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
+
 describe('AgentRunner fork dispatch', () => {
   let adapter: FakeAdapter;
   let runner: AgentRunner;

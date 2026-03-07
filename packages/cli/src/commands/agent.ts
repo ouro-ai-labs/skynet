@@ -34,6 +34,7 @@ async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl:
   const runner = new AgentRunner({
     serverUrl,
     adapter,
+    agentId: agentProfile.id,
     agentName: agentProfile.name,
     role: agentProfile.role,
     persona: agentProfile.persona,

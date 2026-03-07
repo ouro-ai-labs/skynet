@@ -17,6 +17,7 @@ import { SKYNET_SKILL } from './skynet-skill.js';
 export interface AgentRunnerOptions {
   serverUrl: string;
   adapter: AgentAdapter;
+  agentId?: string;
   agentName?: string;
   capabilities?: string[];
   role?: string;
@@ -33,7 +34,7 @@ export class AgentRunner {
 
   constructor(private options: AgentRunnerOptions) {
     const agentCard: AgentCard = {
-      id: randomUUID(),
+      id: options.agentId ?? randomUUID(),
       name: options.agentName ?? `${options.adapter.name}-${randomUUID().slice(0, 8)}`,
       type: options.adapter.type,
       role: options.role,
