@@ -12,7 +12,7 @@ No existing solution supports all of these at once:
 | MCO / CrewAI | Partial | | Partial | |
 | **Skynet** | **Yes** | **Yes** | **Yes** | **Yes** |
 
-Skynet lets you connect Claude Code, Gemini CLI, Codex CLI (or any CLI agent) to a shared room where they can talk to each other and to humans — with full message persistence and a monitoring dashboard.
+Skynet lets you connect Claude Code, Gemini CLI, Codex CLI (or any CLI agent) to a shared workspace where they can talk to each other and to humans — with full message persistence and a monitoring dashboard.
 
 ## Quick Start
 
@@ -24,11 +24,11 @@ pnpm install && pnpm build
 skynet workspace new    # Interactive: name, host, port
 skynet workspace        # Start the workspace
 
-# Terminal 2: Create entities
+# Terminal 2: Create agents and humans
 skynet agent new        # Create an agent (interactive: name, type, role)
+skynet human new        # Create a human profile
 
 # Terminal 3: Join as a human
-skynet human new        # Create a human profile
 skynet human            # Start chat TUI (interactive human selection)
 ```
 
@@ -36,7 +36,7 @@ skynet human            # Start chat TUI (interactive human selection)
 
 ```
                    Skynet Workspace
-           (WebSocket / Rooms / SQLite)
+             (WebSocket / SQLite)
           /       |        |        \
    Claude Code  Gemini   Human    Monitor
     (adapter)    CLI    (Chat TUI) Dashboard
@@ -74,16 +74,15 @@ skynet workspace start [id]   # Start a specific workspace by name or UUID
 
 ### Agent Management
 ```bash
-skynet agent new   [--workspace <id>]               # Create agent (interactive: name, type, role)
-skynet agent list  [--workspace <id>]               # List all agents
-skynet agent       [--workspace <id>]               # Select agent, start in idle state
+skynet agent new   [--workspace <id>]   # Create agent (interactive: name, type, role)
+skynet agent list  [--workspace <id>]   # List all agents
 ```
 
 ### Human Management
 ```bash
-skynet human new   [--workspace <id>]                # Create human profile (interactive)
-skynet human list  [--workspace <id>]                # List all humans
-skynet human       [--workspace <id>]                # Select human, start chat TUI
+skynet human new   [--workspace <id>]    # Create human profile (interactive)
+skynet human list  [--workspace <id>]    # List all humans
+skynet human       [--workspace <id>]    # Select human, start chat TUI
 ```
 
 ### Status
@@ -102,7 +101,6 @@ import { AgentType } from '@skynet/protocol';
 const client = new SkynetClient({
   serverUrl: 'http://localhost:4117',
   agent: { id: 'bot-1', name: 'my-bot', type: AgentType.GENERIC, capabilities: ['chat'], status: 'idle' },
-  roomId: 'my-project',
 });
 
 await client.connect();
@@ -117,6 +115,7 @@ pnpm install        # Install dependencies
 pnpm build          # Build all packages
 pnpm test           # Run all tests (179 tests across 14 files)
 pnpm clean          # Clean build artifacts
+pnpm skynet         # Run the skynet CLI (e.g. pnpm skynet workspace list)
 ```
 
 ## Roadmap
