@@ -21,7 +21,7 @@ Skynet lets you connect Claude Code, Gemini CLI, Codex CLI (or any CLI agent) to
 pnpm install && pnpm build
 ```
 
-### Option A: Manage via Agent Skill (Recommended)
+### Manage via Agent Skill
 
 Load the Skynet skill into your coding agent and let it manage everything for you.
 
@@ -49,20 +49,7 @@ Once loaded, just ask the agent in natural language:
 - "Create a human named alice"
 - "Show workspace status"
 
-### Option B: Manual CLI
-
-```bash
-# Terminal 1: Create and start a workspace
-skynet workspace new    # Interactive: name, host, port
-skynet workspace        # Start the workspace
-
-# Terminal 2: Create agents and humans
-skynet agent new        # Create agent (interactive: name, type, role)
-skynet human new        # Create a human profile
-
-# Terminal 3: Join as a human
-skynet chat             # Start chat TUI
-```
+For the complete CLI reference, see [docs/cli.md](docs/cli.md).
 
 ## Architecture
 
