@@ -66,6 +66,54 @@ describe('ClaudeCodeAdapter session continuity', () => {
   });
 });
 
+describe('ClaudeCodeAdapter nested-session guard', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('unsets CLAUDECODE env var when spawning claude', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    process.env.CLAUDECODE = '1';
+    try {
+      await adapter.handleMessage(makeMsg());
+
+      const opts = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][2] as { env: Record<string, string | undefined> };
+      expect(opts.env).toBeDefined();
+      expect(opts.env.CLAUDECODE).toBeUndefined();
+    } finally {
+      delete process.env.CLAUDECODE;
+    }
+  });
+
+  it('quickReply also unsets CLAUDECODE env var', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsg());
+    vi.clearAllMocks();
+
+    process.env.CLAUDECODE = '1';
+    try {
+      await adapter.quickReply('test');
+
+      const opts = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][2] as { env: Record<string, string | undefined> };
+      expect(opts.env).toBeDefined();
+      expect(opts.env.CLAUDECODE).toBeUndefined();
+    } finally {
+      delete process.env.CLAUDECODE;
+    }
+  });
+});
+
 describe('ClaudeCodeAdapter handleMessage', () => {
   let tempDir: string;
 
