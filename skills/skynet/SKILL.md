@@ -58,6 +58,14 @@ skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--pers
 - `--role` (optional): Agent's role description (e.g., "backend engineer")
 - `--persona` (optional): Persona description for the agent's behavior
 
+### Start an agent
+
+```bash
+skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+Connects the agent to the workspace and starts processing messages. This is a long-running process — run it in the background or in a separate terminal. Press `Ctrl+C` to disconnect.
+
 ### List agents
 
 ```bash
@@ -99,8 +107,9 @@ Shows connected members, registered agents, and registered humans.
 1. **Create a workspace**: `skynet workspace new --name my-project`
 2. **Start the workspace**: `skynet workspace start my-project` (keep running)
 3. **Create agents**: `skynet agent new --name backend --type claude-code --role "backend engineer"`
-4. **Create a human**: `skynet human new --name alice`
-5. **Check status**: `skynet status`
+4. **Start the agent**: `skynet agent start backend` (keep running)
+5. **Create a human**: `skynet human new --name alice`
+6. **Check status**: `skynet status`
 
 ---
 
