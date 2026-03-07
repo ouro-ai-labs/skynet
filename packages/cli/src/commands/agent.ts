@@ -11,7 +11,9 @@ export function registerAgentCommand(program: Command): void {
   const agent = program
     .command('agent')
     .description('Manage agents')
-    .option('--workspace <id>', 'Workspace UUID or name')
+    .enablePositionalOptions()
+    .passThroughOptions()
+    .option('--workspace <id>', 'Workspace UUID')
     .action(async (opts) => {
       // Bare `skynet agent`: select workspace → select agent → start
       const workspace = selectWorkspace(opts);
@@ -73,7 +75,7 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('new')
     .description('Create a new agent')
-    .option('--workspace <id>', 'Workspace UUID or name')
+    .option('--workspace <id>', 'Workspace UUID')
     .option('--name <name>', 'Agent name (skip interactive prompt)')
     .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, generic')
     .option('--role <role>', 'Agent role')
@@ -168,7 +170,7 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('list')
     .description('List all agents')
-    .option('--workspace <id>', 'Workspace UUID or name')
+    .option('--workspace <id>', 'Workspace UUID')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);

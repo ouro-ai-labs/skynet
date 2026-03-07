@@ -11,7 +11,8 @@ const program = new Command();
 program
   .name('skynet')
   .description('Multi-Agent Collaboration Network')
-  .version('0.1.0');
+  .version('0.1.0')
+  .enablePositionalOptions();
 
 registerWorkspaceCommand(program);
 registerAgentCommand(program);

@@ -9,6 +9,7 @@ import {
   listWorkspaces,
   addWorkspace,
   getWorkspace,
+  getWorkspaceByIdOrName,
   getWorkspaceDir,
   getServerUrl,
   loadWorkspaceConfig,
@@ -69,14 +70,21 @@ describe('config module', () => {
     expect(workspaces).toHaveLength(1);
     expect(workspaces[0].name).toBe('test-ws');
 
-    // Verify lookup by name and id
-    const byName = getWorkspace('test-ws');
-    expect(byName).toBeDefined();
-    expect(byName!.id).toBe(entry.id);
+    // getWorkspace only matches by ID
+    expect(getWorkspace('test-ws')).toBeUndefined();
 
     const byId = getWorkspace(entry.id);
     expect(byId).toBeDefined();
     expect(byId!.name).toBe('test-ws');
+
+    // getWorkspaceByIdOrName matches both
+    const byName = getWorkspaceByIdOrName('test-ws');
+    expect(byName).toBeDefined();
+    expect(byName!.id).toBe(entry.id);
+
+    const byIdOrName = getWorkspaceByIdOrName(entry.id);
+    expect(byIdOrName).toBeDefined();
+    expect(byIdOrName!.name).toBe('test-ws');
   });
 
   it('getWorkspace returns undefined for non-existent workspace', () => {
