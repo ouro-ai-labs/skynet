@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { SkynetWorkspace, SqliteStore } from '@skynet/workspace';
 import { SkynetClient } from '@skynet/sdk';
-import { AgentType, MessageType, type SkynetMessage, type TaskPayload, type AgentCard } from '@skynet/protocol';
+import { AgentType, MessageType, MENTION_ALL, type SkynetMessage, type TaskPayload, type AgentCard } from '@skynet/protocol';
 import { AgentRunner } from '../agent-runner.js';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 import { randomUUID } from 'node:crypto';
@@ -137,9 +137,9 @@ describe('E2E: multi-agent collaboration', () => {
     expect(names).toEqual(['agent-1', 'agent-2', 'human']);
   });
 
-  it('human broadcast reaches both agents who respond', async () => {
+  it('human @all reaches both agents who respond', async () => {
     const pending = collectMessages(humanClient, 2, humanClient.agent.id);
-    humanClient.chat('Hello everyone!');
+    humanClient.chat('Hello everyone!', [MENTION_ALL]);
 
     const messages = await pending;
     const texts = messages.map((m) => (m.payload as { text: string }).text).sort();
@@ -150,9 +150,9 @@ describe('E2E: multi-agent collaboration', () => {
     ]);
   });
 
-  it('human DM to agent-1 gets response only from agent-1', async () => {
+  it('human mention agent-1 gets response only from agent-1', async () => {
     const pending = collectMessages(humanClient, 1, humanClient.agent.id);
-    humanClient.chat('Question for agent-1', runner1.agentId);
+    humanClient.chat('Question for agent-1', [runner1.agentId]);
 
     const messages = await pending;
     expect(messages).toHaveLength(1);
@@ -161,9 +161,9 @@ describe('E2E: multi-agent collaboration', () => {
     );
   });
 
-  it('human DM to agent-2 gets response only from agent-2', async () => {
+  it('human mention agent-2 gets response only from agent-2', async () => {
     const pending = collectMessages(humanClient, 1, humanClient.agent.id);
-    humanClient.chat('Question for agent-2', runner2.agentId);
+    humanClient.chat('Question for agent-2', [runner2.agentId]);
 
     const messages = await pending;
     expect(messages).toHaveLength(1);
@@ -264,7 +264,7 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
 
     // 5. Chat and verify response
     const pending = collectMessages(humanClient, 1, humanClient.agent.id);
-    humanClient.chat('lifecycle test');
+    humanClient.chat('lifecycle test', [runner.agentId]);
     const responses = await pending;
     expect((responses[0].payload as { text: string }).text).toBe('[lifecycle-1] echo: lifecycle test');
 
@@ -326,24 +326,24 @@ describe('E2E: workspace.state only returns mentioned messages for connecting ag
 
     const agentId = randomUUID();
 
-    // Broadcast (not addressed to agent)
+    // Messages without mention (not addressed to agent)
     human.chat('General broadcast 1');
     human.chat('General broadcast 2');
     await sleep(50);
 
-    // DM to the agent
-    human.chat('DM for agent', agentId);
-    await sleep(50);
-
     // Mention the agent
-    human.chat('Hey @agent check this', null, [agentId]);
+    human.chat('DM for agent', [agentId]);
     await sleep(50);
 
-    // Another broadcast
+    // Another mention
+    human.chat('Hey @agent check this', [agentId]);
+    await sleep(50);
+
+    // No mention
     human.chat('General broadcast 3');
     await sleep(200);
 
-    // Agent connects — should only see the DM and the mention
+    // Agent connects — should only see messages that mention it
     const agent = new SkynetClient({
       serverUrl: baseUrl,
       agent: { id: agentId, name: 'target-agent', type: AgentType.CLAUDE_CODE },
@@ -376,9 +376,9 @@ describe('E2E: workspace.state only returns mentioned messages for connecting ag
     await human.connect();
     await sleep(50);
 
-    // Send 5 DMs to the agent (limit is 3)
+    // Send 5 mentions to the agent (limit is 3)
     for (let i = 0; i < 5; i++) {
-      human.chat(`DM ${i}`, agentId);
+      human.chat(`DM ${i}`, [agentId]);
     }
     await sleep(200);
 
@@ -431,16 +431,16 @@ describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
     await human.connect();
     await sleep(50);
 
-    // Send first DM
-    human.chat('old message', agentId);
+    // Send first mention
+    human.chat('old message', [agentId]);
     await sleep(100);
 
     // Record boundary timestamp
     const boundary = Date.now();
     await sleep(50);
 
-    // Send second DM
-    human.chat('new message', agentId);
+    // Send second mention
+    human.chat('new message', [agentId]);
     await sleep(200);
 
     // Agent connects with lastSeenTimestamp — should only see the newer message
@@ -474,7 +474,7 @@ describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
     await human.connect();
     await sleep(50);
 
-    human.chat('msg for fresh agent', agentId);
+    human.chat('msg for fresh agent', [agentId]);
     await sleep(200);
 
     // Agent connects without lastSeenTimestamp — should see the message
@@ -541,7 +541,7 @@ describe('E2E: AgentRunner persists and restores lastSeenTimestamp', () => {
     await human.connect();
     await sleep(50);
 
-    human.chat('first message', agentId);
+    human.chat('first message', [agentId]);
     await sleep(500); // Wait for processing
 
     // Verify state file was written
@@ -556,7 +556,7 @@ describe('E2E: AgentRunner persists and restores lastSeenTimestamp', () => {
     const boundary = state.lastSeenTimestamp;
 
     await sleep(50);
-    human.chat('second message while offline', agentId);
+    human.chat('second message while offline', [agentId]);
     await sleep(200);
 
     // --- Phase 3: Agent restarts with persisted state ---

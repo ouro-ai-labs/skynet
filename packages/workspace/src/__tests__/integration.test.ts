@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet/sdk';
-import { AgentType, type SkynetMessage } from '@skynet/protocol';
+import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet/protocol';
 import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);
@@ -56,7 +56,7 @@ describe('Server integration', () => {
     });
 
     await sleep(50);
-    alice.chat('Hello Bob!');
+    alice.chat('Hello Bob!', [bob.agent.id]);
     await sleep(200);
 
     expect(received).toContain('Hello Bob!');
@@ -65,7 +65,7 @@ describe('Server integration', () => {
     await bob.close();
   });
 
-  it('DM reaches only the target', async () => {
+  it('mention reaches only the mentioned agent', async () => {
     const alice = makeClient('alice-dm');
     const bob = makeClient('bob-dm');
     const charlie = makeClient('charlie-dm');
@@ -85,9 +85,10 @@ describe('Server integration', () => {
     });
 
     await sleep(50);
-    alice.chat('Secret for Bob', bob.agent.id);
+    alice.chat('Secret for Bob', [bob.agent.id]);
     await sleep(200);
 
+    expect(bobReceived).toContain('Secret for Bob');
     expect(charlieReceived).toHaveLength(0);
 
     await alice.close();
@@ -95,7 +96,7 @@ describe('Server integration', () => {
     await charlie.close();
   });
 
-  it('broadcast reaches all members', async () => {
+  it('@all reaches all members', async () => {
     const alice = makeClient('alice-bc');
     const bob = makeClient('bob-bc');
     const charlie = makeClient('charlie-bc');
@@ -115,7 +116,7 @@ describe('Server integration', () => {
     });
 
     await sleep(50);
-    alice.chat('Hello everyone!');
+    alice.chat('Hello everyone!', [MENTION_ALL]);
     await sleep(200);
 
     expect(bobReceived).toContain('Hello everyone!');
@@ -154,7 +155,7 @@ describe('Server integration', () => {
     await alice.close();
   });
 
-  it('DM with mentions reaches both target and mentioned agents', async () => {
+  it('mentions reach all mentioned agents', async () => {
     const alice = makeClient('alice-mention');
     const bob = makeClient('bob-mention');
     const charlie = makeClient('charlie-mention');
@@ -180,8 +181,8 @@ describe('Server integration', () => {
     });
 
     await sleep(50);
-    // Alice sends a DM to Bob, with Charlie mentioned
-    alice.chat('Hey discuss this', bob.agent.id, [charlie.agent.id]);
+    // Alice mentions Bob and Charlie
+    alice.chat('Hey discuss this', [bob.agent.id, charlie.agent.id]);
     await sleep(200);
 
     expect(bobReceived).toContain('Hey discuss this');
@@ -299,15 +300,15 @@ describe('Server integration', () => {
 
     const bobId = randomUUID();
 
-    // Send two DMs to bob at different times
-    alice.chat('old msg for bob', bobId);
+    // Send two mentions to bob at different times
+    alice.chat('old msg for bob', [bobId]);
     await sleep(100);
 
     // Record the timestamp boundary
     const boundary = Date.now();
     await sleep(50);
 
-    alice.chat('new msg for bob', bobId);
+    alice.chat('new msg for bob', [bobId]);
     await sleep(200);
 
     // Bob connects with lastSeenTimestamp — should only get the newer message
@@ -334,17 +335,17 @@ describe('Server integration', () => {
     await alice.connect();
     await sleep(50);
 
-    // Broadcast message (not addressed to bob)
+    // Message without mention (not addressed to bob)
     alice.chat('General broadcast');
     await sleep(50);
-    // DM to bob
-    alice.chat('DM for bob', bob.agent.id);
+    // Mention bob
+    alice.chat('DM for bob', [bob.agent.id]);
     await sleep(50);
-    // Message mentioning bob
-    alice.chat('Hey @bob check this', null, [bob.agent.id]);
+    // Another mention of bob
+    alice.chat('Hey @bob check this', [bob.agent.id]);
     await sleep(200);
 
-    // Bob connects and should only see messages addressed to or mentioning him
+    // Bob connects and should only see messages mentioning him
     const state = await bob.connect();
 
     const chatMessages = state.recentMessages.filter(m => m.type === 'chat');

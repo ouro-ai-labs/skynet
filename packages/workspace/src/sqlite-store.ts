@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import type { SkynetMessage, AgentCard, HumanProfile } from '@skynet/protocol';
+import { MENTION_ALL, type SkynetMessage, type AgentCard, type HumanProfile } from '@skynet/protocol';
 import type { Store } from './store.js';
 
 export class SqliteStore implements Store {
@@ -78,18 +78,18 @@ export class SqliteStore implements Store {
   }
 
   getMessagesFor(agentId: string, limit: number = 3, since?: number): SkynetMessage[] {
-    const baseCondition = '("to" = ? OR (mentions IS NOT NULL AND instr(mentions, ?) > 0))';
+    const baseCondition = '(mentions IS NOT NULL AND (instr(mentions, ?) > 0 OR instr(mentions, ?) > 0))';
     const rows = since
       ? this.db.prepare(`
           SELECT * FROM messages
           WHERE ${baseCondition} AND timestamp > ?
           ORDER BY timestamp DESC LIMIT ?
-        `).all(agentId, agentId, since, limit)
+        `).all(agentId, MENTION_ALL, since, limit)
       : this.db.prepare(`
           SELECT * FROM messages
           WHERE ${baseCondition}
           ORDER BY timestamp DESC LIMIT ?
-        `).all(agentId, agentId, limit);
+        `).all(agentId, MENTION_ALL, limit);
 
     return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
   }

@@ -11,11 +11,12 @@ import {
   type TaskPayload,
   AgentType,
   MessageType,
+  MENTION_ALL,
   extractMentionNames,
 } from '@skynet/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
-import { SKYNET_SKILL } from './skynet-skill.js';
+import { SKYNET_INTRO } from './skynet-intro.js';
 
 export interface AgentRunnerOptions {
   serverUrl: string;
@@ -34,6 +35,9 @@ export interface AgentRunnerOptions {
 
 /** Max number of message IDs to track for deduplication. */
 const DEDUP_MAX_SIZE = 500;
+
+/** Sentinel value returned by agents when they choose not to reply. */
+export const NO_REPLY = 'NO_REPLY';
 
 export class AgentRunner {
   private client: SkynetClient;
@@ -77,7 +81,7 @@ export class AgentRunner {
     const parts: string[] = [];
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
-    parts.push(SKYNET_SKILL);
+    parts.push(SKYNET_INTRO);
     this.adapter.persona = parts.join('\n\n');
   }
 
@@ -137,13 +141,15 @@ export class AgentRunner {
     if (this.processedMessageIds.has(msg.id)) return;
     this.trackMessageId(msg.id);
 
+    // Only process messages that mention this agent (or @all)
+    if (msg.type === MessageType.CHAT && !this.isMessageForMe(msg)) return;
+
     // When busy: only fork for @mentioned chat messages, max 1 concurrent fork
     if (
       this.processing &&
       msg.type === MessageType.CHAT &&
       this.adapter.supportsQuickReply() &&
-      !this.forkInProgress &&
-      this.isMessageForMe(msg)
+      !this.forkInProgress
     ) {
       this.handleForkedReply(msg);
       return;
@@ -153,12 +159,11 @@ export class AgentRunner {
     this.processQueue();
   }
 
-  /** Check if this agent is directly targeted or @mentioned. */
+  /** Check if this agent is @mentioned (directly or via @all). */
   private isMessageForMe(msg: SkynetMessage): boolean {
-    const myId = this.client.agent.id;
-    if (msg.to === myId) return true;
-    if (msg.mentions && msg.mentions.includes(myId)) return true;
-    return false;
+    if (!msg.mentions || msg.mentions.length === 0) return false;
+    if (msg.mentions.includes(MENTION_ALL)) return true;
+    return msg.mentions.includes(this.client.agent.id);
   }
 
   /** Track a message ID, evicting old entries when the set gets too large. */
@@ -181,9 +186,11 @@ export class AgentRunner {
       const response = await this.adapter.quickReply(
         `Message from ${senderName}: ${text}`,
       );
-      if (response) {
+      if (response && response.trim() !== NO_REPLY) {
         const mentions = this.resolveMentions(response);
-        this.client.chat(response, msg.from, mentions.length > 0 ? mentions : undefined);
+        // Always include the original sender in mentions
+        if (!mentions.includes(msg.from)) mentions.push(msg.from);
+        this.client.chat(response, mentions);
       }
     } catch (err) {
       // Fork failed — fall back to normal queue so the message is not lost
@@ -208,7 +215,7 @@ export class AgentRunner {
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err);
           this.logger.error(`Error processing task from ${msg.from}:`, err);
-          this.client.chat(`Error processing task: ${errorMsg}`, msg.from);
+          this.client.chat(`Error processing task: ${errorMsg}`, [msg.from]);
         }
         continue;
       }
@@ -230,9 +237,11 @@ export class AgentRunner {
           const msg = chatBatch[0];
           const senderName = this.memberNames.get(msg.from) ?? msg.from;
           const response = await this.adapter.handleMessage(msg, senderName);
-          if (response) {
+          if (response && response.trim() !== NO_REPLY) {
             const mentions = this.resolveMentions(response);
-            this.client.chat(response, msg.from, mentions.length > 0 ? mentions : undefined);
+            // Always include the original sender in mentions
+            if (!mentions.includes(msg.from)) mentions.push(msg.from);
+            this.client.chat(response, mentions);
           }
         } else {
           // Multiple messages — batch into a single prompt
@@ -241,7 +250,7 @@ export class AgentRunner {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         this.logger.error('Error processing messages:', err);
-        this.client.chat(`Error processing messages: ${errorMsg}`, chatBatch[0].from);
+        this.client.chat(`Error processing messages: ${errorMsg}`, [chatBatch[0].from]);
       }
     }
 
@@ -270,27 +279,27 @@ export class AgentRunner {
     const senderName = this.memberNames.get(messages[0].from) ?? messages[0].from;
     const response = await this.adapter.handleMessage(batchMsg, senderName);
 
-    if (response) {
+    if (response && response.trim() !== NO_REPLY) {
       const mentions = this.resolveMentions(response);
-      // Collect unique senders to determine reply target
-      const senders = new Set(messages.map((m) => m.from));
-      if (senders.size === 1) {
-        // All from same sender — reply directly
-        this.client.chat(response, messages[0].from, mentions.length > 0 ? mentions : undefined);
-      } else {
-        // Multiple senders — broadcast
-        this.client.chat(response, null, mentions.length > 0 ? mentions : undefined);
+      // Include all senders in mentions
+      for (const m of messages) {
+        if (!mentions.includes(m.from)) mentions.push(m.from);
       }
+      this.client.chat(response, mentions);
     }
   }
 
-  /** Resolve @name mentions in text to agent IDs (excluding self). */
+  /** Resolve @name mentions in text to agent IDs (excluding self). @all maps to MENTION_ALL. */
   private resolveMentions(text: string): string[] {
     const names = extractMentionNames(text);
     if (names.length === 0) return [];
     const selfId = this.client.agent.id;
     const ids: string[] = [];
     for (const name of names) {
+      if (name === 'all') {
+        ids.push(MENTION_ALL);
+        continue;
+      }
       for (const [agentId, agentName] of this.memberNames) {
         if (agentName.toLowerCase() === name && agentId !== selfId) {
           ids.push(agentId);

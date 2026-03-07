@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import { type SkynetMessage, extractMentionNames } from '@skynet/protocol';
+import { type SkynetMessage, extractMentionNames, MENTION_ALL } from '@skynet/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -67,6 +67,10 @@ export function App({ options }: AppProps): React.ReactElement {
     const mentionedNames = extractMentionNames(text);
     const resolvedIds: string[] = [];
     for (const name of mentionedNames) {
+      if (name === 'all') {
+        resolvedIds.push(MENTION_ALL);
+        continue;
+      }
       for (const [id, card] of state.members) {
         if (card.name.toLowerCase() === name) {
           resolvedIds.push(id);
@@ -76,12 +80,7 @@ export function App({ options }: AppProps): React.ReactElement {
     }
 
     if (resolvedIds.length > 0) {
-      // Strip leading @name tokens to extract the message body
-      const body = text.replace(/^(?:@\S+\s*)+/, '').trim();
-      const messageText = body || text;
-      // Primary recipient is the first mentioned agent; others go in mentions
-      const [primaryTo, ...additionalMentions] = resolvedIds;
-      sendChat(messageText, primaryTo, additionalMentions.length > 0 ? additionalMentions : undefined);
+      sendChat(text, resolvedIds);
     } else {
       sendChat(text);
     }

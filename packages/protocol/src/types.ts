@@ -116,6 +116,11 @@ export interface FileChangePayload {
   agentId: string;
 }
 
+// ── Special Mention Constants ──
+
+/** Special mention ID that targets all workspace members. */
+export const MENTION_ALL = '__all__';
+
 // ── Client-Server Wire Protocol ──
 
 export enum ClientAction {

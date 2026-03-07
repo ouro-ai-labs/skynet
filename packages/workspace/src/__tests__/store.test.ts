@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SqliteStore } from '../sqlite-store.js';
-import { createChatMessage, createMessage, MessageType, AgentType } from '@skynet/protocol';
+import { createChatMessage, createMessage, MessageType, AgentType, MENTION_ALL } from '@skynet/protocol';
 import type { Store } from '../store.js';
 
 describe('SqliteStore', () => {
@@ -82,16 +82,16 @@ describe('SqliteStore', () => {
     expect(retrieved!.replyTo).toBe(original.id);
   });
 
-  it('handles DM messages with to field', () => {
-    const dm = createChatMessage('alice', 'private', 'bob');
+  it('handles DM messages via mentions', () => {
+    const dm = createChatMessage('alice', 'private', ['bob-id']);
     store.save(dm);
 
     const retrieved = store.getById(dm.id);
-    expect(retrieved!.to).toBe('bob');
+    expect(retrieved!.mentions).toEqual(['bob-id']);
   });
 
   it('handles messages with mentions', () => {
-    const msg = createChatMessage('alice', 'hey @bob @charlie', null, ['bob-id', 'charlie-id']);
+    const msg = createChatMessage('alice', 'hey @bob @charlie', ['bob-id', 'charlie-id']);
     store.save(msg);
 
     const retrieved = store.getById(msg.id);
@@ -133,15 +133,15 @@ describe('SqliteStore', () => {
     }
   });
 
-  it('getMessagesFor returns messages addressed to or mentioning the agent', () => {
-    // Broadcast (no to, no mentions)
+  it('getMessagesFor returns messages mentioning the agent', () => {
+    // No mentions
     store.save(createChatMessage('alice', 'broadcast'));
-    // DM to bob
-    store.save(createChatMessage('alice', 'dm for bob', 'bob-id'));
     // Mentions bob
-    store.save(createChatMessage('alice', 'hey @bob', null, ['bob-id']));
-    // DM to charlie
-    store.save(createChatMessage('alice', 'dm for charlie', 'charlie-id'));
+    store.save(createChatMessage('alice', 'dm for bob', ['bob-id']));
+    // Also mentions bob
+    store.save(createChatMessage('alice', 'hey @bob', ['bob-id']));
+    // Mentions charlie only
+    store.save(createChatMessage('alice', 'dm for charlie', ['charlie-id']));
 
     const bobMessages = store.getMessagesFor('bob-id');
     expect(bobMessages).toHaveLength(2);
@@ -152,7 +152,7 @@ describe('SqliteStore', () => {
 
   it('getMessagesFor respects limit', () => {
     for (let i = 0; i < 10; i++) {
-      store.save(createChatMessage('alice', `dm ${i}`, 'bob-id'));
+      store.save(createChatMessage('alice', `dm ${i}`, ['bob-id']));
     }
 
     const messages = store.getMessagesFor('bob-id', 3);
@@ -172,9 +172,10 @@ describe('SqliteStore', () => {
       const msg = createMessage({
         type: MessageType.CHAT,
         from: 'alice',
-        to: 'bob-id',
+        to: null,
         timestamp: 1000 + i,
         payload: { text: `dm ${i}` },
+        mentions: ['bob-id'],
       });
       store.save(msg);
     }
@@ -184,6 +185,15 @@ describe('SqliteStore', () => {
     expect(messages).toHaveLength(2);
     const texts = messages.map(m => (m.payload as { text: string }).text);
     expect(texts).toEqual(['dm 3', 'dm 4']);
+  });
+
+  it('getMessagesFor matches @all mentions', () => {
+    store.save(createChatMessage('alice', 'hello everyone', [MENTION_ALL]));
+    store.save(createChatMessage('alice', 'only for charlie', ['charlie-id']));
+
+    const bobMessages = store.getMessagesFor('bob-id');
+    expect(bobMessages).toHaveLength(1);
+    expect((bobMessages[0].payload as { text: string }).text).toBe('hello everyone');
   });
 });
 

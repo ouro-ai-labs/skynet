@@ -14,6 +14,7 @@ import {
   AgentType,
   MessageType,
   ClientAction,
+  MENTION_ALL,
   createMessage,
   deserialize,
   serialize,
@@ -307,22 +308,18 @@ export class SkynetWorkspace {
     this.store.save(fullMsg);
     this.logger.debug(`Message from=${agentId} to=${fullMsg.to ?? 'broadcast'} type=${fullMsg.type}`);
 
-    const delivered = new Set<string>();
-
-    if (fullMsg.to) {
-      // Point-to-point
-      this.members.sendTo(fullMsg.to, fullMsg);
-      delivered.add(fullMsg.to);
-      // Also send back to sender as confirmation
-      socket.send(serialize(fullMsg));
-      delivered.add(agentId);
-    } else {
-      // Broadcast (including back to sender)
+    // Routing is driven entirely by mentions.
+    // @all → broadcast to all members; otherwise deliver only to mentioned members + echo to sender.
+    if (fullMsg.mentions && fullMsg.mentions.includes(MENTION_ALL)) {
       this.members.broadcast(fullMsg);
       return;
     }
 
-    // Deliver to additionally mentioned agents who haven't received the message yet
+    const delivered = new Set<string>();
+    // Echo back to sender
+    socket.send(serialize(fullMsg));
+    delivered.add(agentId);
+
     if (fullMsg.mentions && fullMsg.mentions.length > 0) {
       for (const mentionedId of fullMsg.mentions) {
         if (!delivered.has(mentionedId)) {

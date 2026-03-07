@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { MessageType } from '@skynet/protocol';
+import { MessageType, MENTION_ALL } from '@skynet/protocol';
 import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet/protocol';
 import { AgentRunner } from '../agent-runner.js';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
@@ -15,7 +15,7 @@ vi.mock('@skynet/sdk', () => {
 
   class MockSkynetClient extends EventEmitter {
     agent: AgentCard;
-    chatCalls: Array<{ text: string; to: string | null }> = [];
+    chatCalls: Array<{ text: string; mentions?: string[] }> = [];
     lastSeenTimestamp = 0;
 
     constructor(options: { agent: AgentCard; lastSeenTimestamp?: number }) {
@@ -30,8 +30,8 @@ vi.mock('@skynet/sdk', () => {
 
     async close() {}
 
-    chat(text: string, to: string | null = null) {
-      this.chatCalls.push({ text, to });
+    chat(text: string, mentions?: string[]) {
+      this.chatCalls.push({ text, mentions });
     }
 
     sendMessage() {}
@@ -122,7 +122,7 @@ class FakeAdapter extends AgentAdapter {
 interface MockClient {
   agent: AgentCard;
   emit(event: string, ...args: unknown[]): boolean;
-  chatCalls: Array<{ text: string; to: string | null }>;
+  chatCalls: Array<{ text: string; mentions?: string[] }>;
 }
 
 function getClient(runner: AgentRunner): MockClient {
@@ -170,9 +170,9 @@ describe('AgentRunner fork dispatch', () => {
     await runner.start();
   });
 
-  it('idle + chat message → normal handleMessage (no fork)', async () => {
+  it('idle + @mentioned chat message → normal handleMessage (no fork)', async () => {
     const client = getClient(runner);
-    const msg = makeChatMsg();
+    const msg = makeChatMsg({ mentions: [runner.agentId] });
 
     client.emit('chat', msg);
 
@@ -183,6 +183,26 @@ describe('AgentRunner fork dispatch', () => {
     expect(adapter.quickReplyCalls).toHaveLength(0);
   });
 
+  it('idle + chat without mention → ignored', async () => {
+    const client = getClient(runner);
+    const msg = makeChatMsg();
+
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(adapter.handleMessageCalls).toHaveLength(0);
+  });
+
+  it('idle + @all chat message → processed', async () => {
+    const client = getClient(runner);
+    const msg = makeChatMsg({ mentions: [MENTION_ALL] });
+
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+  });
+
   it('busy + @mentioned chat + supportsQuickReply=true → uses quickReply', async () => {
     adapter.handleDelay = 100;
     adapter.setSupportsQuickReply(true);
@@ -190,14 +210,14 @@ describe('AgentRunner fork dispatch', () => {
     const client = getClient(runner);
 
     // First message makes runner busy
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'do something complex' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'do something complex', mentions: [runner.agentId] });
     client.emit('chat', msg1);
 
     // Allow processQueue to start (but not finish due to delay)
     await new Promise(r => setTimeout(r, 10));
 
-    // Second message arrives while busy — directly targeted at this agent
-    const msg2 = makeChatMsg({ from: 'user-b', text: 'how is progress?', to: runner.agentId });
+    // Second message arrives while busy — @mentioned this agent
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'how is progress?', mentions: [runner.agentId] });
     client.emit('chat', msg2);
 
     await new Promise(r => setTimeout(r, 10));
@@ -213,17 +233,17 @@ describe('AgentRunner fork dispatch', () => {
     await new Promise(r => setTimeout(r, 150));
   });
 
-  it('busy + broadcast (no @mention) → queues instead of forking', async () => {
+  it('busy + message without @mention → ignored entirely', async () => {
     adapter.handleDelay = 100;
     adapter.setSupportsQuickReply(true);
 
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'work' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
-    // Broadcast message (to=null, no mentions) — should NOT fork
+    // Message without mention — should be ignored entirely
     const msg2 = makeChatMsg({ from: 'user-b', text: 'general chat' });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
@@ -233,8 +253,8 @@ describe('AgentRunner fork dispatch', () => {
     // Wait for queue to drain
     await new Promise(r => setTimeout(r, 200));
 
-    // Both processed via handleMessage
-    expect(adapter.handleMessageCalls).toHaveLength(2);
+    // Only msg1 processed
+    expect(adapter.handleMessageCalls).toHaveLength(1);
   });
 
   it('busy + @mentioned via mentions array → forks', async () => {
@@ -243,7 +263,7 @@ describe('AgentRunner fork dispatch', () => {
 
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'work' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
@@ -271,17 +291,17 @@ describe('AgentRunner fork dispatch', () => {
     const client = getClient(runner);
 
     // First message makes runner busy
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'work' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
     // Second message: @mentioned → should fork
-    const msg2 = makeChatMsg({ from: 'user-b', text: 'first mention', to: runner.agentId });
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'first mention', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
 
     // Third message: @mentioned → fork in progress, should queue
-    const msg3 = makeChatMsg({ from: 'user-c', text: 'second mention', to: runner.agentId });
+    const msg3 = makeChatMsg({ from: 'user-c', text: 'second mention', mentions: [runner.agentId] });
     client.emit('chat', msg3);
     await new Promise(r => setTimeout(r, 10));
 
@@ -301,11 +321,11 @@ describe('AgentRunner fork dispatch', () => {
 
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'first' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
-    const msg2 = makeChatMsg({ from: 'user-b', text: 'second', to: runner.agentId });
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'second', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
 
@@ -325,7 +345,7 @@ describe('AgentRunner fork dispatch', () => {
 
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'work' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
@@ -353,12 +373,12 @@ describe('AgentRunner fork dispatch', () => {
 
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'work' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
-    // Directly targeted — will attempt fork
-    const msg2 = makeChatMsg({ from: 'user-b', text: 'status?', to: runner.agentId });
+    // @mentioned — will attempt fork
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'status?', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
 
@@ -384,7 +404,7 @@ describe('AgentRunner fork dispatch', () => {
 
   it('deduplicates messages with the same ID', async () => {
     const client = getClient(runner);
-    const msg = makeChatMsg({ from: 'user-a', text: 'duplicate test' });
+    const msg = makeChatMsg({ from: 'user-a', text: 'duplicate test', mentions: [runner.agentId] });
 
     // Send the same message twice
     client.emit('chat', msg);
@@ -406,8 +426,8 @@ describe('AgentRunner fork dispatch', () => {
       recentMessages: [],
     });
 
-    // Send a message from the new agent
-    const msg = makeChatMsg({ from: 'new-agent', text: 'hi' });
+    // Send a message from the new agent mentioning this agent
+    const msg = makeChatMsg({ from: 'new-agent', text: 'hi', mentions: [runner.agentId] });
     client.emit('chat', msg);
     await new Promise(r => setTimeout(r, 50));
 
@@ -434,13 +454,13 @@ describe('AgentRunner batch processing', () => {
     const client = getClient(runner);
 
     // First message starts processing (takes 100ms)
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'first' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
     // Queue up two more messages while busy
-    const msg2 = makeChatMsg({ from: 'user-a', text: 'second' });
-    const msg3 = makeChatMsg({ from: 'user-a', text: 'third' });
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'second', mentions: [runner.agentId] });
+    const msg3 = makeChatMsg({ from: 'user-a', text: 'third', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     client.emit('chat', msg3);
 
@@ -458,35 +478,37 @@ describe('AgentRunner batch processing', () => {
     expect(batchText).toContain('2 unread messages');
   });
 
-  it('batches messages from multiple senders and broadcasts response', async () => {
+  it('batches messages from multiple senders and mentions all senders', async () => {
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'first' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
     // Queue messages from different senders
-    const msg2 = makeChatMsg({ from: 'user-a', text: 'from A' });
-    const msg3 = makeChatMsg({ from: 'user-b', text: 'from B' });
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'from A', mentions: [runner.agentId] });
+    const msg3 = makeChatMsg({ from: 'user-b', text: 'from B', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     client.emit('chat', msg3);
 
     await new Promise(r => setTimeout(r, 300));
 
-    // Batched response should be broadcast (to=null) since multiple senders
-    const batchResponse = client.chatCalls.find(c => c.to === null);
+    // Batched response should mention both senders
+    const batchResponse = client.chatCalls.find(c =>
+      c.mentions && c.mentions.includes('user-a') && c.mentions.includes('user-b')
+    );
     expect(batchResponse).toBeDefined();
   });
 
   it('single queued message is processed normally (not batched)', async () => {
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'first' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
     // Only one message queued
-    const msg2 = makeChatMsg({ from: 'user-b', text: 'second' });
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'second', mentions: [runner.agentId] });
     client.emit('chat', msg2);
 
     await new Promise(r => setTimeout(r, 300));
@@ -501,14 +523,14 @@ describe('AgentRunner batch processing', () => {
   it('tasks are processed individually even when mixed with chat', async () => {
     const client = getClient(runner);
 
-    const msg1 = makeChatMsg({ from: 'user-a', text: 'first' });
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
     // Queue: chat, task, chat
-    const msg2 = makeChatMsg({ from: 'user-a', text: 'second' });
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'second', mentions: [runner.agentId] });
     const taskMsg = makeTaskMsg();
-    const msg3 = makeChatMsg({ from: 'user-a', text: 'third' });
+    const msg3 = makeChatMsg({ from: 'user-a', text: 'third', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     client.emit('task-assign', taskMsg);
     client.emit('chat', msg3);
@@ -545,7 +567,7 @@ describe('AgentRunner state persistence', () => {
     const client = getClient(runner);
 
     // Simulate receiving a message with a known timestamp
-    const msg = makeChatMsg({ from: 'user-a', text: 'hello' });
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
     // Override timestamp to a predictable value
     (msg as { timestamp: number }).timestamp = 42000;
     // Also set lastSeenTimestamp on the mock client
