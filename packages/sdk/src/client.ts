@@ -76,9 +76,13 @@ export class SkynetClient extends EventEmitter {
         // Server event (has 'event' field)
         if ('event' in parsed) {
           const evt = parsed as ServerEvent;
-          if (evt.event === 'workspace.state' && !resolved) {
-            resolved = true;
-            resolve(evt.data as WorkspaceState);
+          if (evt.event === 'workspace.state') {
+            if (!resolved) {
+              resolved = true;
+              resolve(evt.data as WorkspaceState);
+            }
+            // On reconnection, emit so listeners can refresh their state
+            this.emit('workspace-state', evt.data as WorkspaceState);
           } else if (evt.event === 'error') {
             this.emit('error', evt.data);
           }

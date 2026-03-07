@@ -85,7 +85,7 @@ describe('E2E: multi-agent collaboration', () => {
 
   beforeAll(async () => {
     // Start server
-    server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:'), disconnectGraceMs: 100 });
     await server.start();
 
     // Create 2 AgentRunners with FakeAdapters
@@ -186,7 +186,7 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
   const LIFECYCLE_PORT = 4300 + Math.floor(Math.random() * 100) + 100;
 
   beforeAll(async () => {
-    server = new SkynetWorkspace({ port: LIFECYCLE_PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: LIFECYCLE_PORT, store: new SqliteStore(':memory:'), disconnectGraceMs: 100 });
     await server.start();
   });
 
@@ -296,7 +296,7 @@ describe('E2E: heartbeat updates agent status', () => {
   const HB_PORT = 4300 + Math.floor(Math.random() * 100) + 200;
 
   beforeAll(async () => {
-    server = new SkynetWorkspace({ port: HB_PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: HB_PORT, store: new SqliteStore(':memory:'), disconnectGraceMs: 100 });
     await server.start();
   });
 
