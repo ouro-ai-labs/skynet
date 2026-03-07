@@ -1,78 +1,34 @@
-import { execaCommand } from 'execa';
-import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet/protocol';
+import { AgentType, type SkynetMessage, type TaskPayload } from '@skynet/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 
 export interface GeminiCliOptions {
   projectRoot: string;
 }
 
+/**
+ * Stub adapter for Gemini CLI.
+ * Session management and multi-turn support are not yet implemented.
+ * Will be completed once the Claude Code adapter is stable.
+ */
 export class GeminiCliAdapter extends AgentAdapter {
   readonly type = AgentType.GEMINI_CLI;
   readonly name = 'gemini-cli';
-  private projectRoot: string;
 
-  constructor(options: GeminiCliOptions) {
+  constructor(_options: GeminiCliOptions) {
     super();
-    this.projectRoot = options.projectRoot;
   }
 
   async isAvailable(): Promise<boolean> {
-    try {
-      await execaCommand('gemini --version');
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 
-  async handleMessage(msg: SkynetMessage, senderName?: string): Promise<string> {
-    const prompt = this.messageToPrompt(msg, senderName);
-    return this.runGemini(prompt);
+  async handleMessage(_msg: SkynetMessage, _senderName?: string): Promise<string> {
+    throw new Error('GeminiCliAdapter is not yet implemented');
   }
 
-  async executeTask(task: TaskPayload): Promise<TaskResult> {
-    const prompt = `Task: ${task.title}\n\nDescription: ${task.description}${
-      task.files?.length ? `\n\nRelevant files: ${task.files.join(', ')}` : ''
-    }`;
-
-    try {
-      const output = await this.runGemini(prompt);
-      return { success: true, summary: output };
-    } catch (err) {
-      return {
-        success: false,
-        summary: 'Task execution failed',
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
+  async executeTask(_task: TaskPayload): Promise<TaskResult> {
+    throw new Error('GeminiCliAdapter is not yet implemented');
   }
 
   async dispose(): Promise<void> {}
-
-  private messageToPrompt(msg: SkynetMessage, senderName?: string): string {
-    const sender = senderName ?? msg.from;
-    const room = this.roomName ? `[${this.roomName}] ` : '';
-    switch (msg.type) {
-      case MessageType.CHAT: {
-        const payload = msg.payload as { text: string };
-        return `${room}Message from ${sender}: ${payload.text}`;
-      }
-      case MessageType.TASK_ASSIGN: {
-        const payload = msg.payload as TaskPayload;
-        return `${room}Task assigned: ${payload.title}\n\n${payload.description}`;
-      }
-      default:
-        return `${room}Received ${msg.type} from ${sender}: ${JSON.stringify(msg.payload)}`;
-    }
-  }
-
-  private async runGemini(prompt: string): Promise<string> {
-    const fullPrompt = this.persona ? `${this.persona}\n\n${prompt}` : prompt;
-    const result = await execaCommand(`echo ${JSON.stringify(fullPrompt)} | gemini`, {
-      cwd: this.projectRoot,
-      shell: true,
-      timeout: 300_000,
-    });
-    return result.stdout;
-  }
 }
