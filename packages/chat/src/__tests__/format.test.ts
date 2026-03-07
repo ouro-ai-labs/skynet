@@ -137,22 +137,7 @@ describe('formatMessage', () => {
     expect(lines[lines.length - 1]).toBe('');
   });
 
-  it('formats chat DM with receiver in header', () => {
-    const msg = makeMsg({
-      type: MessageType.CHAT,
-      to: 'agent-2',
-      payload: { text: 'secret message' },
-    });
-    const lines = formatMessage(msg, resolve);
-    const headerPlain = stripAnsi(lines[0]);
-    expect(headerPlain).toContain('Alice');
-    expect(headerPlain).toContain('Bob');
-    expect(headerPlain).toContain('->');
-    const allPlain = lines.map(stripAnsi).join('\n');
-    expect(allPlain).toContain('secret message');
-  });
-
-  it('formats chat with mentions showing all targets in header', () => {
+  it('formats chat with mentions showing targets in header', () => {
     const kevinCard = makeCard({ id: 'agent-3', name: 'Kevin', type: AgentType.CLAUDE_CODE });
     const members = new Map<string, AgentCard>();
     members.set('agent-1', aliceCard);
@@ -163,9 +148,8 @@ describe('formatMessage', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       from: 'agent-1',
-      to: 'agent-2',
       payload: { text: 'discuss this' },
-      mentions: ['agent-3'],
+      mentions: ['agent-2', 'agent-3'],
     });
     const lines = formatMessage(msg, resolveWithKevin);
     const headerPlain = stripAnsi(lines[0]);
@@ -175,18 +159,17 @@ describe('formatMessage', () => {
     expect(headerPlain).toContain('Kevin');
   });
 
-  it('formats chat with only mentions and no primary to', () => {
+  it('formats chat with @all mention', () => {
     const msg = makeMsg({
       type: MessageType.CHAT,
       from: 'agent-1',
-      to: null,
       payload: { text: 'hey everyone' },
-      mentions: ['agent-2'],
+      mentions: ['__all__'],
     });
     const lines = formatMessage(msg, resolve);
     const headerPlain = stripAnsi(lines[0]);
     expect(headerPlain).toContain('->');
-    expect(headerPlain).toContain('Bob');
+    expect(headerPlain).toContain('@all');
   });
 
   it('formats task assignment with marker style', () => {

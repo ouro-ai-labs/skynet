@@ -44,21 +44,15 @@ describe('createChatMessage', () => {
     expect(msg.payload).toEqual({ text: 'Hello!' });
   });
 
-  it('supports DM with to field', () => {
-    const msg = createChatMessage('alice', 'Hey Bob', 'bob');
-
-    expect(msg.to).toBe('bob');
-  });
-
   it('includes mentions when provided', () => {
-    const msg = createChatMessage('alice', 'Hey @bob @charlie', 'bob', ['charlie-id']);
+    const msg = createChatMessage('alice', 'Hey @bob @charlie', ['bob-id', 'charlie-id']);
 
-    expect(msg.to).toBe('bob');
-    expect(msg.mentions).toEqual(['charlie-id']);
+    expect(msg.to).toBeNull();
+    expect(msg.mentions).toEqual(['bob-id', 'charlie-id']);
   });
 
   it('omits mentions when empty', () => {
-    const msg = createChatMessage('alice', 'Hello', null, []);
+    const msg = createChatMessage('alice', 'Hello', []);
 
     expect(msg.mentions).toBeUndefined();
   });

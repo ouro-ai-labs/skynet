@@ -14,13 +14,12 @@ export function createMessage(
 export function createChatMessage(
   from: string,
   text: string,
-  to: string | null = null,
   mentions?: string[],
 ): SkynetMessage {
   return createMessage({
     type: MessageType.CHAT,
     from,
-    to,
+    to: null,
     payload: { text },
     ...(mentions && mentions.length > 0 ? { mentions } : {}),
   });

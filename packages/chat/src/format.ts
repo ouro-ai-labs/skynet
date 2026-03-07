@@ -123,14 +123,14 @@ export function formatChat(msg: SkynetMessage, resolve: AgentResolver, width?: n
   const s = resolve(msg.from);
   const p = msg.payload as ChatPayload;
   const targets: string[] = [];
-  if (msg.to) {
-    const r = resolve(msg.to);
-    targets.push(agentNameColored(r.name, r.type));
-  }
   if (msg.mentions && msg.mentions.length > 0) {
     for (const mid of msg.mentions) {
-      const r = resolve(mid);
-      targets.push(agentNameColored(r.name, r.type));
+      if (mid === '__all__') {
+        targets.push(chalk.hex('#ffcc00').bold('@all'));
+      } else {
+        const r = resolve(mid);
+        targets.push(agentNameColored(r.name, r.type));
+      }
     }
   }
   const dm = targets.length > 0
