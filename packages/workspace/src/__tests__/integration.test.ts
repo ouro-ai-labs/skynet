@@ -27,7 +27,7 @@ describe('Server integration', () => {
   let server: SkynetWorkspace;
 
   beforeAll(async () => {
-    server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:'), disconnectGraceMs: 100 });
     await server.start();
   });
 
@@ -230,12 +230,66 @@ describe('Server integration', () => {
     });
 
     await bob.close();
-    await sleep(200);
+    // Wait for disconnect grace period (100ms) + propagation
+    await sleep(500);
 
     expect(leaveEvents).toHaveLength(1);
     expect(leaveEvents[0]).toBe(bob.agent.id);
 
     await alice.close();
+  });
+
+  it('reconnecting agent does not broadcast duplicate join/leave', async () => {
+    const alice = makeClient('alice-recon');
+    const reconnectBob = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: {
+        id: randomUUID(),
+        name: 'bob-recon',
+        type: AgentType.HUMAN,
+      },
+      reconnect: false,
+    });
+
+    await alice.connect();
+    await reconnectBob.connect();
+    await sleep(50);
+
+    const joinEvents: string[] = [];
+    const leaveEvents: string[] = [];
+    alice.on('agent-join', (msg: SkynetMessage) => {
+      const payload = msg.payload as { agent: { name: string } };
+      joinEvents.push(payload.agent.name);
+    });
+    alice.on('agent-leave', (msg: SkynetMessage) => {
+      const payload = msg.payload as { agentId: string };
+      leaveEvents.push(payload.agentId);
+    });
+
+    // Simulate reconnection: create a new client with the SAME agent ID
+    const bobAgentId = reconnectBob.agent.id;
+    // Force close without explicit LEAVE (simulates network drop)
+    (reconnectBob as unknown as { ws: { terminate: () => void } }).ws.terminate();
+
+    // Immediately reconnect with the same agent ID (within grace period)
+    const reconnectBob2 = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: {
+        id: bobAgentId,
+        name: 'bob-recon',
+        type: AgentType.HUMAN,
+      },
+      reconnect: false,
+    });
+    await reconnectBob2.connect();
+    await sleep(300);
+
+    // No join or leave events should have been broadcast (silent reconnection)
+    expect(joinEvents).toHaveLength(0);
+    expect(leaveEvents).toHaveLength(0);
+
+    await alice.close();
+    await reconnectBob2.close();
   });
 
   it('workspace.state includes recent messages', async () => {

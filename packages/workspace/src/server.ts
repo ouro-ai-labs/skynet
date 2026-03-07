@@ -24,6 +24,8 @@ export interface SkynetWorkspaceOptions {
   port?: number;
   host?: string;
   store: Store;
+  /** Grace period (ms) before broadcasting AGENT_LEAVE after socket close. Default: 300000 (5 minutes). */
+  disconnectGraceMs?: number;
 }
 
 export class SkynetWorkspace {
@@ -31,9 +33,14 @@ export class SkynetWorkspace {
   private members = new MemberManager();
   private store: Store;
   private socketAgentMap = new WeakMap<WebSocket, string>();
+  /** Pending leave timers — cancelled if agent reconnects within grace period. */
+  private pendingLeaves = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly disconnectGraceMs: number;
+  private _stopping = false;
 
   constructor(private options: SkynetWorkspaceOptions) {
     this.store = options.store;
+    this.disconnectGraceMs = options.disconnectGraceMs ?? 300000;
   }
 
   async start(): Promise<void> {
@@ -182,7 +189,7 @@ export class SkynetWorkspace {
         this.handleJoin(socket, envelope.data as JoinRequest);
         break;
       case ClientAction.LEAVE:
-        this.handleDisconnect(socket);
+        this.handleExplicitLeave(socket);
         break;
       case ClientAction.SEND:
         this.handleSend(socket, envelope.data as SkynetMessage);
@@ -196,10 +203,28 @@ export class SkynetWorkspace {
   }
 
   private handleJoin(socket: WebSocket, req: JoinRequest): void {
-    this.members.join(req.agent, socket);
-    this.socketAgentMap.set(socket, req.agent.id);
+    const agentId = req.agent.id;
 
-    // Notify the joining agent of current workspace state
+    // Check if this is a reconnection (agent already known or has a pending leave)
+    const pendingLeave = this.pendingLeaves.get(agentId);
+    const existingMember = this.members.getMember(agentId);
+    const isReconnect = !!pendingLeave || !!existingMember;
+
+    // Cancel any pending leave timer — agent is back
+    if (pendingLeave) {
+      clearTimeout(pendingLeave);
+      this.pendingLeaves.delete(agentId);
+    }
+
+    // Close the old socket if still open (prevent ghost connections)
+    if (existingMember && existingMember.socket !== socket && existingMember.socket.readyState === existingMember.socket.OPEN) {
+      existingMember.socket.close();
+    }
+
+    this.members.join(req.agent, socket);
+    this.socketAgentMap.set(socket, agentId);
+
+    // Always send workspace state to the (re)connecting agent
     socket.send(JSON.stringify({
       event: 'workspace.state',
       data: {
@@ -208,15 +233,17 @@ export class SkynetWorkspace {
       },
     }));
 
-    // Broadcast join to others
-    const joinMsg = createMessage({
-      type: MessageType.AGENT_JOIN,
-      from: req.agent.id,
-      to: null,
-      payload: { agent: req.agent } satisfies AgentJoinPayload,
-    });
-    this.store.save(joinMsg);
-    this.members.broadcast(joinMsg, req.agent.id);
+    // Only broadcast join to others for genuinely new members
+    if (!isReconnect) {
+      const joinMsg = createMessage({
+        type: MessageType.AGENT_JOIN,
+        from: agentId,
+        to: null,
+        payload: { agent: req.agent } satisfies AgentJoinPayload,
+      });
+      this.store.save(joinMsg);
+      this.members.broadcast(joinMsg, agentId);
+    }
   }
 
   private handleSend(socket: WebSocket, msg: SkynetMessage): void {
@@ -269,9 +296,61 @@ export class SkynetWorkspace {
     socket.send(JSON.stringify({ event: 'heartbeat.ack', data: { timestamp: Date.now() } }));
   }
 
+  /** Explicit LEAVE action — immediate departure, no grace period. */
+  private handleExplicitLeave(socket: WebSocket): void {
+    const agentId = this.socketAgentMap.get(socket);
+    if (!agentId) return;
+
+    // Cancel any pending grace-period leave
+    const pending = this.pendingLeaves.get(agentId);
+    if (pending) {
+      clearTimeout(pending);
+      this.pendingLeaves.delete(agentId);
+    }
+
+    this.socketAgentMap.delete(socket);
+    // Force leave — skip socket readyState check since this is intentional
+    this.commitLeave(agentId, true);
+  }
+
+  /** Socket close — deferred departure with grace period for reconnection. */
   private handleDisconnect(socket: WebSocket): void {
     const agentId = this.socketAgentMap.get(socket);
     if (!agentId) return;
+
+    this.socketAgentMap.delete(socket);
+
+    // During shutdown, skip grace period entirely — server is closing
+    if (this._stopping) return;
+
+    // Check if the member's current socket matches this one.
+    // If a reconnection already replaced the socket, skip the leave entirely.
+    const current = this.members.getMember(agentId);
+    if (current && current.socket !== socket) {
+      return;
+    }
+
+    // Defer the actual leave to allow reconnection within the grace period
+    if (!this.pendingLeaves.has(agentId)) {
+      this.pendingLeaves.set(
+        agentId,
+        setTimeout(() => {
+          this.pendingLeaves.delete(agentId);
+          this.commitLeave(agentId);
+        }, this.disconnectGraceMs),
+      );
+    }
+  }
+
+  /** Actually remove the member and broadcast AGENT_LEAVE. */
+  private commitLeave(agentId: string, force = false): void {
+    // Double-check the agent hasn't reconnected while the timer was pending
+    if (!force) {
+      const member = this.members.getMember(agentId);
+      if (member && member.socket.readyState === member.socket.OPEN) {
+        return;
+      }
+    }
 
     this.members.leave(agentId);
 
@@ -283,11 +362,14 @@ export class SkynetWorkspace {
     });
     this.store.save(leaveMsg);
     this.members.broadcast(leaveMsg);
-
-    this.socketAgentMap.delete(socket);
   }
 
   async stop(): Promise<void> {
+    this._stopping = true;
+    for (const timer of this.pendingLeaves.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingLeaves.clear();
     await this.fastify.close();
     this.store.close();
   }

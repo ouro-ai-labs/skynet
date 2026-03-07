@@ -25,12 +25,18 @@ export interface AgentRunnerOptions {
   projectRoot?: string;
 }
 
+/** Max number of message IDs to track for deduplication. */
+const DEDUP_MAX_SIZE = 500;
+
 export class AgentRunner {
   private client: SkynetClient;
   private adapter: AgentAdapter;
   private processing = false;
+  private forkInProgress = false;
   private messageQueue: SkynetMessage[] = [];
   private memberNames = new Map<string, string>();
+  /** Recently processed message IDs to prevent duplicate handling. */
+  private processedMessageIds = new Set<string>();
 
   constructor(private options: AgentRunnerOptions) {
     const agentCard: AgentCard = {
@@ -76,6 +82,14 @@ export class AgentRunner {
       this.memberNames.delete(payload.agentId);
     });
 
+    // Refresh member names on reconnection
+    this.client.on('workspace-state', (ws: WorkspaceState) => {
+      this.memberNames.clear();
+      for (const member of ws.members) {
+        this.memberNames.set(member.id, member.name);
+      }
+    });
+
     this.client.on('chat', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
 
@@ -99,11 +113,17 @@ export class AgentRunner {
     // Skip messages from self
     if (msg.from === this.client.agent.id) return;
 
-    // When busy and adapter supports fork: handle chat via forked session
+    // Deduplicate: skip already-processed messages
+    if (this.processedMessageIds.has(msg.id)) return;
+    this.trackMessageId(msg.id);
+
+    // When busy: only fork for @mentioned chat messages, max 1 concurrent fork
     if (
       this.processing &&
       msg.type === MessageType.CHAT &&
-      this.adapter.supportsQuickReply()
+      this.adapter.supportsQuickReply() &&
+      !this.forkInProgress &&
+      this.isMessageForMe(msg)
     ) {
       this.handleForkedReply(msg);
       return;
@@ -113,7 +133,28 @@ export class AgentRunner {
     this.processQueue();
   }
 
+  /** Check if this agent is directly targeted or @mentioned. */
+  private isMessageForMe(msg: SkynetMessage): boolean {
+    const myId = this.client.agent.id;
+    if (msg.to === myId) return true;
+    if (msg.mentions && msg.mentions.includes(myId)) return true;
+    return false;
+  }
+
+  /** Track a message ID, evicting old entries when the set gets too large. */
+  private trackMessageId(id: string): void {
+    this.processedMessageIds.add(id);
+    if (this.processedMessageIds.size > DEDUP_MAX_SIZE) {
+      // Remove the oldest entry (first inserted)
+      const first = this.processedMessageIds.values().next().value;
+      if (first !== undefined) {
+        this.processedMessageIds.delete(first);
+      }
+    }
+  }
+
   private async handleForkedReply(msg: SkynetMessage): Promise<void> {
+    this.forkInProgress = true;
     const senderName = this.memberNames.get(msg.from) ?? msg.from;
     const text = (msg.payload as ChatPayload).text;
     try {
@@ -128,6 +169,8 @@ export class AgentRunner {
       // Fork failed — fall back to normal queue so the message is not lost
       console.error('[AgentRunner] Fork reply failed, queueing message:', err);
       this.messageQueue.push(msg);
+    } finally {
+      this.forkInProgress = false;
     }
   }
 
@@ -137,27 +180,87 @@ export class AgentRunner {
     this.client.agent.status = 'busy';
 
     while (this.messageQueue.length > 0) {
-      const msg = this.messageQueue.shift()!;
-      try {
-        if (msg.type === MessageType.TASK_ASSIGN) {
+      // Peek at first message — tasks are always processed individually
+      if (this.messageQueue[0].type === MessageType.TASK_ASSIGN) {
+        const msg = this.messageQueue.shift()!;
+        try {
           await this.handleTask(msg);
-        } else {
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          console.error(`[AgentRunner] Error processing task from ${msg.from}:`, err);
+          this.client.chat(`Error processing task: ${errorMsg}`, msg.from);
+        }
+        continue;
+      }
+
+      // Drain all leading chat messages and batch them
+      const chatBatch: SkynetMessage[] = [];
+      while (
+        this.messageQueue.length > 0 &&
+        (this.messageQueue[0].type as string) !== MessageType.TASK_ASSIGN
+      ) {
+        chatBatch.push(this.messageQueue.shift()!);
+      }
+
+      if (chatBatch.length === 0) continue;
+
+      try {
+        if (chatBatch.length === 1) {
+          // Single message — process normally
+          const msg = chatBatch[0];
           const senderName = this.memberNames.get(msg.from) ?? msg.from;
           const response = await this.adapter.handleMessage(msg, senderName);
           if (response) {
             const mentions = this.resolveMentions(response);
             this.client.chat(response, msg.from, mentions.length > 0 ? mentions : undefined);
           }
+        } else {
+          // Multiple messages — batch into a single prompt
+          await this.handleBatchMessages(chatBatch);
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[AgentRunner] Error processing message from ${msg.from}:`, err);
-        this.client.chat(`Error processing message: ${errorMsg}`, msg.from);
+        console.error(`[AgentRunner] Error processing messages:`, err);
+        this.client.chat(`Error processing messages: ${errorMsg}`, chatBatch[0].from);
       }
     }
 
     this.client.agent.status = 'idle';
     this.processing = false;
+  }
+
+  /** Batch multiple chat messages into a single adapter call. */
+  private async handleBatchMessages(messages: SkynetMessage[]): Promise<void> {
+    // Build a combined message with all texts
+    const lines = messages.map((msg) => {
+      const senderName = this.memberNames.get(msg.from) ?? msg.from;
+      const text = (msg.payload as ChatPayload).text;
+      return `[${senderName}]: ${text}`;
+    });
+
+    // Create a synthetic message for the adapter
+    const batchMsg: SkynetMessage = {
+      ...messages[0],
+      payload: {
+        text: `You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
+      },
+    };
+
+    const senderName = this.memberNames.get(messages[0].from) ?? messages[0].from;
+    const response = await this.adapter.handleMessage(batchMsg, senderName);
+
+    if (response) {
+      const mentions = this.resolveMentions(response);
+      // Collect unique senders to determine reply target
+      const senders = new Set(messages.map((m) => m.from));
+      if (senders.size === 1) {
+        // All from same sender — reply directly
+        this.client.chat(response, messages[0].from, mentions.length > 0 ? mentions : undefined);
+      } else {
+        // Multiple senders — broadcast
+        this.client.chat(response, null, mentions.length > 0 ? mentions : undefined);
+      }
+    }
   }
 
   /** Resolve @name mentions in text to agent IDs (excluding self). */
