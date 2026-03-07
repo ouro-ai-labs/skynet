@@ -122,6 +122,19 @@ export class SkynetWorkspace {
       }
       return agent;
     });
+
+    // Delete agent by UUID
+    this.fastify.delete<{ Params: { id: string } }>('/api/agents/:id', async (req, reply) => {
+      const agent = this.store.getAgent(req.params.id);
+      if (!agent || agent.id !== req.params.id) {
+        return reply.status(404).send({ error: 'Agent not found' });
+      }
+      if (this.members.getMember(agent.id)) {
+        return reply.status(409).send({ error: 'Agent is currently connected. Disconnect it first.' });
+      }
+      this.store.deleteAgent(agent.id);
+      return reply.status(200).send({ deleted: agent });
+    });
   }
 
   private registerHumanRoutes(): void {
@@ -153,6 +166,19 @@ export class SkynetWorkspace {
         return reply.status(404).send({ error: 'Human not found' });
       }
       return human;
+    });
+
+    // Delete human by UUID
+    this.fastify.delete<{ Params: { id: string } }>('/api/humans/:id', async (req, reply) => {
+      const human = this.store.getHuman(req.params.id);
+      if (!human || human.id !== req.params.id) {
+        return reply.status(404).send({ error: 'Human not found' });
+      }
+      if (this.members.getMember(human.id)) {
+        return reply.status(409).send({ error: 'Human is currently connected. Disconnect first.' });
+      }
+      this.store.deleteHuman(human.id);
+      return reply.status(200).send({ deleted: human });
     });
   }
 

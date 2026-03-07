@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -63,6 +63,22 @@ export function addWorkspace(entry: WorkspaceEntry): void {
   mkdirSync(wsDir, { recursive: true });
   const wsConfig: WorkspaceConfig = { host: entry.host, port: entry.port };
   writeFileSync(join(wsDir, 'config.json'), JSON.stringify(wsConfig, null, 2) + '\n', 'utf-8');
+}
+
+export function removeWorkspace(id: string): boolean {
+  const workspaces = listWorkspaces();
+  const idx = workspaces.findIndex((w) => w.id === id);
+  if (idx === -1) return false;
+
+  workspaces.splice(idx, 1);
+  writeFileSync(getServersFilePath(), JSON.stringify({ servers: workspaces }, null, 2) + '\n', 'utf-8');
+
+  // Remove workspace directory (data.db, config.json, agent dirs, etc.)
+  const wsDir = join(getSkynetDir(), id);
+  if (existsSync(wsDir)) {
+    rmSync(wsDir, { recursive: true, force: true });
+  }
+  return true;
 }
 
 export function getWorkspace(id: string): WorkspaceEntry | undefined {

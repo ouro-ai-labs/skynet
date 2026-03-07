@@ -235,6 +235,30 @@ describe('SqliteStore agents', () => {
   it('returns undefined for non-existent agent', () => {
     expect(store.getAgent('ghost')).toBeUndefined();
   });
+
+  it('deletes agent by id', () => {
+    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    expect(store.deleteAgent('agent-1')).toBe(true);
+    expect(store.getAgent('agent-1')).toBeUndefined();
+    expect(store.listAgents()).toHaveLength(0);
+  });
+
+  it('does not delete agent by name', () => {
+    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    expect(store.deleteAgent('Claude')).toBe(false);
+    expect(store.getAgent('agent-1')).toBeDefined();
+  });
+
+  it('returns false when deleting non-existent agent', () => {
+    expect(store.deleteAgent('ghost')).toBe(false);
+  });
+
+  it('frees name after agent deletion', () => {
+    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    expect(store.checkNameUnique('Claude')).toBe(false);
+    store.deleteAgent('agent-1');
+    expect(store.checkNameUnique('Claude')).toBe(true);
+  });
 });
 
 describe('SqliteStore humans', () => {
@@ -265,6 +289,23 @@ describe('SqliteStore humans', () => {
 
   it('returns undefined for non-existent human', () => {
     expect(store.getHuman('ghost')).toBeUndefined();
+  });
+
+  it('deletes human by id', () => {
+    store.saveHuman({ id: 'human-1', name: 'Alice', createdAt: Date.now() });
+    expect(store.deleteHuman('human-1')).toBe(true);
+    expect(store.getHuman('human-1')).toBeUndefined();
+    expect(store.listHumans()).toHaveLength(0);
+  });
+
+  it('does not delete human by name', () => {
+    store.saveHuman({ id: 'human-1', name: 'Alice', createdAt: Date.now() });
+    expect(store.deleteHuman('Alice')).toBe(false);
+    expect(store.getHuman('human-1')).toBeDefined();
+  });
+
+  it('returns false when deleting non-existent human', () => {
+    expect(store.deleteHuman('ghost')).toBe(false);
   });
 });
 

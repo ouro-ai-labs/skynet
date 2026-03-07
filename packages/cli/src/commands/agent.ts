@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { Command } from 'commander';
 import { AgentType } from '@skynet/protocol';
 import type { AgentCard } from '@skynet/protocol';
@@ -188,6 +188,58 @@ export function registerAgentCommand(program: Command): void {
         } else {
           const body = await res.json() as { error?: string };
           console.error(`Failed to create agent: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to workspace at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  agent
+    .command('delete <id>')
+    .description('Delete an agent by UUID')
+    .option('--workspace <id>', 'Workspace UUID')
+    .option('--force', 'Skip confirmation prompt')
+    .action(async (agentId: string, opts: { workspace?: string; force?: boolean }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+
+      try {
+        // Fetch agent profile for confirmation message
+        const getRes = await fetch(`${url}/api/agents/${agentId}`);
+        if (getRes.status === 404) {
+          console.error(`Agent '${agentId}' not found. Run 'skynet agent list' to see available agents.`);
+          process.exit(1);
+        }
+        const agentProfile = await getRes.json() as AgentCard;
+
+        if (!opts.force) {
+          const { default: inquirer } = await import('inquirer');
+          const { confirm } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
+            message: `Delete agent '${agentProfile.name}' (${agentProfile.id})?`,
+            default: false,
+          }]);
+          if (!confirm) {
+            console.log('Cancelled.');
+            return;
+          }
+        }
+
+        const res = await fetch(`${url}/api/agents/${agentProfile.id}`, { method: 'DELETE' });
+
+        if (res.status === 200) {
+          // Clean up local agent directory
+          const agentDir = join(getWorkspaceDir(workspace.id), agentProfile.id);
+          if (existsSync(agentDir)) {
+            rmSync(agentDir, { recursive: true, force: true });
+          }
+          console.log(`Agent '${agentProfile.name}' deleted.`);
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed to delete agent: ${body.error ?? res.statusText}`);
           process.exit(1);
         }
       } catch {
