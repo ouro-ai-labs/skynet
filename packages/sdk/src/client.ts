@@ -95,6 +95,8 @@ export class SkynetClient extends EventEmitter {
             }
             // On reconnection, emit so listeners can refresh their state
             this.emit('workspace-state', evt.data as WorkspaceState);
+          } else if (evt.event === 'typing') {
+            this.emit('typing', evt.data);
           } else if (evt.event === 'error') {
             this.emit('error', evt.data);
           }
@@ -212,6 +214,13 @@ export class SkynetClient extends EventEmitter {
       type: MessageType.CONTEXT_SHARE,
       to: null,
       payload: { files, metadata },
+    });
+  }
+
+  setTyping(isTyping: boolean): void {
+    this.send({
+      action: ClientAction.TYPING,
+      data: { agentId: this.agent.id, isTyping },
     });
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
 import { type SkynetMessage, extractMentionNames, MENTION_ALL } from '@skynet/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
@@ -21,6 +21,34 @@ interface StaticItem {
   memberLines?: string[];
   commandLines?: string[];
   commandError?: boolean;
+}
+
+function TypingIndicator({ names }: { names: string[] }): React.ReactElement | null {
+  const [dots, setDots] = useState(1);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDots((prev) => (prev % 3) + 1);
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (names.length === 0) return null;
+
+  let label: string;
+  if (names.length === 1) {
+    label = `${names[0]} is thinking`;
+  } else if (names.length === 2) {
+    label = `${names[0]} and ${names[1]} are thinking`;
+  } else {
+    label = `${names[0]} and ${names.length - 1} others are thinking`;
+  }
+
+  return (
+    <Box paddingX={1}>
+      <Text dimColor>{label}{'.'.repeat(dots)}</Text>
+    </Box>
+  );
 }
 
 export function App({ options }: AppProps): React.ReactElement {
@@ -141,6 +169,15 @@ export function App({ options }: AppProps): React.ReactElement {
     );
   }
 
+  const typingNames = useMemo(() => {
+    const names: string[] = [];
+    for (const [id] of state.typingAgents) {
+      const card = state.members.get(id);
+      if (card) names.push(card.name);
+    }
+    return names;
+  }, [state.typingAgents, state.members]);
+
   const statusLine = `${state.connected ? '\u25CF' : '\u25CB'} workspace \u00B7 ${state.members.size} members`;
 
   return (
@@ -193,6 +230,9 @@ export function App({ options }: AppProps): React.ReactElement {
         <Box paddingX={1}>
           <Text dimColor>{statusLine}</Text>
         </Box>
+
+        {/* Typing indicator */}
+        <TypingIndicator names={typingNames} />
 
         {/* Input */}
         <InputBar

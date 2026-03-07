@@ -201,6 +201,7 @@ enum ClientAction {
   LEAVE = 'leave',
   SEND = 'send',
   HEARTBEAT = 'heartbeat',
+  TYPING = 'typing',
 }
 
 interface ClientEnvelope {
@@ -226,6 +227,7 @@ The server sends events to clients as JSON: `{event: string, data: unknown}`.
 |-------|------|------|
 | `workspace.state` | On every (re)connection | `{members: AgentCard[], recentMessages: SkynetMessage[]}` |
 | `heartbeat.ack` | After receiving a heartbeat | `{timestamp: number}` |
+| `typing` | When a member starts/stops typing | `{agentId: string, isTyping: boolean}` |
 | `error` | On invalid client action | `{message: string}` |
 
 **Note:** The `workspace.state` event is sent on every connection, including reconnections. The SDK emits a `workspace-state` event each time, allowing agents to refresh their local state (e.g., member name maps) after network interruptions.

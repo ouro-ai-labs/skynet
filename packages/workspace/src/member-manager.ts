@@ -48,6 +48,14 @@ export class MemberManager {
     return false;
   }
 
+  broadcastRaw(raw: string, excludeAgentId?: string): void {
+    for (const [id, member] of this.members) {
+      if (id !== excludeAgentId && member.socket.readyState === member.socket.OPEN) {
+        member.socket.send(raw);
+      }
+    }
+  }
+
   updateStatus(agentId: string, status: AgentStatus): void {
     const member = this.members.get(agentId);
     if (member) {

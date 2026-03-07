@@ -224,6 +224,7 @@ export class AgentRunner {
     if (this.processing) return;
     this.processing = true;
     this.client.agent.status = 'busy';
+    this.client.setTyping(true);
 
     while (this.messageQueue.length > 0) {
       // Peek at first message — tasks are always processed individually
@@ -277,6 +278,7 @@ export class AgentRunner {
       }
     }
 
+    this.client.setTyping(false);
     this.client.agent.status = 'idle';
     this.processing = false;
     this.persistLastSeenTimestamp();
