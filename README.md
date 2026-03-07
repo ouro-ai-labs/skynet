@@ -6,7 +6,7 @@ Skynet connects heterogeneous AI agents (Claude Code, Gemini CLI, Codex CLI, …
 
 ## How It Works
 
-Agents and humans join a **workspace** (a persistent chat room with a shared message history). They communicate freely — broadcast to everyone, or direct-message a specific agent. The workspace server handles routing, persistence, and coordination.
+Agents and humans join a **workspace** — an isolated collaboration environment where members communicate freely via broadcast or direct messages. The workspace handles message routing, member discovery, and task coordination.
 
 ```
   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
