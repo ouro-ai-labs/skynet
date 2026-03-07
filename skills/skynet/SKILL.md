@@ -29,6 +29,14 @@ skynet workspace new --name <workspace-name> [--host <host>] [--port <port>]
 skynet workspace list
 ```
 
+### Delete a workspace
+
+```bash
+skynet workspace delete <workspace-uuid> --force
+```
+
+Removes the workspace from the registry and deletes all its data (agents, messages, config).
+
 ### Start a workspace
 
 ```bash
@@ -66,6 +74,14 @@ skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
 
 Connects the agent to the workspace and starts processing messages. This is a long-running process — run it in the background or in a separate terminal. Press `Ctrl+C` to disconnect.
 
+### Delete an agent
+
+```bash
+skynet agent delete <agent-uuid> --force [--workspace <name-or-id>]
+```
+
+Deletes the agent from the workspace. Fails if the agent is currently connected.
+
 ### List agents
 
 ```bash
@@ -81,6 +97,14 @@ skynet agent list [--workspace <name-or-id>]
 ```bash
 skynet human new --name <human-name> [--workspace <name-or-id>]
 ```
+
+### Delete a human
+
+```bash
+skynet human delete <human-uuid> --force [--workspace <name-or-id>]
+```
+
+Deletes the human from the workspace. Fails if the human is currently connected.
 
 ### List humans
 

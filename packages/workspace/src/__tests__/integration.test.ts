@@ -500,6 +500,89 @@ describe('Server HTTP API', () => {
     expect(res.status).toBe(400);
   });
 
+  it('deletes an agent', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'delete-me-agent', type: 'generic' }),
+    });
+    expect(createRes.status).toBe(201);
+    const agent = await createRes.json() as { id: string; name: string };
+
+    const deleteRes = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}`, { method: 'DELETE' });
+    expect(deleteRes.status).toBe(200);
+    const body = await deleteRes.json() as { deleted: { name: string } };
+    expect(body.deleted.name).toBe('delete-me-agent');
+
+    // Verify it's gone
+    const getRes = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}`);
+    expect(getRes.status).toBe(404);
+  });
+
+  it('returns 404 when deleting non-existent agent', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/nonexistent`, { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 when deleting agent by name instead of UUID', async () => {
+    await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'name-delete-test', type: 'generic' }),
+    });
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/name-delete-test`, { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+
+  it('deletes a human', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'delete-me-human' }),
+    });
+    expect(createRes.status).toBe(201);
+    const human = await createRes.json() as { id: string; name: string };
+
+    const deleteRes = await fetch(`http://localhost:${API_PORT}/api/humans/${human.id}`, { method: 'DELETE' });
+    expect(deleteRes.status).toBe(200);
+    const body = await deleteRes.json() as { deleted: { name: string } };
+    expect(body.deleted.name).toBe('delete-me-human');
+
+    // Verify it's gone
+    const getRes = await fetch(`http://localhost:${API_PORT}/api/humans/${human.id}`);
+    expect(getRes.status).toBe(404);
+  });
+
+  it('returns 404 when deleting non-existent human', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/humans/nonexistent`, { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 when deleting human by name instead of UUID', async () => {
+    await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'name-delete-human-test' }),
+    });
+    const res = await fetch(`http://localhost:${API_PORT}/api/humans/name-delete-human-test`, { method: 'DELETE' });
+    expect(res.status).toBe(404);
+  });
+
+  it('name becomes available after agent deletion', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'recycle-name', type: 'generic' }),
+    });
+    const agent = await createRes.json() as { id: string };
+
+    await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}`, { method: 'DELETE' });
+
+    const checkRes = await fetch(`http://localhost:${API_PORT}/api/names/check?name=recycle-name`);
+    const check = await checkRes.json() as { available: boolean };
+    expect(check.available).toBe(true);
+  });
+
   it('messages endpoint supports pagination', async () => {
     // Connect a client and send a few messages
     const client = makeClient('paginator');

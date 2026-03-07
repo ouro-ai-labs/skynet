@@ -114,6 +114,11 @@ export class SqliteStore implements Store {
     return row ? this.rowToAgent(row) : undefined;
   }
 
+  deleteAgent(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM agents WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
   // ── Humans ──
 
   saveHuman(human: HumanProfile): void {
@@ -132,6 +137,11 @@ export class SqliteStore implements Store {
       | Record<string, unknown>
       | undefined;
     return row ? this.rowToHuman(row) : undefined;
+  }
+
+  deleteHuman(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM humans WHERE id = ?').run(id);
+    return result.changes > 0;
   }
 
   // ── Name Uniqueness ──

@@ -6,6 +6,8 @@ import {
   ensureSkynetDir,
   listWorkspaces,
   addWorkspace,
+  removeWorkspace,
+  getWorkspace,
   getWorkspaceByIdOrName,
   getWorkspaceDir,
   type WorkspaceEntry,
@@ -125,6 +127,35 @@ export function registerWorkspaceCommand(program: Command): void {
       for (const w of workspaces) {
         console.log(`  - ${w.name} (${w.host}:${w.port}) [${w.id}]`);
       }
+    });
+
+  workspace
+    .command('delete <id>')
+    .description('Delete a workspace and all its data by UUID')
+    .option('--force', 'Skip confirmation prompt')
+    .action(async (id: string, opts: { force?: boolean }) => {
+      const entry = getWorkspace(id);
+      if (!entry) {
+        console.error(`Workspace '${id}' not found. Run 'skynet workspace list' to see available workspaces.`);
+        process.exit(1);
+      }
+
+      if (!opts.force) {
+        const { default: inquirer } = await import('inquirer');
+        const { confirm } = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'confirm',
+          message: `Delete workspace '${entry.name}' (${entry.id})? This will remove all data including agents and messages.`,
+          default: false,
+        }]);
+        if (!confirm) {
+          console.log('Cancelled.');
+          return;
+        }
+      }
+
+      removeWorkspace(entry.id);
+      console.log(`Workspace '${entry.name}' deleted.`);
     });
 
   workspace

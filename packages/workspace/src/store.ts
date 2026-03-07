@@ -12,11 +12,13 @@ export interface Store {
   saveAgent(agent: AgentCard): void;
   listAgents(): AgentCard[];
   getAgent(idOrName: string): AgentCard | undefined;
+  deleteAgent(id: string): boolean;
 
   // Humans
   saveHuman(human: HumanProfile): void;
   listHumans(): HumanProfile[];
   getHuman(idOrName: string): HumanProfile | undefined;
+  deleteHuman(id: string): boolean;
 
   // Name uniqueness
   checkNameUnique(name: string): boolean;

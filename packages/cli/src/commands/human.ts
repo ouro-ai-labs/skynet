@@ -54,6 +54,53 @@ export function registerHumanCommand(program: Command): void {
     });
 
   human
+    .command('delete <id>')
+    .description('Delete a human by UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
+    .option('--force', 'Skip confirmation prompt')
+    .action(async (humanId: string, opts: { workspace?: string; force?: boolean }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+
+      try {
+        // Fetch human profile for confirmation message
+        const getRes = await fetch(`${url}/api/humans/${humanId}`);
+        if (getRes.status === 404) {
+          console.error(`Human '${humanId}' not found. Run 'skynet human list' to see available humans.`);
+          process.exit(1);
+        }
+        const human = await getRes.json() as HumanProfile;
+
+        if (!opts.force) {
+          const { default: inquirer } = await import('inquirer');
+          const { confirm } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
+            message: `Delete human '${human.name}' (${human.id})?`,
+            default: false,
+          }]);
+          if (!confirm) {
+            console.log('Cancelled.');
+            return;
+          }
+        }
+
+        const res = await fetch(`${url}/api/humans/${human.id}`, { method: 'DELETE' });
+
+        if (res.status === 200) {
+          console.log(`Human '${human.name}' deleted.`);
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed to delete human: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to workspace at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  human
     .command('list')
     .description('List all humans')
     .option('--workspace <name-or-id>', 'Workspace name or UUID')

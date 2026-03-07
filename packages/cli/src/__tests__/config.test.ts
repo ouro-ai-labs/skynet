@@ -8,6 +8,7 @@ import {
   ensureSkynetDir,
   listWorkspaces,
   addWorkspace,
+  removeWorkspace,
   getWorkspace,
   getWorkspaceByIdOrName,
   getWorkspaceDir,
@@ -118,5 +119,39 @@ describe('config module', () => {
   it('loadWorkspaceConfig returns undefined for non-existent workspace', () => {
     ensureSkynetDir();
     expect(loadWorkspaceConfig('nonexistent')).toBeUndefined();
+  });
+
+  it('removeWorkspace removes entry and directory', () => {
+    ensureSkynetDir();
+
+    const entry = { id: randomUUID(), name: 'to-delete', host: 'localhost', port: 4117 };
+    addWorkspace(entry);
+
+    expect(existsSync(getWorkspaceDir(entry.id))).toBe(true);
+    expect(listWorkspaces()).toHaveLength(1);
+
+    const removed = removeWorkspace(entry.id);
+    expect(removed).toBe(true);
+    expect(listWorkspaces()).toHaveLength(0);
+    expect(existsSync(getWorkspaceDir(entry.id))).toBe(false);
+  });
+
+  it('removeWorkspace returns false for non-existent workspace', () => {
+    ensureSkynetDir();
+    expect(removeWorkspace('nonexistent')).toBe(false);
+  });
+
+  it('removeWorkspace only removes the target workspace', () => {
+    ensureSkynetDir();
+
+    const entry1 = { id: randomUUID(), name: 'keep-me', host: 'localhost', port: 4117 };
+    const entry2 = { id: randomUUID(), name: 'delete-me', host: 'localhost', port: 4118 };
+    addWorkspace(entry1);
+    addWorkspace(entry2);
+
+    removeWorkspace(entry2.id);
+    const remaining = listWorkspaces();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].name).toBe('keep-me');
   });
 });
