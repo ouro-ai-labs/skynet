@@ -58,7 +58,7 @@ If you modify code under these paths, also read the matching docs first:
 - `packages/workspace` → `docs/workspace.md` (WebSocket protocol, HTTP API, entity management)
 - `packages/sdk` → `docs/usage.md` (client SDK usage, reconnection, error handling)
 - `packages/agent-adapter` → `docs/adapter.md` (adapter contracts, CLI process management)
-- `packages/cli` (skynet CLI behavior) → **must update both** `skills/skynet.md` (agent skill) **and** `docs/cli.md` (CLI reference)
+- `packages/cli` (skynet CLI behavior) → **must update both** `skills/skynet/SKILL.md` (agent skill) **and** `docs/cli.md` (CLI reference)
 - Entity model → `docs/entities.md` (workspace, agent, human lifecycle)
 
 ## Language
