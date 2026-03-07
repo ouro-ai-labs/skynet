@@ -29,7 +29,7 @@ skynet agent new        # Create an agent (interactive: name, type, role)
 skynet human new        # Create a human profile
 
 # Terminal 3: Join as a human
-skynet human            # Start chat TUI (interactive human selection)
+skynet chat             # Start chat TUI
 ```
 
 ## Architecture
@@ -62,35 +62,7 @@ See [docs/architecture.md](docs/architecture.md) for the full design.
 
 ## CLI Commands
 
-All commands use a workspace-based model. Use `--workspace <uuid|name>` to target a specific workspace (auto-selected if only one exists).
-
-### Workspace Management
-```bash
-skynet workspace new          # Create a new workspace (interactive)
-skynet workspace list         # List all workspaces
-skynet workspace              # Select and start a workspace (interactive)
-skynet workspace start [id]   # Start a specific workspace by name or UUID
-```
-
-### Agent Management
-```bash
-skynet agent new   [--workspace <id>]   # Create agent (interactive: name, type, role)
-skynet agent list  [--workspace <id>]   # List all agents
-```
-
-### Human Management
-```bash
-skynet human new   [--workspace <id>]    # Create human profile (interactive)
-skynet human list  [--workspace <id>]    # List all humans
-skynet human       [--workspace <id>]    # Select human, start chat TUI
-```
-
-### Status
-```bash
-skynet status [--workspace <id>]   # Show workspace status
-```
-
-See [docs/usage.md](docs/usage.md) for the full usage guide with examples.
+See [docs/cli.md](docs/cli.md) for the complete CLI reference.
 
 ## SDK Usage
 
@@ -135,7 +107,8 @@ See [docs/phases.md](docs/phases.md) for the full roadmap.
 - [Entities](docs/entities.md) — Workspace, agent, human entity model
 - [Workspace](docs/workspace.md) — WebSocket protocol, HTTP API, message store
 - [Agent Adapter](docs/adapter.md) — CLI agent adapter system
-- [Usage](docs/usage.md) — CLI commands, SDK examples, multi-agent workflows
+- [CLI Reference](docs/cli.md) — Complete CLI command reference
+- [Usage](docs/usage.md) — SDK examples, multi-agent workflows
 - [Phases](docs/phases.md) — Implementation roadmap
 
 ## License
