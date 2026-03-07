@@ -151,6 +151,25 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 
 ---
 
+## Logs
+
+All runtime logs are written to `~/.skynet/<workspace-uuid>/logs/`:
+
+- **Server log**: `~/.skynet/<workspace-uuid>/logs/server.log`
+- **Agent logs**: `~/.skynet/<workspace-uuid>/logs/<agent-uuid>.log`
+
+Logs include timestamps, log level, and namespace. Useful for debugging connection issues, message routing, and agent errors.
+
+```bash
+# Tail server logs in real time
+tail -f ~/.skynet/<workspace-uuid>/logs/server.log
+
+# Tail a specific agent's logs
+tail -f ~/.skynet/<workspace-uuid>/logs/<agent-uuid>.log
+```
+
+---
+
 ## Tips
 
 - Run `skynet status` to see who is currently connected.

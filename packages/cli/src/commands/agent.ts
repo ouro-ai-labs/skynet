@@ -29,6 +29,7 @@ function resolveAgent(agents: AgentCard[], nameOrId: string): AgentCard {
 async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl: string): Promise<void> {
   const wsDir = getWorkspaceDir(workspaceId);
   const workDir = join(wsDir, agentProfile.id, 'work');
+  const logFile = join(wsDir, 'logs', `${agentProfile.id}.log`);
 
   const adapter = createAdapter(agentProfile.type as AgentType, workDir);
   const statePath = join(wsDir, agentProfile.id, 'state.json');
@@ -41,6 +42,7 @@ async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl:
     persona: agentProfile.persona,
     projectRoot: workDir,
     statePath,
+    logFile,
   });
 
   process.on('SIGINT', async () => {

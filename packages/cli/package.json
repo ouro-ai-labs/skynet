@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@skynet/agent-adapter": "workspace:*",
+    "@skynet/logger": "workspace:*",
     "@skynet/coordinator": "workspace:*",
     "@skynet/chat": "workspace:*",
     "@skynet/protocol": "workspace:*",
