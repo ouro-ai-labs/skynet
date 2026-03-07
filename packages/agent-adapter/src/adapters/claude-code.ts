@@ -9,6 +9,11 @@ export interface ClaudeCodeOptions {
   model?: string;
 }
 
+/** Build a copy of process.env without the nested-session guard var */
+function spawnEnv(): Record<string, string | undefined> {
+  return { ...process.env, CLAUDECODE: undefined };
+}
+
 export class ClaudeCodeAdapter extends AgentAdapter {
   readonly type = AgentType.CLAUDE_CODE;
   readonly name = 'claude-code';
@@ -79,6 +84,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     const result = await execa('claude', args, {
       cwd: this.projectRoot,
       stdin: 'ignore',
+      env: spawnEnv(),
       timeout: 60_000, // 1 min timeout for quick replies
     });
 
@@ -131,6 +137,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     const result = await execa('claude', args, {
       cwd: this.projectRoot,
       stdin: 'ignore',
+      env: spawnEnv(),
       timeout: 300_000, // 5 min timeout
     });
 
