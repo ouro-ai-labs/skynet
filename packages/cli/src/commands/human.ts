@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import type { HumanProfile } from '@skynet/protocol';
-import { runChatTUI } from '@skynet/chat';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
 export function registerHumanCommand(program: Command): void {
@@ -8,45 +7,7 @@ export function registerHumanCommand(program: Command): void {
     .command('human')
     .description('Manage humans')
     .enablePositionalOptions()
-    .passThroughOptions()
-    .option('--workspace <id>', 'Workspace UUID')
-    .action(async (opts) => {
-      // Bare `skynet human`: select workspace → select human → start chat TUI
-      const workspace = selectWorkspace(opts);
-      const url = getServerUrl(workspace);
-
-      let humans: HumanProfile[];
-      try {
-        const res = await fetch(`${url}/api/humans`);
-        humans = await res.json() as HumanProfile[];
-      } catch {
-        console.error(`Failed to connect to workspace at ${url}`);
-        process.exit(1);
-      }
-
-      if (humans.length === 0) {
-        console.error('No humans registered. Run \'skynet human new\' to create one.');
-        process.exit(1);
-      }
-
-      const { default: inquirer } = await import('inquirer');
-      const { selected } = await inquirer.prompt([{
-        type: 'list',
-        name: 'selected',
-        message: 'Select human:',
-        choices: humans.map((h) => ({
-          name: h.name,
-          value: h,
-        })),
-      }]);
-
-      const humanProfile = selected as HumanProfile;
-
-      await runChatTUI({
-        serverUrl: url,
-        name: humanProfile.name,
-      });
-    });
+    .passThroughOptions();
 
   human
     .command('new')
