@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { SkynetServer, SqliteStore } from '@skynet/server';
+import { SkynetWorkspace, SqliteStore } from '@skynet/workspace';
 import { SkynetClient } from '@skynet/sdk';
 import { AgentType, MessageType, type SkynetMessage, type TaskPayload, type AgentCard } from '@skynet/protocol';
 import { AgentRunner } from '../agent-runner.js';
@@ -78,14 +78,14 @@ function collectMessages(
 const PORT = 4300 + Math.floor(Math.random() * 100);
 
 describe('E2E: multi-agent collaboration', () => {
-  let server: SkynetServer;
+  let server: SkynetWorkspace;
   let runner1: AgentRunner;
   let runner2: AgentRunner;
   let humanClient: SkynetClient;
 
   beforeAll(async () => {
     // Start server
-    server = new SkynetServer({ port: PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:') });
     await server.start();
 
     // Create 2 AgentRunners with FakeAdapters
@@ -182,11 +182,11 @@ describe('E2E: multi-agent collaboration', () => {
 });
 
 describe('E2E: full lifecycle (API create → connect → chat → disconnect)', () => {
-  let server: SkynetServer;
+  let server: SkynetWorkspace;
   const LIFECYCLE_PORT = 4300 + Math.floor(Math.random() * 100) + 100;
 
   beforeAll(async () => {
-    server = new SkynetServer({ port: LIFECYCLE_PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: LIFECYCLE_PORT, store: new SqliteStore(':memory:') });
     await server.start();
   });
 
@@ -292,11 +292,11 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
 });
 
 describe('E2E: heartbeat updates agent status', () => {
-  let server: SkynetServer;
+  let server: SkynetWorkspace;
   const HB_PORT = 4300 + Math.floor(Math.random() * 100) + 200;
 
   beforeAll(async () => {
-    server = new SkynetServer({ port: HB_PORT, store: new SqliteStore(':memory:') });
+    server = new SkynetWorkspace({ port: HB_PORT, store: new SqliteStore(':memory:') });
     await server.start();
   });
 

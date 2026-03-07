@@ -19,7 +19,7 @@
     "@skynet/chat": "workspace:*",
     "@skynet/protocol": "workspace:*",
     "@skynet/sdk": "workspace:*",
-    "@skynet/server": "workspace:*",
+    "@skynet/workspace": "workspace:*",
     "chalk": "^5.4.0",
     "commander": "^13.0.0",
     "inquirer": "^12.0.0"

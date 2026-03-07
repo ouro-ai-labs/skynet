@@ -65,7 +65,7 @@ Skynet's core idea: **agents and humans communicate and collaborate freely, just
 skynet/
 ├── packages/
 │   ├── protocol/          # Message type definitions, entity types
-│   ├── server/            # Central server (WebSocket + HTTP + entity management)
+│   ├── workspace/         # Workspace server (WebSocket + HTTP + entity management)
 │   ├── sdk/               # Client SDK
 │   ├── agent-adapter/     # Agent adapters (Claude Code, Gemini CLI, Codex CLI, generic)
 │   ├── coordinator/       # Task assignment, file locks, git worktree management

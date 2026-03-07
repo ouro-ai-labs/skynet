@@ -7,15 +7,15 @@ Establish the message protocol, server framework, and base SDK so that two nodes
 
 ### Components Built
 1. **`packages/protocol`** - Message type definitions, entity types, serialization/deserialization
-2. **`packages/server`** - WebSocket server, member management, entity management, message routing
-3. **`packages/sdk`** - Client SDK for agents to connect to the server
+2. **`packages/workspace`** - WebSocket server, member management, entity management, message routing
+3. **`packages/sdk`** - Client SDK for agents to connect to the workspace
 4. **`packages/cli`** - CLI entry point skeleton
 
 ### Key Files
 - `packages/protocol/src/types.ts` - All message and type definitions (AgentCard, HumanProfile, etc.)
-- `packages/server/src/server.ts` - WebSocket server main body
-- `packages/server/src/member-manager.ts` - Workspace-level member tracking
-- `packages/server/src/sqlite-store.ts` - SQLite message + entity persistence
+- `packages/workspace/src/server.ts` - WebSocket server main body
+- `packages/workspace/src/member-manager.ts` - Workspace-level member tracking
+- `packages/workspace/src/sqlite-store.ts` - SQLite message + entity persistence
 - `packages/sdk/src/client.ts` - SkynetClient class
 
 ### Validation
@@ -181,8 +181,8 @@ skynet agent --workspace my-team-project
 ```
 
 ### Key Files
-- `packages/server/src/auth.ts` - Token authentication
-- `packages/server/src/sync.ts` - Cross-machine git sync coordination
+- `packages/workspace/src/auth.ts` - Token authentication
+- `packages/workspace/src/sync.ts` - Cross-machine git sync coordination
 - `packages/core/src/p2p.ts` - Optional libp2p P2P layer
 
 ---

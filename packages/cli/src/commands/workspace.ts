@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Command } from 'commander';
-import { SkynetServer, SqliteStore } from '@skynet/server';
+import { SkynetWorkspace, SqliteStore } from '@skynet/workspace';
 import {
   ensureSkynetDir,
   listWorkspaces,
@@ -16,7 +16,7 @@ async function startServer(workspace: WorkspaceEntry): Promise<void> {
   const dbPath = join(wsDir, 'data.db');
 
   const store = new SqliteStore(dbPath);
-  const srv = new SkynetServer({ port: workspace.port, host: workspace.host, store });
+  const srv = new SkynetWorkspace({ port: workspace.port, host: workspace.host, store });
 
   process.on('SIGINT', async () => {
     console.log('\nShutting down...');

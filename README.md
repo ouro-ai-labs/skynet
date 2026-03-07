@@ -20,14 +20,12 @@ Skynet lets you connect Claude Code, Gemini CLI, Codex CLI (or any CLI agent) to
 # Install
 pnpm install && pnpm build
 
-# Terminal 1: Create and start a server workspace
-skynet server new       # Interactive: name, host, port
-skynet server           # Start the server
+# Terminal 1: Create and start a workspace
+skynet workspace new    # Interactive: name, host, port
+skynet workspace        # Start the workspace
 
-# Terminal 2: Create entities and wire them up
-skynet room new         # Create a room (interactive name prompt)
+# Terminal 2: Create entities
 skynet agent new        # Create an agent (interactive: name, type, role)
-skynet agent join <agent> <room>   # Add agent to room
 
 # Terminal 3: Join as a human
 skynet human new        # Create a human profile
@@ -37,7 +35,7 @@ skynet human            # Start chat TUI (interactive human selection)
 ## Architecture
 
 ```
-                    Skynet Server
+                   Skynet Workspace
            (WebSocket / Rooms / SQLite)
           /       |        |        \
    Claude Code  Gemini   Human    Monitor
@@ -45,7 +43,7 @@ skynet human            # Start chat TUI (interactive human selection)
                 (adapter)         (Phase 2)
 ```
 
-Agents connect to a central server via WebSocket. The server handles message routing (broadcast + point-to-point + rooms), agent registration, and message persistence. Each agent type has an adapter that translates network messages into CLI calls.
+Agents connect to a workspace via WebSocket. The server handles message routing (broadcast + point-to-point), agent registration, and message persistence. Each agent type has an adapter that translates network messages into CLI calls.
 
 See [docs/architecture.md](docs/architecture.md) for the full design.
 
@@ -54,7 +52,7 @@ See [docs/architecture.md](docs/architecture.md) for the full design.
 | Package | Description |
 |---------|-------------|
 | `@skynet/protocol` | Message types, agent card, entity types, serialization |
-| `@skynet/server` | Fastify + WebSocket server, rooms, entity management, SQLite store |
+| `@skynet/workspace` | Fastify + WebSocket server, entity management, SQLite store |
 | `@skynet/sdk` | Client SDK with reconnection and typed events |
 | `@skynet/agent-adapter` | Adapters for Claude Code, Gemini CLI, Codex CLI, generic |
 | `@skynet/coordinator` | Task queue, file locks, git worktree management |
@@ -64,43 +62,33 @@ See [docs/architecture.md](docs/architecture.md) for the full design.
 
 ## CLI Commands
 
-All commands use a workspace-based model. Use `--server <uuid|name>` to target a specific workspace (auto-selected if only one exists).
+All commands use a workspace-based model. Use `--workspace <uuid|name>` to target a specific workspace (auto-selected if only one exists).
 
-### Server Management
+### Workspace Management
 ```bash
-skynet server new          # Create a new server workspace (interactive)
-skynet server list         # List all workspaces
-skynet server              # Select and start a server (interactive)
-skynet server start [id]   # Start a specific server by name or UUID
-```
-
-### Room Management
-```bash
-skynet room new   [--server <id>]   # Create a room (interactive name prompt)
-skynet room list  [--server <id>]   # List all rooms
+skynet workspace new          # Create a new workspace (interactive)
+skynet workspace list         # List all workspaces
+skynet workspace              # Select and start a workspace (interactive)
+skynet workspace start [id]   # Start a specific workspace by name or UUID
 ```
 
 ### Agent Management
 ```bash
-skynet agent new   [--server <id>]               # Create agent (interactive: name, type, role)
-skynet agent list  [--server <id>]               # List all agents
-skynet agent join <agent> <room> [--server <id>]  # Agent joins room
-skynet agent leave <agent> <room> [--server <id>] # Agent leaves room
-skynet agent       [--server <id>]               # Select agent, start in idle state
+skynet agent new   [--workspace <id>]               # Create agent (interactive: name, type, role)
+skynet agent list  [--workspace <id>]               # List all agents
+skynet agent       [--workspace <id>]               # Select agent, start in idle state
 ```
 
 ### Human Management
 ```bash
-skynet human new   [--server <id>]                # Create human profile (interactive)
-skynet human list  [--server <id>]                # List all humans
-skynet human join <human> <room> [--server <id>]   # Human joins room
-skynet human leave <human> <room> [--server <id>]  # Human leaves room
-skynet human       [--server <id>]                # Select human, start chat TUI
+skynet human new   [--workspace <id>]                # Create human profile (interactive)
+skynet human list  [--workspace <id>]                # List all humans
+skynet human       [--workspace <id>]                # Select human, start chat TUI
 ```
 
 ### Status
 ```bash
-skynet status [room-id] [--server <id>]   # Show server/room status
+skynet status [--workspace <id>]   # Show workspace status
 ```
 
 See [docs/usage.md](docs/usage.md) for the full usage guide with examples.

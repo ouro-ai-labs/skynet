@@ -20,19 +20,19 @@ import {
 import { MemberManager } from './member-manager.js';
 import type { Store } from './store.js';
 
-export interface SkynetServerOptions {
+export interface SkynetWorkspaceOptions {
   port?: number;
   host?: string;
   store: Store;
 }
 
-export class SkynetServer {
+export class SkynetWorkspace {
   private fastify = Fastify({ logger: true });
   private members = new MemberManager();
   private store: Store;
   private socketAgentMap = new WeakMap<WebSocket, string>();
 
-  constructor(private options: SkynetServerOptions) {
+  constructor(private options: SkynetWorkspaceOptions) {
     this.store = options.store;
   }
 

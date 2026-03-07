@@ -1,12 +1,12 @@
 # Workspace Server
 
-`packages/server` — WebSocket messaging server handling member management, entity management, message routing, and persistence.
+`packages/workspace` — WebSocket messaging server handling member management, entity management, message routing, and persistence.
 
 ## File Structure
 
 ```
-packages/server/src/
-  server.ts          # SkynetServer — Fastify + WebSocket main server
+packages/workspace/src/
+  server.ts          # SkynetWorkspace — Fastify + WebSocket main server
   member-manager.ts  # MemberManager — In-memory workspace member management
   store.ts           # Store interface
   sqlite-store.ts    # SqliteStore — SQLite message + entity persistence
@@ -15,11 +15,11 @@ packages/server/src/
 
 ## Core Classes
 
-### SkynetServer (`server.ts`)
+### SkynetWorkspace (`server.ts`)
 
 Main server entry point, built on Fastify + `@fastify/websocket`.
 
-**Options** (`SkynetServerOptions`):
+**Options** (`SkynetWorkspaceOptions`):
 
 | Field | Default | Description |
 |-------|---------|-------------|

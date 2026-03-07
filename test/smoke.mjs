@@ -2,14 +2,14 @@
  * Smoke test: start server, connect two clients, exchange messages.
  * Run: node test/smoke.mjs (after pnpm build)
  */
-import { SkynetServer } from '../packages/server/dist/index.js';
+import { SkynetWorkspace } from '../packages/workspace/dist/index.js';
 import { SkynetClient } from '../packages/sdk/dist/index.js';
 import { AgentType } from '../packages/protocol/dist/index.js';
 import { randomUUID } from 'node:crypto';
 
 async function main() {
   // 1. Start server
-  const server = new SkynetServer({ port: 4118 });
+  const server = new SkynetWorkspace({ port: 4118 });
   await server.start();
   console.log('Server started on port 4118');
 

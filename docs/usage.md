@@ -252,7 +252,7 @@ pnpm test
 This runs tests for all packages via turborepo. Currently covers:
 
 - `@skynet/protocol` — message types, serialization (17 tests)
-- `@skynet/server` — member management, entity management, message store, integration (32 tests)
+- `@skynet/workspace` — member management, entity management, message store, integration (32 tests)
 - `@skynet/sdk` — client connection and events (5 tests)
 - `@skynet/agent-adapter` — adapter implementations, agent runner, E2E multi-agent (22 tests)
 - `@skynet/coordinator` — file locks, task queue (18 tests)
@@ -268,10 +268,10 @@ This runs tests for all packages via turborepo. Currently covers:
 pnpm build
 
 # Build a specific package
-pnpm --filter @skynet/server build
+pnpm --filter @skynet/workspace build
 
 # Run tests for a specific package
-pnpm --filter @skynet/server test
+pnpm --filter @skynet/workspace test
 
 # Clean all build artifacts
 pnpm clean
