@@ -12,7 +12,7 @@ import {
 } from '@skynet/protocol';
 import { SkynetClient, type RoomState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
-import { SKYNET_SKILL } from './skynet-skill.js';
+
 
 export interface AgentRunnerOptions {
   serverUrl: string;
@@ -56,8 +56,9 @@ export class AgentRunner {
     const parts: string[] = [];
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
-    parts.push(SKYNET_SKILL);
-    this.adapter.persona = parts.join('\n\n');
+    if (parts.length > 0) {
+      this.adapter.persona = parts.join('\n\n');
+    }
 
     this.adapter.setRoomId(options.roomId);
   }
