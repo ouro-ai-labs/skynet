@@ -6,7 +6,7 @@ import {
   ensureSkynetDir,
   listWorkspaces,
   addWorkspace,
-  getWorkspace,
+  getWorkspaceByIdOrName,
   getWorkspaceDir,
   type WorkspaceEntry,
 } from '../config.js';
@@ -90,7 +90,7 @@ export function registerWorkspaceCommand(program: Command): void {
         }
       }
 
-      const existing = getWorkspace(name);
+      const existing = getWorkspaceByIdOrName(name);
       if (existing) {
         console.error(`Workspace '${name}' already exists.`);
         process.exit(1);
@@ -131,13 +131,13 @@ export function registerWorkspaceCommand(program: Command): void {
     .command('start')
     .description('Start a workspace by name or UUID')
     .argument('[name-or-id]', 'Workspace name or UUID')
-    .option('--workspace <id>', 'Workspace UUID or name')
+    .option('--workspace <id>', 'Workspace UUID')
     .action(async (nameOrId?: string, opts?: { workspace?: string }) => {
       const identifier = nameOrId ?? opts?.workspace;
       let entry: WorkspaceEntry | undefined;
 
       if (identifier) {
-        entry = getWorkspace(identifier);
+        entry = getWorkspaceByIdOrName(identifier);
         if (!entry) {
           console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
           process.exit(1);

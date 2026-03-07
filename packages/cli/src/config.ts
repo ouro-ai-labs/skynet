@@ -65,7 +65,12 @@ export function addWorkspace(entry: WorkspaceEntry): void {
   writeFileSync(join(wsDir, 'config.json'), JSON.stringify(wsConfig, null, 2) + '\n', 'utf-8');
 }
 
-export function getWorkspace(idOrName: string): WorkspaceEntry | undefined {
+export function getWorkspace(id: string): WorkspaceEntry | undefined {
+  const workspaces = listWorkspaces();
+  return workspaces.find((w) => w.id === id);
+}
+
+export function getWorkspaceByIdOrName(idOrName: string): WorkspaceEntry | undefined {
   const workspaces = listWorkspaces();
   return workspaces.find((w) => w.id === idOrName || w.name === idOrName);
 }

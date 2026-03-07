@@ -20,7 +20,7 @@ export function selectWorkspace(opts: { workspace?: string }): WorkspaceEntry {
     return workspaces[0];
   }
 
-  console.error('Multiple workspaces found. Use --workspace <uuid-or-name> to specify which one.');
+  console.error('Multiple workspaces found. Use --workspace <uuid> to specify which one.');
   console.error('Run \'skynet workspace list\' to see available workspaces.');
   process.exit(1);
 }
