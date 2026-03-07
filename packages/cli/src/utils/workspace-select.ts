@@ -1,8 +1,8 @@
-import { listWorkspaces, getWorkspace, getServerUrl, type WorkspaceEntry } from '../config.js';
+import { listWorkspaces, getWorkspaceByIdOrName, getServerUrl, type WorkspaceEntry } from '../config.js';
 
 export function selectWorkspace(opts: { workspace?: string }): WorkspaceEntry {
   if (opts.workspace) {
-    const ws = getWorkspace(opts.workspace);
+    const ws = getWorkspaceByIdOrName(opts.workspace);
     if (!ws) {
       console.error(`Workspace '${opts.workspace}' not found. Run 'skynet workspace list' to see available workspaces.`);
       process.exit(1);
@@ -20,7 +20,7 @@ export function selectWorkspace(opts: { workspace?: string }): WorkspaceEntry {
     return workspaces[0];
   }
 
-  console.error('Multiple workspaces found. Use --workspace <uuid> to specify which one.');
+  console.error('Multiple workspaces found. Use --workspace <name-or-id> to specify which one.');
   console.error('Run \'skynet workspace list\' to see available workspaces.');
   process.exit(1);
 }

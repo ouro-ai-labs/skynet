@@ -12,7 +12,7 @@ export function registerHumanCommand(program: Command): void {
   human
     .command('new')
     .description('Create a new human')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .option('--name <name>', 'Human name (skip interactive prompt)')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
@@ -56,7 +56,7 @@ export function registerHumanCommand(program: Command): void {
   human
     .command('list')
     .description('List all humans')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);

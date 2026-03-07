@@ -131,7 +131,7 @@ export function registerWorkspaceCommand(program: Command): void {
     .command('start')
     .description('Start a workspace by name or UUID')
     .argument('[name-or-id]', 'Workspace name or UUID')
-    .option('--workspace <id>', 'Workspace UUID')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .action(async (nameOrId?: string, opts?: { workspace?: string }) => {
       const identifier = nameOrId ?? opts?.workspace;
       let entry: WorkspaceEntry | undefined;

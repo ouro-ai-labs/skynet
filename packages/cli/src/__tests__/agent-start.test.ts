@@ -13,12 +13,12 @@ describe('agent start subcommand', () => {
       .command('agent')
       .enablePositionalOptions()
       .passThroughOptions()
-      .option('--workspace <id>', 'Workspace UUID');
+      .option('--workspace <name-or-id>', 'Workspace name or UUID');
 
     agent
       .command('start <name-or-id>')
       .description('Start an agent by name or UUID')
-      .option('--workspace <id>', 'Workspace UUID')
+      .option('--workspace <name-or-id>', 'Workspace name or UUID')
       .action((nameOrId: string, opts: Record<string, unknown>) => {
         capturedNameOrId = nameOrId;
         capturedOpts = opts;
@@ -39,12 +39,12 @@ describe('agent start subcommand', () => {
       .command('agent')
       .enablePositionalOptions()
       .passThroughOptions()
-      .option('--workspace <id>', 'Workspace UUID');
+      .option('--workspace <name-or-id>', 'Workspace name or UUID');
 
     agent
       .command('start <name-or-id>')
       .description('Start an agent by name or UUID')
-      .option('--workspace <id>', 'Workspace UUID')
+      .option('--workspace <name-or-id>', 'Workspace name or UUID')
       .action((nameOrId: string, opts: Record<string, unknown>) => {
         capturedNameOrId = nameOrId;
         capturedOpts = opts;
@@ -65,12 +65,12 @@ describe('agent start subcommand', () => {
       .command('agent')
       .enablePositionalOptions()
       .passThroughOptions()
-      .option('--workspace <id>', 'Workspace UUID');
+      .option('--workspace <name-or-id>', 'Workspace name or UUID');
 
     agent
       .command('start <name-or-id>')
       .description('Start an agent by name or UUID')
-      .option('--workspace <id>', 'Workspace UUID')
+      .option('--workspace <name-or-id>', 'Workspace name or UUID')
       .action((nameOrId: string) => {
         capturedNameOrId = nameOrId;
       });
