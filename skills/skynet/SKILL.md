@@ -1,3 +1,8 @@
+---
+name: skynet
+description: Manage the Skynet multi-agent collaboration network using the skynet CLI. Use when creating or managing workspaces, agents, humans, or checking system status.
+---
+
 # Skynet Management Skill
 
 You can manage the Skynet multi-agent collaboration network using the `skynet` CLI. All commands below are non-interactive (pass all options as flags) so you can run them directly via your shell tool.
