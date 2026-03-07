@@ -152,6 +152,43 @@ describe('formatMessage', () => {
     expect(allPlain).toContain('secret message');
   });
 
+  it('formats chat with mentions showing all targets in header', () => {
+    const kevinCard = makeCard({ id: 'agent-3', name: 'Kevin', type: AgentType.CLAUDE_CODE });
+    const members = new Map<string, AgentCard>();
+    members.set('agent-1', aliceCard);
+    members.set('agent-2', bobCard);
+    members.set('agent-3', kevinCard);
+    const resolveWithKevin = createAgentResolver(members);
+
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      to: 'agent-2',
+      payload: { text: 'discuss this' },
+      mentions: ['agent-3'],
+    });
+    const lines = formatMessage(msg, resolveWithKevin);
+    const headerPlain = stripAnsi(lines[0]);
+    expect(headerPlain).toContain('Alice');
+    expect(headerPlain).toContain('->');
+    expect(headerPlain).toContain('Bob');
+    expect(headerPlain).toContain('Kevin');
+  });
+
+  it('formats chat with only mentions and no primary to', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      to: null,
+      payload: { text: 'hey everyone' },
+      mentions: ['agent-2'],
+    });
+    const lines = formatMessage(msg, resolve);
+    const headerPlain = stripAnsi(lines[0]);
+    expect(headerPlain).toContain('->');
+    expect(headerPlain).toContain('Bob');
+  });
+
   it('formats task assignment with marker style', () => {
     const msg = makeMsg({
       type: MessageType.TASK_ASSIGN,
