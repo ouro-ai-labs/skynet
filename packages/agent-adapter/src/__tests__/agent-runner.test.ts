@@ -36,6 +36,7 @@ vi.mock('@skynet/sdk', () => {
     }
 
     sendMessage() {}
+    setTyping() {}
     updateTask() {}
     reportTaskResult() {}
   }

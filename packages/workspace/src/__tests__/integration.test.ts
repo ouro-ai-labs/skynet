@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet/sdk';
-import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet/protocol';
+import { AgentType, MENTION_ALL, type SkynetMessage, type ServerEvent } from '@skynet/protocol';
 import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);
@@ -327,6 +327,54 @@ describe('Server integration', () => {
 
     await alice.close();
     await bob.close();
+  });
+
+  it('typing indicator is broadcast to other members', async () => {
+    const alice = makeClient('alice-typing');
+    const bob = makeClient('bob-typing');
+
+    await alice.connect();
+    await bob.connect();
+    await sleep(50);
+
+    const typingEvents: Array<{ agentId: string; isTyping: boolean }> = [];
+    bob.on('typing', (data: { agentId: string; isTyping: boolean }) => {
+      typingEvents.push(data);
+    });
+
+    alice.setTyping(true);
+    await sleep(100);
+
+    expect(typingEvents).toHaveLength(1);
+    expect(typingEvents[0].agentId).toBe(alice.agent.id);
+    expect(typingEvents[0].isTyping).toBe(true);
+
+    alice.setTyping(false);
+    await sleep(100);
+
+    expect(typingEvents).toHaveLength(2);
+    expect(typingEvents[1].isTyping).toBe(false);
+
+    await alice.close();
+    await bob.close();
+  });
+
+  it('typing indicator is not echoed back to sender', async () => {
+    const alice = makeClient('alice-typing-echo');
+    await alice.connect();
+    await sleep(50);
+
+    const typingEvents: Array<{ agentId: string; isTyping: boolean }> = [];
+    alice.on('typing', (data: { agentId: string; isTyping: boolean }) => {
+      typingEvents.push(data);
+    });
+
+    alice.setTyping(true);
+    await sleep(100);
+
+    expect(typingEvents).toHaveLength(0);
+
+    await alice.close();
   });
 
   it('workspace.state only includes messages mentioning the connecting agent', async () => {
