@@ -190,9 +190,8 @@ skynet status --workspace <uuid>
 
 Output includes:
 - Workspace name and server URL
-- Connected members (name, type, status)
-- Registered agents (name, type)
-- Registered humans (name)
+- Agents — id, name, type, role, persona, and online status (idle/busy/offline)
+- Humans — id, name, and online status (online/offline)
 
 ---
 
