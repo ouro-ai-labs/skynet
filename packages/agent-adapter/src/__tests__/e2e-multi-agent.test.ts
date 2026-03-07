@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { SkynetWorkspace, SqliteStore } from '@skynet/workspace';
 import { SkynetClient } from '@skynet/sdk';
 import { AgentType, MessageType, type SkynetMessage, type TaskPayload, type AgentCard } from '@skynet/protocol';
@@ -288,6 +291,294 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
     expect(types).toContain('agent.leave');
 
     await humanClient.close();
+  });
+});
+
+describe('E2E: workspace.state only returns mentioned messages for connecting agent', () => {
+  let server: SkynetWorkspace;
+  const MENTION_PORT = 4300 + Math.floor(Math.random() * 100) + 300;
+
+  beforeAll(async () => {
+    server = new SkynetWorkspace({
+      port: MENTION_PORT,
+      store: new SqliteStore(':memory:'),
+      disconnectGraceMs: 100,
+      recentMentionsLimit: 3,
+    });
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('new agent only sees messages addressed to or mentioning it', async () => {
+    const baseUrl = `http://localhost:${MENTION_PORT}`;
+
+    // Human sends various messages before the agent connects
+    const human = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: randomUUID(), name: 'human-mention', type: AgentType.HUMAN },
+      reconnect: false,
+    });
+    await human.connect();
+    await sleep(50);
+
+    const agentId = randomUUID();
+
+    // Broadcast (not addressed to agent)
+    human.chat('General broadcast 1');
+    human.chat('General broadcast 2');
+    await sleep(50);
+
+    // DM to the agent
+    human.chat('DM for agent', agentId);
+    await sleep(50);
+
+    // Mention the agent
+    human.chat('Hey @agent check this', null, [agentId]);
+    await sleep(50);
+
+    // Another broadcast
+    human.chat('General broadcast 3');
+    await sleep(200);
+
+    // Agent connects — should only see the DM and the mention
+    const agent = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: agentId, name: 'target-agent', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+    });
+    const state = await agent.connect();
+
+    const chatMsgs = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMsgs.map(m => (m.payload as { text: string }).text);
+
+    expect(texts).toContain('DM for agent');
+    expect(texts).toContain('Hey @agent check this');
+    expect(texts).not.toContain('General broadcast 1');
+    expect(texts).not.toContain('General broadcast 2');
+    expect(texts).not.toContain('General broadcast 3');
+
+    await human.close();
+    await agent.close();
+  });
+
+  it('recentMentionsLimit caps the number of returned messages', async () => {
+    const baseUrl = `http://localhost:${MENTION_PORT}`;
+
+    const agentId = randomUUID();
+    const human = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: randomUUID(), name: 'human-limit', type: AgentType.HUMAN },
+      reconnect: false,
+    });
+    await human.connect();
+    await sleep(50);
+
+    // Send 5 DMs to the agent (limit is 3)
+    for (let i = 0; i < 5; i++) {
+      human.chat(`DM ${i}`, agentId);
+    }
+    await sleep(200);
+
+    const agent = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: agentId, name: 'limit-agent', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+    });
+    const state = await agent.connect();
+
+    const chatMsgs = state.recentMessages.filter(m => m.type === 'chat');
+    expect(chatMsgs).toHaveLength(3);
+
+    // Should be the 3 most recent, in chronological order
+    const texts = chatMsgs.map(m => (m.payload as { text: string }).text);
+    expect(texts).toEqual(['DM 2', 'DM 3', 'DM 4']);
+
+    await human.close();
+    await agent.close();
+  });
+});
+
+describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
+  let server: SkynetWorkspace;
+  const SEEN_PORT = 4300 + Math.floor(Math.random() * 100) + 400;
+
+  beforeAll(async () => {
+    server = new SkynetWorkspace({
+      port: SEEN_PORT,
+      store: new SqliteStore(':memory:'),
+      disconnectGraceMs: 200,
+      recentMentionsLimit: 10,
+    });
+    await server.start();
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('agent reconnecting with lastSeenTimestamp skips old messages', async () => {
+    const baseUrl = `http://localhost:${SEEN_PORT}`;
+    const agentId = randomUUID();
+
+    const human = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: randomUUID(), name: 'human-seen', type: AgentType.HUMAN },
+      reconnect: false,
+    });
+    await human.connect();
+    await sleep(50);
+
+    // Send first DM
+    human.chat('old message', agentId);
+    await sleep(100);
+
+    // Record boundary timestamp
+    const boundary = Date.now();
+    await sleep(50);
+
+    // Send second DM
+    human.chat('new message', agentId);
+    await sleep(200);
+
+    // Agent connects with lastSeenTimestamp — should only see the newer message
+    const agent = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: agentId, name: 'seen-agent', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+      lastSeenTimestamp: boundary,
+    });
+    const state = await agent.connect();
+
+    const chatMsgs = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMsgs.map(m => (m.payload as { text: string }).text);
+
+    expect(texts).toContain('new message');
+    expect(texts).not.toContain('old message');
+
+    await human.close();
+    await agent.close();
+  });
+
+  it('agent with lastSeenTimestamp=0 gets all recent mentions', async () => {
+    const baseUrl = `http://localhost:${SEEN_PORT}`;
+    const agentId = randomUUID();
+
+    const human = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: randomUUID(), name: 'human-zero', type: AgentType.HUMAN },
+      reconnect: false,
+    });
+    await human.connect();
+    await sleep(50);
+
+    human.chat('msg for fresh agent', agentId);
+    await sleep(200);
+
+    // Agent connects without lastSeenTimestamp — should see the message
+    const agent = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: agentId, name: 'fresh-agent', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+    });
+    const state = await agent.connect();
+
+    const chatMsgs = state.recentMessages.filter(m => m.type === 'chat');
+    expect(chatMsgs.length).toBeGreaterThanOrEqual(1);
+    expect(chatMsgs.map(m => (m.payload as { text: string }).text)).toContain('msg for fresh agent');
+
+    await human.close();
+    await agent.close();
+  });
+});
+
+describe('E2E: AgentRunner persists and restores lastSeenTimestamp', () => {
+  let server: SkynetWorkspace;
+  let testDir: string;
+  const PERSIST_PORT = 4300 + Math.floor(Math.random() * 100) + 500;
+
+  beforeAll(async () => {
+    server = new SkynetWorkspace({
+      port: PERSIST_PORT,
+      store: new SqliteStore(':memory:'),
+      disconnectGraceMs: 200,
+      recentMentionsLimit: 10,
+    });
+    await server.start();
+    testDir = join(tmpdir(), `skynet-e2e-${randomUUID().slice(0, 8)}`);
+    mkdirSync(testDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await server.stop();
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('AgentRunner persists state and uses it on restart to skip old messages', async () => {
+    const baseUrl = `http://localhost:${PERSIST_PORT}`;
+    const statePath = join(testDir, 'agent-state.json');
+    const agentId = randomUUID();
+
+    // --- Phase 1: Agent connects, processes messages, stops ---
+    const adapter1 = new FakeAdapter('persist-agent');
+    const runner1 = new AgentRunner({
+      serverUrl: baseUrl,
+      adapter: adapter1,
+      agentId,
+      agentName: 'persist-agent',
+      statePath,
+    });
+    await runner1.start();
+
+    // Human sends a DM to the agent
+    const human = new SkynetClient({
+      serverUrl: baseUrl,
+      agent: { id: randomUUID(), name: 'human-persist', type: AgentType.HUMAN },
+      reconnect: false,
+    });
+    await human.connect();
+    await sleep(50);
+
+    human.chat('first message', agentId);
+    await sleep(500); // Wait for processing
+
+    // Verify state file was written
+    const stateRaw = readFileSync(statePath, 'utf-8');
+    const state = JSON.parse(stateRaw) as { lastSeenTimestamp: number };
+    expect(state.lastSeenTimestamp).toBeGreaterThan(0);
+
+    await runner1.stop();
+    await sleep(300); // Wait for grace period
+
+    // --- Phase 2: Send more messages while agent is offline ---
+    const boundary = state.lastSeenTimestamp;
+
+    await sleep(50);
+    human.chat('second message while offline', agentId);
+    await sleep(200);
+
+    // --- Phase 3: Agent restarts with persisted state ---
+    const adapter2 = new FakeAdapter('persist-agent');
+    const runner2 = new AgentRunner({
+      serverUrl: baseUrl,
+      adapter: adapter2,
+      agentId,
+      agentName: 'persist-agent',
+      statePath,
+    });
+    const reconnectState = await runner2.start();
+
+    // workspace.state should only contain the message sent while offline
+    const chatMsgs = reconnectState.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMsgs.map(m => (m.payload as { text: string }).text);
+
+    expect(texts).not.toContain('first message');
+    expect(texts).toContain('second message while offline');
+
+    await runner2.stop();
+    await human.close();
   });
 });
 

@@ -132,6 +132,8 @@ export interface ClientEnvelope {
 
 export interface JoinRequest {
   agent: AgentCard;
+  /** Timestamp of the last message the client saw — server will only replay newer messages. */
+  lastSeenTimestamp?: number;
 }
 
 export interface ServerEvent {

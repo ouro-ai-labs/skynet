@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   type AgentCard,
   type AgentJoinPayload,
@@ -23,6 +25,8 @@ export interface AgentRunnerOptions {
   role?: string;
   persona?: string;
   projectRoot?: string;
+  /** Path to a JSON file for persisting agent state (e.g. lastSeenTimestamp). */
+  statePath?: string;
 }
 
 /** Max number of message IDs to track for deduplication. */
@@ -50,9 +54,12 @@ export class AgentRunner {
       persona: options.persona,
     };
 
+    const lastSeenTimestamp = this.loadLastSeenTimestamp();
+
     this.client = new SkynetClient({
       serverUrl: options.serverUrl,
       agent: agentCard,
+      lastSeenTimestamp,
     });
 
     this.adapter = options.adapter;
@@ -227,6 +234,7 @@ export class AgentRunner {
 
     this.client.agent.status = 'idle';
     this.processing = false;
+    this.persistLastSeenTimestamp();
   }
 
   /** Batch multiple chat messages into a single adapter call. */
@@ -278,6 +286,34 @@ export class AgentRunner {
       }
     }
     return ids;
+  }
+
+  private persistLastSeenTimestamp(): void {
+    if (!this.options.statePath) return;
+    try {
+      const dir = dirname(this.options.statePath);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(
+        this.options.statePath,
+        JSON.stringify({ lastSeenTimestamp: this.client.lastSeenTimestamp }) + '\n',
+        'utf-8',
+      );
+    } catch {
+      // Best-effort persistence — don't crash on write failure
+    }
+  }
+
+  private loadLastSeenTimestamp(): number {
+    if (!this.options.statePath || !existsSync(this.options.statePath)) return 0;
+    try {
+      const raw = readFileSync(this.options.statePath, 'utf-8');
+      const data = JSON.parse(raw) as { lastSeenTimestamp?: number };
+      return data.lastSeenTimestamp ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
   private async handleTask(msg: SkynetMessage): Promise<void> {

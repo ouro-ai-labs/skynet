@@ -18,6 +18,8 @@ export interface SkynetClientOptions {
   reconnectInterval?: number;
   maxReconnectInterval?: number;
   heartbeatInterval?: number;
+  /** Timestamp of the last message processed — used to skip already-seen messages on reconnect. */
+  lastSeenTimestamp?: number;
 }
 
 export interface WorkspaceState {
@@ -33,6 +35,7 @@ export class SkynetClient extends EventEmitter {
   private _closed = false;
   private _reconnecting = false;
   private _reconnectAttempt = 0;
+  private _lastSeenTimestamp = 0;
 
   readonly agent: AgentCard;
   private serverUrl: string;
@@ -49,6 +52,11 @@ export class SkynetClient extends EventEmitter {
     this.reconnectInterval = options.reconnectInterval ?? 1000;
     this.maxReconnectInterval = options.maxReconnectInterval ?? 30000;
     this.heartbeatInterval = options.heartbeatInterval ?? 30000;
+    this._lastSeenTimestamp = options.lastSeenTimestamp ?? 0;
+  }
+
+  get lastSeenTimestamp(): number {
+    return this._lastSeenTimestamp;
   }
 
   get connected(): boolean {
@@ -64,7 +72,11 @@ export class SkynetClient extends EventEmitter {
         this._connected = true;
         this._reconnecting = false;
         this._reconnectAttempt = 0;
-        this.send({ action: ClientAction.JOIN, data: { agent: this.agent } satisfies JoinRequest });
+        const joinReq: JoinRequest = { agent: this.agent };
+        if (this._lastSeenTimestamp > 0) {
+          joinReq.lastSeenTimestamp = this._lastSeenTimestamp;
+        }
+        this.send({ action: ClientAction.JOIN, data: joinReq });
         this.startHeartbeat();
       });
 
@@ -92,6 +104,9 @@ export class SkynetClient extends EventEmitter {
 
         // Regular message (has 'type' field)
         const msg = parsed as SkynetMessage;
+        if (msg.timestamp > this._lastSeenTimestamp) {
+          this._lastSeenTimestamp = msg.timestamp;
+        }
         this.emit('message', msg);
 
         // Emit typed events
