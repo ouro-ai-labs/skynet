@@ -122,8 +122,19 @@ export function formatMessage(msg: SkynetMessage, resolve: AgentResolver, width?
 export function formatChat(msg: SkynetMessage, resolve: AgentResolver, width?: number): string[] {
   const s = resolve(msg.from);
   const p = msg.payload as ChatPayload;
-  const dm = msg.to
-    ? ` ${dimText('->')} ${agentNameColored(resolve(msg.to).name, resolve(msg.to).type)}`
+  const targets: string[] = [];
+  if (msg.to) {
+    const r = resolve(msg.to);
+    targets.push(agentNameColored(r.name, r.type));
+  }
+  if (msg.mentions && msg.mentions.length > 0) {
+    for (const mid of msg.mentions) {
+      const r = resolve(mid);
+      targets.push(agentNameColored(r.name, r.type));
+    }
+  }
+  const dm = targets.length > 0
+    ? ` ${dimText('->')} ${targets.join(dimText(', '))}`
     : '';
 
   const header = `${markerColored(s.type)} ${agentNameColored(s.name, s.type)}${dm} ${formatTimestampDim(msg.timestamp)}`;
