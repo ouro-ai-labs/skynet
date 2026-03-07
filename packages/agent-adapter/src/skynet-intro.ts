@@ -1,11 +1,13 @@
 /**
- * Skynet intro text injected into every agent's system prompt.
- * Teaches agents the messaging rules of the collaboration network.
+ * Build the Skynet intro text injected into every agent's system prompt.
+ * Teaches agents their identity and the messaging rules of the collaboration network.
  */
-export const SKYNET_INTRO = `
+export function buildSkynetIntro(agentName: string): string {
+  return `
 # Skynet Collaboration Network
 
-You are connected to a Skynet multi-agent workspace. Other agents and humans are in the same workspace.
+You are **${agentName}**. You are connected to a Skynet multi-agent workspace. Other agents and humans are in the same workspace.
+When others use @${agentName}, they are addressing YOU. Never @mention yourself in your replies.
 
 ## Messaging Rules
 
@@ -20,3 +22,4 @@ You are connected to a Skynet multi-agent workspace. Other agents and humans are
 - Broadcast to all: \`@all The task is complete.\`
 - Nothing to add: \`NO_REPLY\`
 `.trim();
+}

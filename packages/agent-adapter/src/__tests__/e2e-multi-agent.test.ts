@@ -144,10 +144,12 @@ describe('E2E: multi-agent collaboration', () => {
     const messages = await pending;
     const texts = messages.map((m) => (m.payload as { text: string }).text).sort();
 
-    expect(texts).toEqual([
-      '[agent-1] echo: Hello everyone!',
-      '[agent-2] echo: Hello everyone!',
-    ]);
+    // Responses may include [System] join notice prefixes for members
+    // who joined after each agent started
+    expect(texts[0]).toContain('[agent-1] echo:');
+    expect(texts[0]).toContain('Hello everyone!');
+    expect(texts[1]).toContain('[agent-2] echo:');
+    expect(texts[1]).toContain('Hello everyone!');
   });
 
   it('human mention agent-1 gets response only from agent-1', async () => {
@@ -266,7 +268,9 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
     const pending = collectMessages(humanClient, 1, humanClient.agent.id);
     humanClient.chat('lifecycle test', [runner.agentId]);
     const responses = await pending;
-    expect((responses[0].payload as { text: string }).text).toBe('[lifecycle-1] echo: lifecycle test');
+    // Response may include a [System] join notice prefix for the human who joined after the agent
+    expect((responses[0].payload as { text: string }).text).toContain('[lifecycle-1] echo:');
+    expect((responses[0].payload as { text: string }).text).toContain('lifecycle test');
 
     // 6. Disconnect agent and verify leave
     const leavePromise = new Promise<void>((resolve) => {

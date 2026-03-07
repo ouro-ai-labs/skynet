@@ -16,7 +16,7 @@ import {
 } from '@skynet/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
-import { SKYNET_INTRO } from './skynet-intro.js';
+import { buildSkynetIntro } from './skynet-intro.js';
 
 export interface AgentRunnerOptions {
   serverUrl: string;
@@ -49,6 +49,8 @@ export class AgentRunner {
   private memberNames = new Map<string, string>();
   /** Recently processed message IDs to prevent duplicate handling. */
   private processedMessageIds = new Set<string>();
+  /** Pending notices (e.g. member join/leave) to piggyback on the next message. */
+  private pendingNotices: string[] = [];
 
   constructor(private options: AgentRunnerOptions) {
     const agentCard: AgentCard = {
@@ -77,11 +79,11 @@ export class AgentRunner {
       console: false,
     });
 
-    // Build system prompt for injection (persona + skynet skill)
+    // Build system prompt for injection (persona + skynet identity & rules)
     const parts: string[] = [];
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
-    parts.push(SKYNET_INTRO);
+    parts.push(buildSkynetIntro(agentCard.name));
     this.adapter.persona = parts.join('\n\n');
   }
 
@@ -98,9 +100,12 @@ export class AgentRunner {
     this.client.on('agent-join', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentJoinPayload;
       this.memberNames.set(payload.agent.id, payload.agent.name);
+      this.pendingNotices.push(`[System] ${payload.agent.name} has joined the workspace.`);
     });
     this.client.on('agent-leave', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentLeavePayload;
+      const name = this.memberNames.get(payload.agentId) ?? payload.agentId;
+      this.pendingNotices.push(`[System] ${name} has left the workspace.`);
       this.memberNames.delete(payload.agentId);
     });
 
@@ -114,6 +119,10 @@ export class AgentRunner {
 
     this.client.on('chat', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
+
+    // Clear any notices generated during initial connection — the agent already
+    // knows the initial member list from workspace state.
+    this.pendingNotices = [];
 
     return state;
   }
@@ -159,6 +168,14 @@ export class AgentRunner {
     this.processQueue();
   }
 
+  /** Drain pending notices and return them as a single prefix string, or empty. */
+  private flushNotices(): string {
+    if (this.pendingNotices.length === 0) return '';
+    const text = this.pendingNotices.join('\n');
+    this.pendingNotices = [];
+    return text;
+  }
+
   /** Check if this agent is @mentioned (directly or via @all). */
   private isMessageForMe(msg: SkynetMessage): boolean {
     if (!msg.mentions || msg.mentions.length === 0) return false;
@@ -182,10 +199,12 @@ export class AgentRunner {
     this.forkInProgress = true;
     const senderName = this.memberNames.get(msg.from) ?? msg.from;
     const text = (msg.payload as ChatPayload).text;
+    const notices = this.flushNotices();
     try {
-      const response = await this.adapter.quickReply(
-        `Message from ${senderName}: ${text}`,
-      );
+      const prompt = notices
+        ? `${notices}\n\nMessage from ${senderName}: ${text}`
+        : `Message from ${senderName}: ${text}`;
+      const response = await this.adapter.quickReply(prompt);
       if (response && response.trim() !== NO_REPLY) {
         const mentions = this.resolveMentions(response);
         // Always include the original sender in mentions
@@ -231,12 +250,16 @@ export class AgentRunner {
 
       if (chatBatch.length === 0) continue;
 
+      const notices = this.flushNotices();
       try {
         if (chatBatch.length === 1) {
           // Single message — process normally
           const msg = chatBatch[0];
           const senderName = this.memberNames.get(msg.from) ?? msg.from;
-          const response = await this.adapter.handleMessage(msg, senderName);
+          const msgToSend = notices
+            ? { ...msg, payload: { text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } as ChatPayload }
+            : msg;
+          const response = await this.adapter.handleMessage(msgToSend, senderName);
           if (response && response.trim() !== NO_REPLY) {
             const mentions = this.resolveMentions(response);
             // Always include the original sender in mentions
@@ -245,7 +268,7 @@ export class AgentRunner {
           }
         } else {
           // Multiple messages — batch into a single prompt
-          await this.handleBatchMessages(chatBatch);
+          await this.handleBatchMessages(chatBatch, notices);
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -260,7 +283,7 @@ export class AgentRunner {
   }
 
   /** Batch multiple chat messages into a single adapter call. */
-  private async handleBatchMessages(messages: SkynetMessage[]): Promise<void> {
+  private async handleBatchMessages(messages: SkynetMessage[], notices = ''): Promise<void> {
     // Build a combined message with all texts
     const lines = messages.map((msg) => {
       const senderName = this.memberNames.get(msg.from) ?? msg.from;
@@ -268,11 +291,13 @@ export class AgentRunner {
       return `[${senderName}]: ${text}`;
     });
 
+    const prefix = notices ? `${notices}\n\n` : '';
+
     // Create a synthetic message for the adapter
     const batchMsg: SkynetMessage = {
       ...messages[0],
       payload: {
-        text: `You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
+        text: `${prefix}You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
       },
     };
 
