@@ -56,7 +56,10 @@ skynet human create my-project --name alice
 skynet chat my-project --as alice
 ```
 
-Or load the [agent skill](skills/skynet/SKILL.md) into your coding agent and manage everything in natural language:
+Or load the agent skill into your coding agent and manage everything in natural language:
+
+- [skills/skynet](skills/skynet/SKILL.md) — for production use (`npm install -g @skynet-ai/cli`)
+- [skills/skynet-dev](skills/skynet-dev/SKILL.md) — for local development (`pnpm skynet`)
 
 > "Create a workspace called my-project, add a Claude agent named backend, and let me join as alice"
 

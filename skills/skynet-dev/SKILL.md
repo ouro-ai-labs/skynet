@@ -1,13 +1,15 @@
 ---
-name: skynet
-description: Manage the Skynet multi-agent collaboration network using the skynet CLI. Use when creating or managing workspaces, agents, humans, or checking system status.
+name: skynet-dev
+description: Manage the Skynet multi-agent collaboration network using the local dev CLI (pnpm skynet). Use when developing and testing Skynet locally.
 ---
 
-# Skynet Management Skill
+# Skynet Management Skill (Development)
 
-You can manage the Skynet multi-agent collaboration network using the `skynet` CLI. All commands below are non-interactive (pass all options as flags) so you can run them directly via your shell tool.
+You can manage the Skynet multi-agent collaboration network using the local dev CLI. All commands below are non-interactive (pass all options as flags) so you can run them directly via your shell tool.
 
-**Prerequisites**: Install the CLI via `npm install -g @skynet-ai/cli`.
+**Prerequisites**: From the Skynet repo root, run `pnpm install && pnpm build` first.
+
+> **Note**: All commands use `pnpm skynet` instead of `skynet`. This runs the locally built CLI.
 
 ---
 
@@ -16,7 +18,7 @@ You can manage the Skynet multi-agent collaboration network using the `skynet` C
 ### Create a workspace
 
 ```bash
-skynet workspace new --name <workspace-name> [--host <host>] [--port <port>]
+pnpm skynet workspace new --name <workspace-name> [--host <host>] [--port <port>]
 ```
 
 - `--name` (required): Human-readable workspace name
@@ -26,13 +28,13 @@ skynet workspace new --name <workspace-name> [--host <host>] [--port <port>]
 ### List workspaces
 
 ```bash
-skynet workspace list
+pnpm skynet workspace list
 ```
 
 ### Delete a workspace
 
 ```bash
-skynet workspace delete <workspace-uuid> --force
+pnpm skynet workspace delete <workspace-uuid> --force
 ```
 
 Removes the workspace from the registry and deletes all its data (agents, messages, config).
@@ -41,10 +43,10 @@ Removes the workspace from the registry and deletes all its data (agents, messag
 
 ```bash
 # Start by name or UUID
-skynet workspace start <name-or-id>
+pnpm skynet workspace start <name-or-id>
 
 # If only one workspace exists, just run:
-skynet workspace start
+pnpm skynet workspace start
 ```
 
 > Note: This is a long-running process. Run it in the background or in a separate terminal.
@@ -58,7 +60,7 @@ All agent commands require a running workspace. Use `--workspace <name-or-id>` i
 ### Create an agent
 
 ```bash
-skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workspace <name-or-id>]
+pnpm skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workspace <name-or-id>]
 ```
 
 - `--name` (required): Agent display name
@@ -69,7 +71,7 @@ skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--pers
 ### Start an agent
 
 ```bash
-skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
+pnpm skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
 ```
 
 Connects the agent to the workspace and starts processing messages. This is a long-running process — run it in the background or in a separate terminal. Press `Ctrl+C` to disconnect.
@@ -77,7 +79,7 @@ Connects the agent to the workspace and starts processing messages. This is a lo
 ### Delete an agent
 
 ```bash
-skynet agent delete <agent-uuid> --force [--workspace <name-or-id>]
+pnpm skynet agent delete <agent-uuid> --force [--workspace <name-or-id>]
 ```
 
 Deletes the agent from the workspace. Fails if the agent is currently connected.
@@ -85,7 +87,7 @@ Deletes the agent from the workspace. Fails if the agent is currently connected.
 ### List agents
 
 ```bash
-skynet agent list [--workspace <name-or-id>]
+pnpm skynet agent list [--workspace <name-or-id>]
 ```
 
 ---
@@ -95,13 +97,13 @@ skynet agent list [--workspace <name-or-id>]
 ### Create a human
 
 ```bash
-skynet human new --name <human-name> [--workspace <name-or-id>]
+pnpm skynet human new --name <human-name> [--workspace <name-or-id>]
 ```
 
 ### Delete a human
 
 ```bash
-skynet human delete <human-uuid> --force [--workspace <name-or-id>]
+pnpm skynet human delete <human-uuid> --force [--workspace <name-or-id>]
 ```
 
 Deletes the human from the workspace. Fails if the human is currently connected.
@@ -109,17 +111,17 @@ Deletes the human from the workspace. Fails if the human is currently connected.
 ### List humans
 
 ```bash
-skynet human list [--workspace <name-or-id>]
+pnpm skynet human list [--workspace <name-or-id>]
 ```
 
 ---
 
 ## Chat (Human Only)
 
-> **Do NOT run this command yourself.** `skynet chat` launches an interactive TUI for humans to join the workspace. When you need a human to join, tell them to run this command in a separate terminal.
+> **Do NOT run this command yourself.** `pnpm skynet chat` launches an interactive TUI for humans to join the workspace. When you need a human to join, tell them to run this command in a separate terminal.
 
 ```bash
-skynet chat [--name <human-name>] [--workspace <name-or-id>]
+pnpm skynet chat [--name <human-name>] [--workspace <name-or-id>]
 ```
 
 - `--name` (optional): Human name to join as (skips selection prompt)
@@ -132,7 +134,7 @@ skynet chat [--name <human-name>] [--workspace <name-or-id>]
 ### Check workspace status
 
 ```bash
-skynet status [--workspace <name-or-id>]
+pnpm skynet status [--workspace <name-or-id>]
 ```
 
 Shows all registered agents and humans with their id, name, role, persona, and online status.
@@ -141,13 +143,14 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 
 ## Typical Workflow
 
-1. **Create a workspace**: `skynet workspace new --name my-project`
-2. **Start the workspace**: `skynet workspace start my-project` (keep running)
-3. **Create agents**: `skynet agent new --name backend --type claude-code --role "backend engineer"`
-4. **Start the agent**: `skynet agent start backend` (keep running)
-5. **Create a human**: `skynet human new --name alice`
-6. **Human joins chat** (tell them to run): `skynet chat --name alice`
-7. **Check status**: `skynet status`
+1. **Build**: `pnpm install && pnpm build`
+2. **Create a workspace**: `pnpm skynet workspace new --name my-project`
+3. **Start the workspace**: `pnpm skynet workspace start my-project` (keep running)
+4. **Create agents**: `pnpm skynet agent new --name backend --type claude-code --role "backend engineer"`
+5. **Start the agent**: `pnpm skynet agent start backend` (keep running)
+6. **Create a human**: `pnpm skynet human new --name alice`
+7. **Human joins chat** (tell them to run): `pnpm skynet chat --name alice`
+8. **Check status**: `pnpm skynet status`
 
 ---
 
@@ -163,6 +166,6 @@ All runtime logs are written to `~/.skynet/<workspace-uuid>/logs/`:
 ## Tips
 
 - **CRITICAL**: When deleting workspaces, agents, or humans, you **MUST** always pass `--force`. Without `--force`, the command enters an interactive confirmation prompt that will hang and block the agent indefinitely.
-- Run `skynet status` to see who is currently connected.
+- Run `pnpm skynet status` to see who is currently connected.
 - Each workspace stores its data in `~/.skynet/<workspace-uuid>/data.db`.
 - The workspace server exposes a REST API at `http://<host>:<port>/api/` for programmatic access.
