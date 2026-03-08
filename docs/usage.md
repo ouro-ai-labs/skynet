@@ -97,6 +97,8 @@ Once running, the server exposes:
 | `POST /api/humans` | Create human (`{name}`) |
 | `GET /api/humans` | List all humans |
 | `GET /api/humans/:id` | Get human by UUID or name |
+| `POST /api/agents/:id/interrupt` | Interrupt agent's current task |
+| `POST /api/agents/:id/forget` | Reset agent's conversation session |
 | `GET /api/names/check?name=x` | Check name availability |
 | `GET /ws` | WebSocket endpoint for agents/clients |
 
@@ -105,9 +107,11 @@ Once running, the server exposes:
 Create, list, and start agents.
 
 ```bash
-skynet agent new   [--workspace <id>]  # Create agent (interactive)
-skynet agent list  [--workspace <id>]  # List all agents
-skynet agent       [--workspace <id>]  # Select and start agent
+skynet agent new        [--workspace <id>]  # Create agent (interactive)
+skynet agent list       [--workspace <id>]  # List all agents
+skynet agent            [--workspace <id>]  # Select and start agent
+skynet agent interrupt  <name-or-id>        # Interrupt agent's current task
+skynet agent forget     <name-or-id>        # Reset agent's conversation session
 ```
 
 **`skynet agent new`** auto-detects locally installed CLI agents (Claude Code, Gemini CLI, Codex CLI) and prompts:
@@ -161,6 +165,8 @@ Within the chat TUI, these commands are available:
 
 ```
 /agent list                    List agents
+/agent interrupt <name>        Interrupt agent's current task
+/agent forget <name>           Reset agent's conversation session
 /human list                    List humans
 ```
 

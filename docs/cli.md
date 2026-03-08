@@ -153,6 +153,34 @@ skynet agent delete a1b2c3d4-... --force
 | `--workspace <name-or-id>` | Workspace name or UUID |
 | `--force` | Skip confirmation prompt |
 
+### `skynet agent interrupt <name-or-id>`
+
+Interrupt a running agent, cancelling its current task. Equivalent to pressing `Ctrl+C` in an interactive Claude Code session. The agent remains connected and can receive new tasks.
+
+```bash
+skynet agent interrupt coder --workspace <name-or-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+
+Returns an error if the agent is not found (404) or not connected (409).
+
+### `skynet agent forget <name-or-id>`
+
+Reset an agent's conversation session, clearing all accumulated context. The agent starts fresh as if it were just created, while remaining connected to the workspace. Useful when reassigning an agent to an unrelated task.
+
+```bash
+skynet agent forget coder --workspace <name-or-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+
+Returns an error if the agent is not found (404) or not connected (409).
+
 ### `skynet agent` (bare)
 
 Interactive shortcut: select a registered agent and start it (connects to the workspace via WebSocket). Press `Ctrl+C` to disconnect.

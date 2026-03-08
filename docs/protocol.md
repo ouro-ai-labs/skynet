@@ -36,6 +36,10 @@ enum MessageType {
   // Context sharing
   CONTEXT_SHARE = 'context.share',  // Share file/project info
   FILE_CHANGE = 'file.change',      // File change notification
+
+  // Agent control
+  AGENT_INTERRUPT = 'agent.interrupt',  // Interrupt agent's current task
+  AGENT_FORGET = 'agent.forget',        // Reset agent's session
 }
 ```
 
@@ -186,6 +190,19 @@ interface ContextSharePayload {
 interface FileChangePayload {
   path: string;
   changeType: 'created' | 'modified' | 'deleted';
+  agentId: string;
+}
+```
+
+### Agent Control
+
+```typescript
+interface AgentInterruptPayload {
+  agentId: string;
+  reason?: string;
+}
+
+interface AgentForgetPayload {
   agentId: string;
 }
 ```

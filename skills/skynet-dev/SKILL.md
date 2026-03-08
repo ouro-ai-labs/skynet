@@ -84,6 +84,22 @@ pnpm skynet agent delete <agent-uuid> --force [--workspace <name-or-id>]
 
 Deletes the agent from the workspace. Fails if the agent is currently connected.
 
+### Interrupt an agent
+
+```bash
+pnpm skynet agent interrupt <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+Interrupts the agent's currently running task (equivalent to `Ctrl+C`). The agent remains connected and can receive new tasks.
+
+### Reset an agent's session (forget)
+
+```bash
+pnpm skynet agent forget <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+Clears the agent's conversation history so it starts fresh. Useful when reassigning an agent to an unrelated task.
+
 ### List agents
 
 ```bash
