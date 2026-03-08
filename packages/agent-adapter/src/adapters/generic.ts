@@ -13,6 +13,19 @@ export interface GenericAdapterConfig {
   timeout?: number;
 }
 
+/** Sanitize execa errors to avoid leaking the full command line when broadcast. */
+function sanitizeExecaError(err: unknown): Error {
+  if (err instanceof Error) {
+    const short = (err as { shortMessage?: string }).shortMessage;
+    if (short && short !== err.message) {
+      const sanitized = new Error(short);
+      sanitized.name = err.name;
+      return sanitized;
+    }
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 export class GenericAdapter extends AgentAdapter {
   readonly type = AgentType.GENERIC;
   readonly name: string;
@@ -82,11 +95,15 @@ export class GenericAdapter extends AgentAdapter {
       cmd = `echo ${JSON.stringify(prompt)} | ${command} ${args.join(' ')}`.trim();
     }
 
-    const result = await execaCommand(cmd, {
-      cwd: this.config.projectRoot,
-      shell: shell ?? true,
-      timeout: this.config.timeout ?? 1_200_000,
-    });
-    return result.stdout;
+    try {
+      const result = await execaCommand(cmd, {
+        cwd: this.config.projectRoot,
+        shell: shell ?? true,
+        timeout: this.config.timeout ?? 1_200_000,
+      });
+      return result.stdout;
+    } catch (err) {
+      throw sanitizeExecaError(err);
+    }
   }
 }

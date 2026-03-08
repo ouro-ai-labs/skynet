@@ -117,6 +117,16 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
           return prev;
         });
       }
+      // Update member status in local state
+      setMembers((prev) => {
+        const member = prev.get(data.agentId);
+        if (member) {
+          const next = new Map(prev);
+          next.set(data.agentId, { ...member, status: data.status as AgentCard['status'] });
+          return next;
+        }
+        return prev;
+      });
     });
 
     client.on('disconnected', () => {

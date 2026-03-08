@@ -201,6 +201,66 @@ describe('ClaudeCodeAdapter handleMessage', () => {
   });
 });
 
+describe('ClaudeCodeAdapter error sanitization', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('strips full command line from execa errors to avoid leaking system prompt', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    adapter.persona = 'You are a secret agent with classified instructions.';
+
+    // Simulate an execa error with shortMessage (clean) and message (leaks command)
+    const execaError = new Error(
+      'Command failed with exit code 1: claude -p "hello" --append-system-prompt "You are a secret agent with classified instructions."',
+    );
+    (execaError as unknown as { shortMessage: string }).shortMessage = 'Command failed with exit code 1';
+    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(execaError);
+
+    const err = await adapter.handleMessage(makeMsg()).catch((e: unknown) => e) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe('Command failed with exit code 1');
+    expect(err.message).not.toContain('secret agent');
+    expect(err.message).not.toContain('append-system-prompt');
+  });
+
+  it('preserves error message when no shortMessage is available', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Connection refused'));
+
+    const err = await adapter.handleMessage(makeMsg()).catch((e: unknown) => e) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe('Connection refused');
+  });
+
+  it('sanitizes quickReply errors too', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Start session first
+    await adapter.handleMessage(makeMsg());
+
+    const execaError = new Error('Command timed out: claude -p "test" --resume abc --fork-session');
+    (execaError as unknown as { shortMessage: string }).shortMessage = 'Command timed out';
+    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(execaError);
+
+    const err = await adapter.quickReply('test').catch((e: unknown) => e) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toBe('Command timed out');
+    expect(err.message).not.toContain('--resume');
+  });
+});
+
 describe('ClaudeCodeAdapter quickReply (session fork)', () => {
   let tempDir: string;
 
