@@ -162,6 +162,7 @@ All runtime logs are written to `~/.skynet/<workspace-uuid>/logs/`:
 
 ## Tips
 
+- **CRITICAL**: When deleting workspaces, agents, or humans, you **MUST** always pass `--force`. Without `--force`, the command enters an interactive confirmation prompt that will hang and block the agent indefinitely.
 - Run `skynet status` to see who is currently connected.
 - Each workspace stores its data in `~/.skynet/<workspace-uuid>/data.db`.
 - The workspace server exposes a REST API at `http://<host>:<port>/api/` for programmatic access.
