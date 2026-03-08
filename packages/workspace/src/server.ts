@@ -251,6 +251,22 @@ export class SkynetWorkspace {
   private handleJoin(socket: WebSocket, req: JoinRequest): void {
     const agentId = req.agent.id;
 
+    // Validate that the agent/human is registered in this workspace's store.
+    // This prevents stale agents from a previous workspace (same port, different DB) from joining.
+    const isHuman = req.agent.type === AgentType.HUMAN;
+    const registered = isHuman
+      ? this.store.getHuman(agentId)
+      : this.store.getAgent(agentId);
+    if (!registered) {
+      this.logger.warn(`Rejected unregistered ${isHuman ? 'human' : 'agent'}: ${req.agent.name} (${agentId})`);
+      socket.send(JSON.stringify({
+        event: 'error',
+        data: { message: `Unknown ${isHuman ? 'human' : 'agent'} ID. Register via the HTTP API first.` },
+      }));
+      socket.close();
+      return;
+    }
+
     // Check if this is a reconnection (agent already known or has a pending leave)
     const pendingLeave = this.pendingLeaves.get(agentId);
     const existingMember = this.members.getMember(agentId);
@@ -274,7 +290,6 @@ export class SkynetWorkspace {
     // Always send workspace state to the (re)connecting agent.
     // Humans see all messages; agents only see messages mentioning them.
     const since = req.lastSeenTimestamp;
-    const isHuman = req.agent.type === AgentType.HUMAN;
     const recentMessages = isHuman
       ? this.store.getMessages(this.recentMentionsLimit, undefined, since)
       : this.store.getMessagesFor(agentId, this.recentMentionsLimit, since);

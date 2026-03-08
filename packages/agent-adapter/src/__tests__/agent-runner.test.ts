@@ -11,6 +11,13 @@ import { buildSkynetIntro } from '../skynet-intro.js';
 
 // ── Mocks ──
 
+// Mock fetch for agent registration — return "already registered" (200 OK)
+vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+  ok: true,
+  status: 200,
+  json: async () => ({}),
+}));
+
 vi.mock('@skynet/sdk', () => {
   const EventEmitter = require('node:events').EventEmitter;
 

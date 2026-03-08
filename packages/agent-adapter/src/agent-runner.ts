@@ -114,6 +114,11 @@ export class AgentRunner {
 
   async start(): Promise<WorkspaceState> {
     this.logger.info(`Connecting to ${this.options.serverUrl}`);
+
+    // Ensure the agent is registered in the workspace before connecting via WebSocket.
+    // The server rejects JOIN from unregistered agents.
+    await this.ensureRegistered();
+
     const state = await this.client.connect();
     this.logger.info(`Connected, ${state.members.length} members online`);
 
@@ -163,6 +168,45 @@ export class AgentRunner {
 
   get agentId(): string {
     return this.client.agent.id;
+  }
+
+  /** Register the agent via HTTP API if it doesn't already exist in the workspace. */
+  private async ensureRegistered(): Promise<void> {
+    const { serverUrl } = this.options;
+    const agent = this.client.agent;
+    const url = `${serverUrl}/api/agents/${agent.id}`;
+
+    const check = await fetch(url);
+    if (check.ok) return; // Already registered
+
+    const create = await fetch(`${serverUrl}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: agent.name,
+        type: agent.type,
+        role: agent.role,
+        persona: agent.persona,
+      }),
+    });
+
+    if (create.ok) {
+      // Server assigned a new ID — update our agent card to match
+      const created = await create.json() as AgentCard;
+      (this.client.agent as AgentCard).id = created.id;
+      this.logger.info(`Auto-registered agent: ${created.name} (${created.id})`);
+    } else if (create.status === 409) {
+      // Name already taken — look up the existing agent by name and use its ID
+      const lookup = await fetch(`${serverUrl}/api/agents/${agent.name}`);
+      if (lookup.ok) {
+        const existing = await lookup.json() as AgentCard;
+        (this.client.agent as AgentCard).id = existing.id;
+        this.logger.info(`Using existing agent: ${existing.name} (${existing.id})`);
+      }
+    } else {
+      const body = await create.text();
+      throw new Error(`Failed to register agent: ${create.status} ${body}`);
+    }
   }
 
   get agentName(): string {

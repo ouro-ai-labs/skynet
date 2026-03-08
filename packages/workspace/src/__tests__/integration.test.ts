@@ -2,19 +2,29 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet/sdk';
-import { AgentType, MENTION_ALL, type SkynetMessage, type ServerEvent } from '@skynet/protocol';
+import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet/protocol';
 import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);
 
-function makeClient(name: string, type = AgentType.HUMAN) {
+/** Register an agent or human via the HTTP API, then return a connected-ready SkynetClient. */
+async function makeClient(port: number, name: string, type = AgentType.HUMAN): Promise<SkynetClient> {
+  const isHuman = type === AgentType.HUMAN;
+  const url = isHuman
+    ? `http://localhost:${port}/api/humans`
+    : `http://localhost:${port}/api/agents`;
+  const body = isHuman
+    ? { name }
+    : { name, type };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const entity = await res.json() as { id: string };
   return new SkynetClient({
-    serverUrl: `http://localhost:${PORT}`,
-    agent: {
-      id: randomUUID(),
-      name,
-      type,
-    },
+    serverUrl: `http://localhost:${port}`,
+    agent: { id: entity.id, name, type },
     reconnect: false,
   });
 }
@@ -41,9 +51,21 @@ describe('Server integration', () => {
     expect(data.status).toBe('ok');
   });
 
+  it('rejects unregistered agent on WebSocket join', async () => {
+    const client = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: { id: randomUUID(), name: 'ghost', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+    });
+
+    // Server sends an error event then closes the socket.
+    // connect() rejects because socket closes before workspace.state is received.
+    await expect(client.connect()).rejects.toThrow('Unknown agent ID');
+  });
+
   it('two clients can exchange messages', async () => {
-    const alice = makeClient('alice');
-    const bob = makeClient('bob');
+    const alice = await makeClient(PORT, 'alice');
+    const bob = await makeClient(PORT, 'bob');
 
     await alice.connect();
     const bobState = await bob.connect();
@@ -66,10 +88,10 @@ describe('Server integration', () => {
   });
 
   it('mention reaches only the mentioned agent (non-human agents excluded)', async () => {
-    const alice = makeClient('alice-dm');
-    const bob = makeClient('bob-dm');
+    const alice = await makeClient(PORT, 'alice-dm');
+    const bob = await makeClient(PORT, 'bob-dm');
     // charlie is a non-human agent — should NOT receive messages not mentioning them
-    const charlie = makeClient('charlie-dm', AgentType.CLAUDE_CODE);
+    const charlie = await makeClient(PORT, 'charlie-dm', AgentType.CLAUDE_CODE);
 
     await alice.connect();
     await bob.connect();
@@ -98,9 +120,9 @@ describe('Server integration', () => {
   });
 
   it('humans see all messages even without being mentioned', async () => {
-    const agent1 = makeClient('agent-vis-1', AgentType.CLAUDE_CODE);
-    const agent2 = makeClient('agent-vis-2', AgentType.CLAUDE_CODE);
-    const human = makeClient('human-vis');
+    const agent1 = await makeClient(PORT, 'agent-vis-1', AgentType.CLAUDE_CODE);
+    const agent2 = await makeClient(PORT, 'agent-vis-2', AgentType.CLAUDE_CODE);
+    const human = await makeClient(PORT, 'human-vis');
 
     await agent1.connect();
     await agent2.connect();
@@ -125,9 +147,9 @@ describe('Server integration', () => {
   });
 
   it('@all reaches all members', async () => {
-    const alice = makeClient('alice-bc');
-    const bob = makeClient('bob-bc');
-    const charlie = makeClient('charlie-bc');
+    const alice = await makeClient(PORT, 'alice-bc');
+    const bob = await makeClient(PORT, 'bob-bc');
+    const charlie = await makeClient(PORT, 'charlie-bc');
 
     await alice.connect();
     await bob.connect();
@@ -156,7 +178,7 @@ describe('Server integration', () => {
   });
 
   it('members API returns connected members', async () => {
-    const client = makeClient('alice-api');
+    const client = await makeClient(PORT, 'alice-api');
     await client.connect();
 
     const res = await fetch(`http://localhost:${PORT}/api/members`);
@@ -167,7 +189,7 @@ describe('Server integration', () => {
   });
 
   it('messages are persisted and retrievable', async () => {
-    const alice = makeClient('alice-persist');
+    const alice = await makeClient(PORT, 'alice-persist');
     await alice.connect();
 
     await sleep(50);
@@ -184,11 +206,11 @@ describe('Server integration', () => {
   });
 
   it('mentions reach all mentioned agents but not unmentioned non-human agents', async () => {
-    const alice = makeClient('alice-mention');
-    const bob = makeClient('bob-mention');
-    const charlie = makeClient('charlie-mention');
+    const alice = await makeClient(PORT, 'alice-mention');
+    const bob = await makeClient(PORT, 'bob-mention');
+    const charlie = await makeClient(PORT, 'charlie-mention');
     // dave is a non-human agent — should NOT receive messages not mentioning them
-    const dave = makeClient('dave-mention', AgentType.CLAUDE_CODE);
+    const dave = await makeClient(PORT, 'dave-mention', AgentType.CLAUDE_CODE);
 
     await alice.connect();
     await bob.connect();
@@ -226,7 +248,7 @@ describe('Server integration', () => {
   });
 
   it('agent-join event is received by existing members', async () => {
-    const alice = makeClient('alice-join');
+    const alice = await makeClient(PORT, 'alice-join');
     await alice.connect();
 
     const joinEvents: string[] = [];
@@ -235,7 +257,7 @@ describe('Server integration', () => {
       joinEvents.push(payload.agent.name);
     });
 
-    const bob = makeClient('bob-join');
+    const bob = await makeClient(PORT, 'bob-join');
     await bob.connect();
     await sleep(200);
 
@@ -246,8 +268,8 @@ describe('Server integration', () => {
   });
 
   it('agent-leave event is received when a member disconnects', async () => {
-    const alice = makeClient('alice-leave');
-    const bob = makeClient('bob-leave');
+    const alice = await makeClient(PORT, 'alice-leave');
+    const bob = await makeClient(PORT, 'bob-leave');
 
     await alice.connect();
     await bob.connect();
@@ -270,14 +292,18 @@ describe('Server integration', () => {
   });
 
   it('reconnecting agent does not broadcast duplicate join/leave', async () => {
-    const alice = makeClient('alice-recon');
+    const alice = await makeClient(PORT, 'alice-recon');
+    // Register bob via HTTP API so we can reuse the ID for reconnection
+    const bobRes = await fetch(`http://localhost:${PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'bob-recon' }),
+    });
+    const bobEntity = await bobRes.json() as { id: string };
+
     const reconnectBob = new SkynetClient({
       serverUrl: `http://localhost:${PORT}`,
-      agent: {
-        id: randomUUID(),
-        name: 'bob-recon',
-        type: AgentType.HUMAN,
-      },
+      agent: { id: bobEntity.id, name: 'bob-recon', type: AgentType.HUMAN },
       reconnect: false,
     });
 
@@ -304,11 +330,7 @@ describe('Server integration', () => {
     // Immediately reconnect with the same agent ID (within grace period)
     const reconnectBob2 = new SkynetClient({
       serverUrl: `http://localhost:${PORT}`,
-      agent: {
-        id: bobAgentId,
-        name: 'bob-recon',
-        type: AgentType.HUMAN,
-      },
+      agent: { id: bobAgentId, name: 'bob-recon', type: AgentType.HUMAN },
       reconnect: false,
     });
     await reconnectBob2.connect();
@@ -323,11 +345,18 @@ describe('Server integration', () => {
   });
 
   it('workspace.state respects lastSeenTimestamp from client', async () => {
-    const alice = makeClient('alice-seen');
+    const alice = await makeClient(PORT, 'alice-seen');
     await alice.connect();
     await sleep(50);
 
-    const bobId = randomUUID();
+    // Register bob via HTTP API
+    const bobRes = await fetch(`http://localhost:${PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'bob-seen' }),
+    });
+    const bobEntity = await bobRes.json() as { id: string };
+    const bobId = bobEntity.id;
 
     // Send two mentions to bob at different times
     alice.chat('old msg for bob', [bobId]);
@@ -359,8 +388,8 @@ describe('Server integration', () => {
   });
 
   it('typing indicator is broadcast to other members', async () => {
-    const alice = makeClient('alice-typing');
-    const bob = makeClient('bob-typing');
+    const alice = await makeClient(PORT, 'alice-typing');
+    const bob = await makeClient(PORT, 'bob-typing');
 
     await alice.connect();
     await bob.connect();
@@ -389,7 +418,7 @@ describe('Server integration', () => {
   });
 
   it('typing indicator is not echoed back to sender', async () => {
-    const alice = makeClient('alice-typing-echo');
+    const alice = await makeClient(PORT, 'alice-typing-echo');
     await alice.connect();
     await sleep(50);
 
@@ -407,9 +436,9 @@ describe('Server integration', () => {
   });
 
   it('workspace.state for non-human agents only includes messages mentioning them', async () => {
-    const alice = makeClient('alice-state');
+    const alice = await makeClient(PORT, 'alice-state');
     // bob is a non-human agent — should only see mentioned messages
-    const bob = makeClient('bob-state', AgentType.CLAUDE_CODE);
+    const bob = await makeClient(PORT, 'bob-state', AgentType.CLAUDE_CODE);
     await alice.connect();
     await sleep(50);
 
@@ -437,8 +466,8 @@ describe('Server integration', () => {
   });
 
   it('workspace.state for humans includes all recent messages', async () => {
-    const agent = makeClient('agent-state', AgentType.CLAUDE_CODE);
-    const human = makeClient('human-state');
+    const agent = await makeClient(PORT, 'agent-state', AgentType.CLAUDE_CODE);
+    const human = await makeClient(PORT, 'human-state');
     await agent.connect();
     await sleep(50);
 
@@ -684,12 +713,17 @@ describe('Server HTTP API', () => {
   });
 
   it('messages endpoint supports pagination', async () => {
-    // Connect a client and send a few messages
-    const client = makeClient('paginator');
-    // Use the API port server
+    // Register and connect a client via HTTP API
+    const res = await fetch(`http://localhost:${API_PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'paginator' }),
+    });
+    const entity = await res.json() as { id: string };
+
     const paginatorClient = new SkynetClient({
       serverUrl: `http://localhost:${API_PORT}`,
-      agent: { id: randomUUID(), name: 'paginator', type: AgentType.HUMAN },
+      agent: { id: entity.id, name: 'paginator', type: AgentType.HUMAN },
       reconnect: false,
     });
     await paginatorClient.connect();
