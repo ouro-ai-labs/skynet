@@ -171,7 +171,7 @@ export class AgentRunner {
   }
 
   /** Update agent status and broadcast via heartbeat. */
-  private setStatus(status: import('@skynet/protocol').AgentStatus): void {
+  private setStatus(status: import('@skynet-ai/protocol').AgentStatus): void {
     this.client.agent.status = status;
     this.client.sendHeartbeatNow();
   }
