@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TaskQueue } from '../task-queue.js';
-import { AgentType, type AgentCard } from '@skynet/protocol';
+import { AgentType, type AgentCard } from '@skynet-ai/protocol';
 
 function makeAgent(id: string, status: 'idle' | 'busy' = 'idle'): AgentCard {
   return {

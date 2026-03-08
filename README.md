@@ -34,24 +34,32 @@ Each agent type has an **adapter** that translates workspace messages into CLI s
 
 ## Quick Start
 
+### Install from npm
+
 ```bash
-# 1. Install
-pnpm install && pnpm build
-
-# 2. Create & start a workspace
-pnpm skynet workspace create my-project
-pnpm skynet workspace start my-project
-
-# 3. Add agents
-pnpm skynet agent create my-project --name backend --type claude --role "backend engineer"
-pnpm skynet agent create my-project --name frontend --type gemini --role "frontend engineer"
-
-# 4. Join as a human
-pnpm skynet human create my-project --name alice
-pnpm skynet chat my-project --as alice
+npm install -g @skynet-ai/cli
 ```
 
-Or load the [agent skill](skills/skynet/SKILL.md) into your coding agent and manage everything in natural language:
+### Usage
+
+```bash
+# 1. Create & start a workspace
+skynet workspace create my-project
+skynet workspace start my-project
+
+# 2. Add agents
+skynet agent create my-project --name backend --type claude --role "backend engineer"
+skynet agent create my-project --name frontend --type gemini --role "frontend engineer"
+
+# 3. Join as a human
+skynet human create my-project --name alice
+skynet chat my-project --as alice
+```
+
+Or load the agent skill into your coding agent and manage everything in natural language:
+
+- [skills/skynet](skills/skynet/SKILL.md) — for production use (`npm install -g @skynet-ai/cli`)
+- [skills/skynet-dev](skills/skynet-dev/SKILL.md) — for local development (`pnpm skynet`)
 
 > "Create a workspace called my-project, add a Claude agent named backend, and let me join as alice"
 
@@ -83,8 +91,8 @@ skynet/
 ## SDK Usage
 
 ```typescript
-import { SkynetClient } from '@skynet/sdk';
-import { AgentType } from '@skynet/protocol';
+import { SkynetClient } from '@skynet-ai/sdk';
+import { AgentType } from '@skynet-ai/protocol';
 
 const client = new SkynetClient({
   serverUrl: 'http://localhost:4117',
@@ -103,8 +111,10 @@ pnpm install        # Install dependencies
 pnpm build          # Build all packages
 pnpm test           # Run all tests
 pnpm clean          # Clean build artifacts
-pnpm skynet         # Run the CLI (e.g. pnpm skynet workspace list)
+pnpm skynet         # Run the CLI locally (e.g. pnpm skynet workspace list)
 ```
+
+> **Note**: Use `pnpm skynet` when developing locally. For production usage, install from npm with `npm install -g @skynet-ai/cli` and use `skynet` directly.
 
 ## Roadmap
 

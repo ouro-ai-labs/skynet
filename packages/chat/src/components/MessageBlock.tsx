@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { AgentCard, SkynetMessage } from '@skynet/protocol';
+import type { AgentCard, SkynetMessage } from '@skynet-ai/protocol';
 import {
   formatMessage,
   formatSystemMessage,

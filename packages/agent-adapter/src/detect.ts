@@ -1,4 +1,4 @@
-import { AgentType } from '@skynet/protocol';
+import { AgentType } from '@skynet-ai/protocol';
 import { ClaudeCodeAdapter } from './adapters/claude-code.js';
 import { GeminiCliAdapter } from './adapters/gemini-cli.js';
 import { CodexCliAdapter } from './adapters/codex-cli.js';

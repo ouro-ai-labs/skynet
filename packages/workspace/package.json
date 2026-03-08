@@ -1,10 +1,22 @@
 {
-  "name": "@skynet/workspace",
+  "name": "@skynet-ai/workspace",
   "version": "0.1.0",
+  "description": "WebSocket server, member management, and message routing for Skynet",
   "type": "module",
-  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ouro-ai-labs/skynet.git",
+    "directory": "packages/workspace"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -12,14 +24,14 @@
     "dev": "node --watch dist/index.js"
   },
   "dependencies": {
-    "@skynet/logger": "workspace:*",
-    "@skynet/protocol": "workspace:*",
+    "@skynet-ai/logger": "workspace:*",
+    "@skynet-ai/protocol": "workspace:*",
     "better-sqlite3": "^11.0.0",
     "fastify": "^5.0.0",
     "@fastify/websocket": "^11.0.0"
   },
   "devDependencies": {
-    "@skynet/sdk": "workspace:*",
+    "@skynet-ai/sdk": "workspace:*",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",

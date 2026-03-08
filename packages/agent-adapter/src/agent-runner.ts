@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { Logger } from '@skynet/logger';
+import { Logger } from '@skynet-ai/logger';
 import {
   type AgentCard,
   type AgentJoinPayload,
@@ -13,13 +13,13 @@ import {
   MessageType,
   MENTION_ALL,
   extractMentionNames,
-} from '@skynet/protocol';
+} from '@skynet-ai/protocol';
 
 interface MemberInfo {
   name: string;
   type: AgentType;
 }
-import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
+import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 import type { AgentAdapter } from './base-adapter.js';
 import { buildSkynetIntro } from './skynet-intro.js';
 
@@ -171,7 +171,7 @@ export class AgentRunner {
   }
 
   /** Update agent status and broadcast via heartbeat. */
-  private setStatus(status: import('@skynet/protocol').AgentStatus): void {
+  private setStatus(status: import('@skynet-ai/protocol').AgentStatus): void {
     this.client.agent.status = status;
     this.client.sendHeartbeatNow();
   }

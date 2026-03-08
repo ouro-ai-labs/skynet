@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { SkynetClient } from '../client.js';
-import { AgentType } from '@skynet/protocol';
+import { AgentType } from '@skynet-ai/protocol';
 
 let port = 19870;
 function nextPort(): number {

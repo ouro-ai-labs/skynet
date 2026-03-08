@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import type { HumanProfile } from '@skynet/protocol';
-import { runChatTUI } from '@skynet/chat';
+import type { HumanProfile } from '@skynet-ai/protocol';
+import { runChatTUI } from '@skynet-ai/chat';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
 export function registerChatCommand(program: Command): void {

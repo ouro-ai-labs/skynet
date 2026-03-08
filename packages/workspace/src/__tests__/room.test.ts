@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemberManager } from '../member-manager.js';
-import { AgentType, createChatMessage } from '@skynet/protocol';
-import type { AgentCard } from '@skynet/protocol';
+import { AgentType, createChatMessage } from '@skynet-ai/protocol';
+import type { AgentCard } from '@skynet-ai/protocol';
 import type { WebSocket } from 'ws';
 
 function mockSocket(open = true): WebSocket {

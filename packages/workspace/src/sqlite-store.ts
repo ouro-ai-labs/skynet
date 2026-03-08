@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { MENTION_ALL, type SkynetMessage, type AgentCard, type HumanProfile } from '@skynet/protocol';
+import { MENTION_ALL, type SkynetMessage, type AgentCard, type HumanProfile } from '@skynet-ai/protocol';
 import type { Store } from './store.js';
 
 export class SqliteStore implements Store {

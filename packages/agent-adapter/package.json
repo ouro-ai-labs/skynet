@@ -1,23 +1,35 @@
 {
-  "name": "@skynet/agent-adapter",
+  "name": "@skynet-ai/agent-adapter",
   "version": "0.1.0",
+  "description": "Agent adapters for Claude Code, Gemini CLI, Codex CLI and more",
   "type": "module",
-  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ouro-ai-labs/skynet.git",
+    "directory": "packages/agent-adapter"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@skynet/logger": "workspace:*",
-    "@skynet/protocol": "workspace:*",
-    "@skynet/sdk": "workspace:*",
+    "@skynet-ai/logger": "workspace:*",
+    "@skynet-ai/protocol": "workspace:*",
+    "@skynet-ai/sdk": "workspace:*",
     "execa": "^9.0.0"
   },
   "devDependencies": {
-    "@skynet/workspace": "workspace:*",
+    "@skynet-ai/workspace": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   }

@@ -165,7 +165,7 @@ What changed and why (user-facing when applicable).
 
 ## Gotchas (Common Rework Sources)
 
-- **Cross-package imports**: always import types from `@skynet/protocol`, not from another package's internal files.
+- **Cross-package imports**: always import types from `@skynet-ai/protocol`, not from another package's internal files.
 - **WebSocket state**: handle reconnection and message ordering carefully; never assume the connection is stable.
 - **Process management**: agent adapters spawn child processes; always handle cleanup on exit/crash (SIGINT, SIGTERM).
 - **SQLite concurrency**: better-sqlite3 is synchronous; keep DB operations off the hot path or use worker threads.

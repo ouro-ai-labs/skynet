@@ -9,7 +9,7 @@ import {
   deserialize,
   MessageType,
   createMessage,
-} from '@skynet/protocol';
+} from '@skynet-ai/protocol';
 
 export interface SkynetClientOptions {
   serverUrl: string;

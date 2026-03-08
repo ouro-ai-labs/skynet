@@ -23,20 +23,20 @@ importers:
 
   packages/agent-adapter:
     dependencies:
-      '@skynet/logger':
+      '@skynet-ai/logger':
         specifier: workspace:*
         version: link:../logger
-      '@skynet/protocol':
+      '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@skynet/sdk':
+      '@skynet-ai/sdk':
         specifier: workspace:*
         version: link:../sdk
       execa:
         specifier: ^9.0.0
         version: 9.6.1
     devDependencies:
-      '@skynet/workspace':
+      '@skynet-ai/workspace':
         specifier: workspace:*
         version: link:../workspace
       '@types/node':
@@ -48,10 +48,10 @@ importers:
 
   packages/chat:
     dependencies:
-      '@skynet/protocol':
+      '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@skynet/sdk':
+      '@skynet-ai/sdk':
         specifier: workspace:*
         version: link:../sdk
       chalk:
@@ -88,25 +88,25 @@ importers:
 
   packages/cli:
     dependencies:
-      '@skynet/agent-adapter':
+      '@skynet-ai/agent-adapter':
         specifier: workspace:*
         version: link:../agent-adapter
-      '@skynet/chat':
+      '@skynet-ai/chat':
         specifier: workspace:*
         version: link:../chat
-      '@skynet/coordinator':
+      '@skynet-ai/coordinator':
         specifier: workspace:*
         version: link:../coordinator
-      '@skynet/logger':
+      '@skynet-ai/logger':
         specifier: workspace:*
         version: link:../logger
-      '@skynet/protocol':
+      '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@skynet/sdk':
+      '@skynet-ai/sdk':
         specifier: workspace:*
         version: link:../sdk
-      '@skynet/workspace':
+      '@skynet-ai/workspace':
         specifier: workspace:*
         version: link:../workspace
       chalk:
@@ -128,7 +128,7 @@ importers:
 
   packages/coordinator:
     dependencies:
-      '@skynet/protocol':
+      '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
       execa:
@@ -164,7 +164,7 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@skynet/protocol':
+      '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
       ws:
@@ -186,10 +186,10 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.0
         version: 11.2.0
-      '@skynet/logger':
+      '@skynet-ai/logger':
         specifier: workspace:*
         version: link:../logger
-      '@skynet/protocol':
+      '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
       better-sqlite3:
@@ -199,7 +199,7 @@ importers:
         specifier: ^5.0.0
         version: 5.8.1
     devDependencies:
-      '@skynet/sdk':
+      '@skynet-ai/sdk':
         specifier: workspace:*
         version: link:../sdk
       '@types/better-sqlite3':

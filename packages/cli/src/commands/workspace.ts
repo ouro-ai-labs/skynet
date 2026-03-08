@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Command } from 'commander';
-import { SkynetWorkspace, SqliteStore } from '@skynet/workspace';
+import { SkynetWorkspace, SqliteStore } from '@skynet-ai/workspace';
 import {
   ensureSkynetDir,
   listWorkspaces,

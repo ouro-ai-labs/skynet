@@ -1,18 +1,30 @@
 {
-  "name": "@skynet/chat",
+  "name": "@skynet-ai/chat",
   "version": "0.1.0",
+  "description": "Chat TUI for human participation in Skynet multi-agent network",
   "type": "module",
-  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ouro-ai-labs/skynet.git",
+    "directory": "packages/chat"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@skynet/protocol": "workspace:*",
-    "@skynet/sdk": "workspace:*",
+    "@skynet-ai/protocol": "workspace:*",
+    "@skynet-ai/sdk": "workspace:*",
     "chalk": "^5.6.2",
     "ink": "^6.8.0",
     "marked": "^15.0.12",

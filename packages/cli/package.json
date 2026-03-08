@@ -1,12 +1,24 @@
 {
-  "name": "@skynet/cli",
+  "name": "@skynet-ai/cli",
   "version": "0.1.0",
+  "description": "CLI entry point for Skynet multi-agent collaboration network",
   "type": "module",
-  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "skynet": "dist/index.js"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ouro-ai-labs/skynet.git",
+    "directory": "packages/cli"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
@@ -14,13 +26,13 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@skynet/agent-adapter": "workspace:*",
-    "@skynet/logger": "workspace:*",
-    "@skynet/coordinator": "workspace:*",
-    "@skynet/chat": "workspace:*",
-    "@skynet/protocol": "workspace:*",
-    "@skynet/sdk": "workspace:*",
-    "@skynet/workspace": "workspace:*",
+    "@skynet-ai/agent-adapter": "workspace:*",
+    "@skynet-ai/logger": "workspace:*",
+    "@skynet-ai/coordinator": "workspace:*",
+    "@skynet-ai/chat": "workspace:*",
+    "@skynet-ai/protocol": "workspace:*",
+    "@skynet-ai/sdk": "workspace:*",
+    "@skynet-ai/workspace": "workspace:*",
     "chalk": "^5.4.0",
     "commander": "^13.0.0",
     "inquirer": "^12.0.0"

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MessageType } from '@skynet/protocol';
+import { MessageType } from '@skynet-ai/protocol';
 import { ClaudeCodeAdapter } from '../adapters/claude-code.js';
 
 vi.mock('execa', () => ({

@@ -153,7 +153,7 @@ All commands that need a workspace context use `--workspace <uuid|name>`. If omi
 
 ## Chat TUI
 
-The chat TUI (`@skynet/chat`) is an Ink-based terminal interface built with React.
+The chat TUI (`@skynet-ai/chat`) is an Ink-based terminal interface built with React.
 
 ### Slash Commands
 
@@ -203,11 +203,11 @@ skynet human   # Select lead, opens chat TUI — auto-joins workspace
 
 ## Using the SDK Programmatically
 
-You can use `@skynet/sdk` to build custom integrations:
+You can use `@skynet-ai/sdk` to build custom integrations:
 
 ```typescript
-import { SkynetClient } from '@skynet/sdk';
-import { AgentType } from '@skynet/protocol';
+import { SkynetClient } from '@skynet-ai/sdk';
+import { AgentType } from '@skynet-ai/protocol';
 import { randomUUID } from 'node:crypto';
 
 const client = new SkynetClient({
@@ -251,13 +251,13 @@ pnpm test
 
 This runs tests for all packages via turborepo. Currently covers:
 
-- `@skynet/protocol` — message types, serialization (17 tests)
-- `@skynet/workspace` — member management, entity management, message store, integration (32 tests)
-- `@skynet/sdk` — client connection and events (5 tests)
-- `@skynet/agent-adapter` — adapter implementations, agent runner, E2E multi-agent (22 tests)
-- `@skynet/coordinator` — file locks, task queue (18 tests)
-- `@skynet/chat` — formatting, markdown rendering, input state (56 tests)
-- `@skynet/cli` — config management (4 tests)
+- `@skynet-ai/protocol` — message types, serialization (17 tests)
+- `@skynet-ai/workspace` — member management, entity management, message store, integration (32 tests)
+- `@skynet-ai/sdk` — client connection and events (5 tests)
+- `@skynet-ai/agent-adapter` — adapter implementations, agent runner, E2E multi-agent (22 tests)
+- `@skynet-ai/coordinator` — file locks, task queue (18 tests)
+- `@skynet-ai/chat` — formatting, markdown rendering, input state (56 tests)
+- `@skynet-ai/cli` — config management (4 tests)
 
 **Total: 154 tests across 15 files.**
 
@@ -268,10 +268,10 @@ This runs tests for all packages via turborepo. Currently covers:
 pnpm build
 
 # Build a specific package
-pnpm --filter @skynet/workspace build
+pnpm --filter @skynet-ai/workspace build
 
 # Run tests for a specific package
-pnpm --filter @skynet/workspace test
+pnpm --filter @skynet-ai/workspace test
 
 # Clean all build artifacts
 pnpm clean
