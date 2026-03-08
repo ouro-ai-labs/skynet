@@ -908,30 +908,33 @@ describe('AgentRunner debounce', () => {
     expect(chatText).toContain('chat before task');
   });
 
-  it('debounce does not apply when agent is already busy', async () => {
+  it('messages queued during processing are debounced after processing finishes', async () => {
     const adapter = new FakeAdapter();
-    adapter.handleDelay = 200;
+    adapter.handleDelay = 100;
     const runner = new AgentRunner({
       serverUrl: 'ws://localhost:0',
       adapter,
-      debounceMs: 0, // Disable debounce for first message to make it start immediately
+      debounceMs: 200,
     });
     await runner.start();
     const client = getClient(runner);
 
-    // First message starts processing immediately (debounceMs: 0)
+    // First message processed after debounce
     const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
     client.emit('chat', msg1);
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise(r => setTimeout(r, 250));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
 
-    // Agent is now busy — second message should queue without debounce
+    // Second message arrives during processing — queued
     const msg2 = makeChatMsg({ from: 'user-b', text: 'second', mentions: [runner.agentId] });
     client.emit('chat', msg2);
 
-    // Wait for both to process
-    await new Promise(r => setTimeout(r, 400));
+    // After msg1 finishes, msg2 should NOT be processed immediately — it must age
+    await new Promise(r => setTimeout(r, 120));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
 
-    // Both should have been processed
+    // After debounce window from msg2's arrival, it should be processed
+    await new Promise(r => setTimeout(r, 200));
     expect(adapter.handleMessageCalls).toHaveLength(2);
   });
 
@@ -973,6 +976,42 @@ describe('AgentRunner debounce', () => {
 
     await new Promise(r => setTimeout(r, 10));
     expect(adapter.handleMessageCalls).toHaveLength(1);
+  });
+
+  it('messages arriving during processing are batched after debounce', async () => {
+    const adapter = new FakeAdapter();
+    adapter.handleDelay = 100;
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 200,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    // First message processed after debounce
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'start debate', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 250));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+
+    // Follow-up arrives during processing
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'follow-up 1', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+
+    // msg1 finishes, msg2 needs to age — not processed yet
+    await new Promise(r => setTimeout(r, 120));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+
+    // A third message arrives — resets the debounce wait for the newest
+    const msg3 = makeChatMsg({ from: 'user-a', text: 'follow-up 2', mentions: [runner.agentId] });
+    client.emit('chat', msg3);
+
+    // Wait for msg3 to age + processing
+    await new Promise(r => setTimeout(r, 350));
+    expect(adapter.handleMessageCalls).toHaveLength(2);
+    const batchText = (adapter.handleMessageCalls[1].payload as { text: string }).text;
+    expect(batchText).toContain('2 unread messages');
   });
 
   it('defaults to DEFAULT_DEBOUNCE_MS when debounceMs is not set', () => {

@@ -23,7 +23,7 @@ import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
 import { buildSkynetIntro } from './skynet-intro.js';
 
-/** Default debounce window (ms) for batching idle-state chat messages. */
+/** Default debounce window (ms) — messages must age this long before processing. */
 const DEFAULT_DEBOUNCE_MS = 3000;
 
 export interface AgentRunnerOptions {
@@ -41,8 +41,8 @@ export interface AgentRunnerOptions {
   logFile?: string;
   /**
    * Debounce window (ms) for collecting chat messages before processing.
-   * When idle, the agent waits this long after the last incoming chat message
-   * before starting to process, allowing multiple messages to be batched.
+   * Each message must have arrived at least this long ago before processing starts.
+   * This naturally batches messages that arrive close together.
    * Set to 0 to disable debouncing. Defaults to 3000.
    */
   debounceMs?: number;
@@ -54,20 +54,26 @@ const DEDUP_MAX_SIZE = 500;
 /** Sentinel value returned by agents when they choose not to reply. */
 export const NO_REPLY = 'NO_REPLY';
 
+/** A message in the queue with its arrival timestamp. */
+interface QueuedMessage {
+  msg: SkynetMessage;
+  arrivedAt: number;
+}
+
 export class AgentRunner {
   private client: SkynetClient;
   private adapter: AgentAdapter;
   private logger: Logger;
   private processing = false;
   private forkInProgress = false;
-  private messageQueue: SkynetMessage[] = [];
+  private messageQueue: QueuedMessage[] = [];
   private memberInfo = new Map<string, MemberInfo>();
   /** Recently processed message IDs to prevent duplicate handling. */
   private processedMessageIds = new Set<string>();
   /** Pending notices (e.g. member join/leave) to piggyback on the next message. */
   private pendingNotices: string[] = [];
-  /** Debounce timer for batching idle-state chat messages. */
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timer for the next processQueue check. */
+  private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly debounceMs: number;
 
   constructor(private options: AgentRunnerOptions) {
@@ -148,7 +154,7 @@ export class AgentRunner {
   }
 
   async stop(): Promise<void> {
-    this.clearDebounce();
+    this.clearSchedule();
     this.logger.info('Stopping agent');
     await this.adapter.dispose();
     await this.client.close();
@@ -189,20 +195,19 @@ export class AgentRunner {
       return;
     }
 
-    this.messageQueue.push(msg);
+    this.messageQueue.push({ msg, arrivedAt: Date.now() });
 
     // Task messages bypass debounce — process immediately
     if (msg.type === MessageType.TASK_ASSIGN) {
-      this.clearDebounce();
+      this.clearSchedule();
       this.processQueue();
       return;
     }
 
     // When already busy, messages accumulate naturally in the queue;
-    // the processQueue while-loop will pick them up. No debounce needed.
+    // processQueue will reschedule itself after finishing.
     if (this.processing) return;
 
-    // Idle + chat message: debounce to collect more messages before processing
     this.scheduleProcessQueue();
   }
 
@@ -252,67 +257,90 @@ export class AgentRunner {
     } catch (err) {
       // Fork failed — fall back to normal queue so the message is not lost
       this.logger.error('Fork reply failed, queueing message:', err);
-      this.messageQueue.push(msg);
+      this.messageQueue.push({ msg, arrivedAt: Date.now() });
     } finally {
       this.forkInProgress = false;
     }
   }
 
-  /** Schedule processQueue after the debounce window. Resets on each call. */
+  /**
+   * Schedule processQueue when the newest message in the queue has aged enough.
+   * If debounce is disabled, processes immediately.
+   */
   private scheduleProcessQueue(): void {
     if (this.debounceMs <= 0) {
       this.processQueue();
       return;
     }
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
+    if (this.messageQueue.length === 0) return;
+
+    // Wait until the newest message has aged at least debounceMs
+    const newest = this.messageQueue[this.messageQueue.length - 1];
+    const age = Date.now() - newest.arrivedAt;
+    const wait = Math.max(0, this.debounceMs - age);
+
+    // Clear any existing timer and set a new one
+    this.clearSchedule();
+    this.scheduleTimer = setTimeout(() => {
+      this.scheduleTimer = null;
       this.processQueue();
-    }, this.debounceMs);
+    }, wait);
   }
 
-  private clearDebounce(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
+  private clearSchedule(): void {
+    if (this.scheduleTimer) {
+      clearTimeout(this.scheduleTimer);
+      this.scheduleTimer = null;
     }
   }
 
   private async processQueue(): Promise<void> {
     if (this.processing) return;
+    if (this.messageQueue.length === 0) return;
+
+    // Check if all chat messages have aged enough.
+    // Tasks in the queue force immediate processing (no debounce).
+    if (this.debounceMs > 0) {
+      const hasTask = this.messageQueue.some((qm) => qm.msg.type === MessageType.TASK_ASSIGN);
+      if (!hasTask) {
+        const now = Date.now();
+        const newestChat = this.findNewestChat();
+        if (newestChat && (now - newestChat.arrivedAt) < this.debounceMs) {
+          this.scheduleProcessQueue();
+          return;
+        }
+      }
+    }
+
     this.processing = true;
     this.client.agent.status = 'busy';
     this.client.setTyping(true);
 
-    while (this.messageQueue.length > 0) {
-      // Peek at first message — tasks are always processed individually
-      if (this.messageQueue[0].type === MessageType.TASK_ASSIGN) {
-        const msg = this.messageQueue.shift()!;
-        try {
-          await this.handleTask(msg);
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          this.logger.error(`Error processing task from ${msg.from}:`, err);
-          this.client.chat(`Error processing task: ${errorMsg}`, [msg.from]);
-        }
-        continue;
+    // Process leading tasks
+    while (this.messageQueue.length > 0 && this.messageQueue[0].msg.type === MessageType.TASK_ASSIGN) {
+      const { msg } = this.messageQueue.shift()!;
+      try {
+        await this.handleTask(msg);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Error processing task from ${msg.from}:`, err);
+        this.client.chat(`Error processing task: ${errorMsg}`, [msg.from]);
       }
+    }
 
-      // Drain all leading chat messages and batch them
-      const chatBatch: SkynetMessage[] = [];
-      while (
-        this.messageQueue.length > 0 &&
-        (this.messageQueue[0].type as string) !== MessageType.TASK_ASSIGN
-      ) {
-        chatBatch.push(this.messageQueue.shift()!);
-      }
+    // Drain chat messages up to the next task
+    const chatBatch: SkynetMessage[] = [];
+    while (
+      this.messageQueue.length > 0 &&
+      this.messageQueue[0].msg.type !== MessageType.TASK_ASSIGN
+    ) {
+      chatBatch.push(this.messageQueue.shift()!.msg);
+    }
 
-      if (chatBatch.length === 0) continue;
-
+    if (chatBatch.length > 0) {
       const notices = this.flushNotices();
       try {
         if (chatBatch.length === 1) {
-          // Single message — process normally
           const msg = chatBatch[0];
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
           const msgToSend = notices
@@ -321,12 +349,10 @@ export class AgentRunner {
           const response = await this.adapter.handleMessage(msgToSend, senderName);
           if (response && response.trim() !== NO_REPLY) {
             const mentions = this.resolveMentions(response);
-            // Always include the original sender in mentions
             if (!mentions.includes(msg.from)) mentions.push(msg.from);
             this.client.chat(response, mentions);
           }
         } else {
-          // Multiple messages — batch into a single prompt
           await this.handleBatchMessages(chatBatch, notices);
         }
       } catch (err) {
@@ -340,6 +366,21 @@ export class AgentRunner {
     this.client.agent.status = 'idle';
     this.processing = false;
     this.persistLastSeenTimestamp();
+
+    // If more messages arrived during processing, reschedule
+    if (this.messageQueue.length > 0) {
+      this.scheduleProcessQueue();
+    }
+  }
+
+  /** Find the newest chat message in the queue, or undefined if none. */
+  private findNewestChat(): QueuedMessage | undefined {
+    for (let i = this.messageQueue.length - 1; i >= 0; i--) {
+      if (this.messageQueue[i].msg.type !== MessageType.TASK_ASSIGN) {
+        return this.messageQueue[i];
+      }
+    }
+    return undefined;
   }
 
   /** Batch multiple chat messages into a single adapter call. */

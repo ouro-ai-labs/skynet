@@ -60,14 +60,15 @@ export class SqliteStore implements Store {
     );
   }
 
-  getMessages(limit: number = 100, before?: number): SkynetMessage[] {
-    const rows = before
-      ? this.db.prepare(`
-          SELECT * FROM messages WHERE timestamp < ? ORDER BY timestamp DESC LIMIT ?
-        `).all(before, limit)
-      : this.db.prepare(`
-          SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?
-        `).all(limit);
+  getMessages(limit: number = 100, before?: number, after?: number): SkynetMessage[] {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (before) { conditions.push('timestamp < ?'); params.push(before); }
+    if (after) { conditions.push('timestamp > ?'); params.push(after); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = this.db.prepare(
+      `SELECT * FROM messages ${where} ORDER BY timestamp DESC LIMIT ?`,
+    ).all(...params, limit);
 
     return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
   }
