@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import type { WebSocket, RawData } from 'ws';
-import { Logger } from '@skynet/logger';
+import { Logger } from '@skynet-ai/logger';
 import {
   type SkynetMessage,
   type AgentCard,
@@ -18,7 +18,7 @@ import {
   createMessage,
   deserialize,
   serialize,
-} from '@skynet/protocol';
+} from '@skynet-ai/protocol';
 import { MemberManager } from './member-manager.js';
 import type { Store } from './store.js';
 

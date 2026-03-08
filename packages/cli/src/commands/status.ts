@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import type { AgentCard, AgentStatus, HumanProfile } from '@skynet/protocol';
+import type { AgentCard, AgentStatus, HumanProfile } from '@skynet-ai/protocol';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
 function truncate(str: string, max: number): string {

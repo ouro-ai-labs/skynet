@@ -94,7 +94,7 @@ All commands that need a workspace context use `--workspace <uuid|name>`. If omi
 
 Built with Ink (React for terminals):
 
-- `@skynet/chat` package, started via `skynet human` command
+- `@skynet-ai/chat` package, started via `skynet human` command
 - Supports @-mentions, slash commands for agent/human management
 - Markdown rendering for agent responses
 - Session fork: quick replies while agent is busy

@@ -4,7 +4,7 @@ import {
   MessageType,
   type SkynetMessage,
   type AgentCard,
-} from '@skynet/protocol';
+} from '@skynet-ai/protocol';
 import {
   agentTag,
   agentNameColored,

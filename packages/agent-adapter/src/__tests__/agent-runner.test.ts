@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { MessageType, MENTION_ALL } from '@skynet/protocol';
-import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet/protocol';
+import { MessageType, MENTION_ALL } from '@skynet-ai/protocol';
+import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet-ai/protocol';
 import { AgentRunner } from '../agent-runner.js';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
-import { AgentType } from '@skynet/protocol';
+import { AgentType } from '@skynet-ai/protocol';
 import { buildSkynetIntro } from '../skynet-intro.js';
 
 // ── Mocks ──
@@ -18,7 +18,7 @@ vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
   json: async () => ({}),
 }));
 
-vi.mock('@skynet/sdk', () => {
+vi.mock('@skynet-ai/sdk', () => {
   const EventEmitter = require('node:events').EventEmitter;
 
   class MockSkynetClient extends EventEmitter {

@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
-import type { AgentCard, AgentStatus, SkynetMessage } from '@skynet/protocol';
-import { AgentType, serialize } from '@skynet/protocol';
+import type { AgentCard, AgentStatus, SkynetMessage } from '@skynet-ai/protocol';
+import { AgentType, serialize } from '@skynet-ai/protocol';
 
 export interface ConnectedMember {
   agent: AgentCard;

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentCard, TaskPayload, TaskStatus } from '@skynet/protocol';
+import type { AgentCard, TaskPayload, TaskStatus } from '@skynet-ai/protocol';
 
 export interface QueuedTask extends TaskPayload {
   createdAt: number;

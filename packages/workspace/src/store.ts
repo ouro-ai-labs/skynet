@@ -1,4 +1,4 @@
-import type { SkynetMessage, AgentCard, HumanProfile } from '@skynet/protocol';
+import type { SkynetMessage, AgentCard, HumanProfile } from '@skynet-ai/protocol';
 
 export interface Store {
   // Messages

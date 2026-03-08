@@ -7,8 +7,8 @@ import {
   type AgentJoinPayload,
   type AgentLeavePayload,
   MessageType,
-} from '@skynet/protocol';
-import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
+} from '@skynet-ai/protocol';
+import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 
 export interface UseSkynetOptions {
   serverUrl: string;

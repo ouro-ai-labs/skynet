@@ -1,7 +1,16 @@
 {
-  "name": "@skynet/monitor",
+  "name": "@skynet-ai/monitor",
   "version": "0.1.0",
-  "private": true,
+  "description": "Web monitoring dashboard for Skynet multi-agent collaboration network",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ouro-ai-labs/skynet.git",
+    "directory": "packages/monitor"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "echo 'monitor build - Phase 2'",
     "clean": "rm -rf dist"

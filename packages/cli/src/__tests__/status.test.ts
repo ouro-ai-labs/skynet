@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
-import { AgentType } from '@skynet/protocol';
+import { AgentType } from '@skynet-ai/protocol';
 import { registerStatusCommand } from '../commands/status.js';
 
 // Mock workspace-select so we don't need real config

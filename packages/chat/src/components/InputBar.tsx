@@ -1,6 +1,6 @@
 import React, { useReducer, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { AgentCard } from '@skynet/protocol';
+import type { AgentCard } from '@skynet-ai/protocol';
 import {
   inputReducer,
   initialInputState,

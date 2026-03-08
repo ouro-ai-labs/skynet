@@ -1,4 +1,4 @@
-import type { AgentType, SkynetMessage, TaskPayload, TaskResultPayload } from '@skynet/protocol';
+import type { AgentType, SkynetMessage, TaskPayload, TaskResultPayload } from '@skynet-ai/protocol';
 
 export interface TaskResult {
   success: boolean;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SqliteStore } from '../sqlite-store.js';
-import { createChatMessage, createMessage, MessageType, AgentType, MENTION_ALL } from '@skynet/protocol';
+import { createChatMessage, createMessage, MessageType, AgentType, MENTION_ALL } from '@skynet-ai/protocol';
 import type { Store } from '../store.js';
 
 describe('SqliteStore', () => {

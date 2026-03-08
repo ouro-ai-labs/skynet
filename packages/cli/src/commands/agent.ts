@@ -1,9 +1,9 @@
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { Command } from 'commander';
-import { AgentType } from '@skynet/protocol';
-import type { AgentCard } from '@skynet/protocol';
-import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet/agent-adapter';
+import { AgentType } from '@skynet-ai/protocol';
+import type { AgentCard } from '@skynet-ai/protocol';
+import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet-ai/agent-adapter';
 import { getWorkspaceDir } from '../config.js';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 

@@ -83,8 +83,8 @@ skynet/
 ## SDK Usage
 
 ```typescript
-import { SkynetClient } from '@skynet/sdk';
-import { AgentType } from '@skynet/protocol';
+import { SkynetClient } from '@skynet-ai/sdk';
+import { AgentType } from '@skynet-ai/protocol';
 
 const client = new SkynetClient({
   serverUrl: 'http://localhost:4117',

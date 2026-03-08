@@ -1,17 +1,29 @@
 {
-  "name": "@skynet/sdk",
+  "name": "@skynet-ai/sdk",
   "version": "0.1.0",
+  "description": "Client SDK for connecting to Skynet multi-agent collaboration network",
   "type": "module",
-  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ouro-ai-labs/skynet.git",
+    "directory": "packages/sdk"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@skynet/protocol": "workspace:*",
+    "@skynet-ai/protocol": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

@@ -11,7 +11,7 @@ import {
   type ContextSharePayload,
   type FileChangePayload,
   MessageType,
-} from '@skynet/protocol';
+} from '@skynet-ai/protocol';
 import { renderMarkdown } from './markdown.js';
 
 // ── Color scheme by agent type ──

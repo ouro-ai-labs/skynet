@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
-import { SkynetClient } from '@skynet/sdk';
-import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet/protocol';
+import { SkynetClient } from '@skynet-ai/sdk';
+import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet-ai/protocol';
 import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);

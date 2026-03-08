@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import { type SkynetMessage, extractMentionNames, MENTION_ALL } from '@skynet/protocol';
+import { type SkynetMessage, extractMentionNames, MENTION_ALL } from '@skynet-ai/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';

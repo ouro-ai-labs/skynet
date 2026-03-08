@@ -1,4 +1,4 @@
-import { AgentType, type SkynetMessage, type TaskPayload } from '@skynet/protocol';
+import { AgentType, type SkynetMessage, type TaskPayload } from '@skynet-ai/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 
 export interface GeminiCliOptions {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execa, execaCommand } from 'execa';
-import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet/protocol';
+import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet-ai/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 
 export interface ClaudeCodeOptions {

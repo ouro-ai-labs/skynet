@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import type { HumanProfile } from '@skynet/protocol';
+import type { HumanProfile } from '@skynet-ai/protocol';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
 
 export function registerHumanCommand(program: Command): void {
