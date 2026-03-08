@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { execa, execaCommand } from 'execa';
+import { execa, execaCommand, type ResultPromise } from 'execa';
 import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet-ai/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 
@@ -40,6 +40,8 @@ export class ClaudeCodeAdapter extends AgentAdapter {
   private model?: string;
   private sessionId: string = randomUUID();
   private sessionStarted = false;
+  /** Track the currently running child process for interrupt support. */
+  private runningProcess: ResultPromise | null = null;
 
   constructor(options: ClaudeCodeOptions) {
     super();
@@ -113,8 +115,25 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
+  override async interrupt(): Promise<boolean> {
+    if (this.runningProcess) {
+      this.runningProcess.kill('SIGTERM');
+      this.runningProcess = null;
+      return true;
+    }
+    return false;
+  }
+
+  override async resetSession(): Promise<void> {
+    // Kill any running process first
+    await this.interrupt();
+    // Start a fresh session
+    this.sessionId = randomUUID();
+    this.sessionStarted = false;
+  }
+
   async dispose(): Promise<void> {
-    // No persistent process to clean up; each call is a new process
+    await this.interrupt();
   }
 
   private messageToPrompt(msg: SkynetMessage, senderName?: string): string {
@@ -157,18 +176,22 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
 
     const isFirstCall = !this.sessionStarted;
+    const proc = execa('claude', args, {
+      cwd: this.projectRoot,
+      stdin: 'ignore',
+      env: spawnEnv(),
+      timeout: 1_200_000, // 20 min timeout
+    });
+    this.runningProcess = proc;
     try {
-      const result = await execa('claude', args, {
-        cwd: this.projectRoot,
-        stdin: 'ignore',
-        env: spawnEnv(),
-        timeout: 1_200_000, // 20 min timeout
-      });
+      const result = await proc;
 
       this.sessionStarted = true;
+      this.runningProcess = null;
 
       return result.stdout;
     } catch (err) {
+      this.runningProcess = null;
       // If this was the first call (--session-id), the session was created on disk
       // even though it timed out. Mark it as started so subsequent calls use --resume
       // instead of --session-id, avoiding "Session ID already in use" errors.

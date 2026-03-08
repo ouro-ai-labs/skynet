@@ -24,6 +24,8 @@ Defined in `src/base-adapter.ts`. All adapters must implement the following meth
 | `handleMessage(msg)` | Convert a `SkynetMessage` to a prompt, call the CLI, return the text response |
 | `executeTask(task)` | Execute a standalone task, return a `TaskResult` |
 | `setRoomId(roomId)` | Associate with a room (used for session persistence). No-op by default |
+| `interrupt()` | Interrupt the currently running process (returns `true` if a process was killed) |
+| `resetSession()` | Reset the conversation session (generates a new session ID, starts fresh) |
 | `dispose()` | Clean up resources (kill child processes, etc.) |
 
 `TaskResult` structure:

@@ -177,6 +177,8 @@ There are two disconnect paths:
 | POST | `/api/agents` | Create agent (body: `{name, type, role?, persona?}`) |
 | GET | `/api/agents` | List all agents |
 | GET | `/api/agents/:id` | Get agent by UUID or name |
+| POST | `/api/agents/:id/interrupt` | Interrupt agent's current task (body: `{reason?}`) |
+| POST | `/api/agents/:id/forget` | Reset agent's conversation session |
 
 ### Humans
 

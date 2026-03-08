@@ -150,6 +150,8 @@ export class AgentRunner {
 
     this.client.on('chat', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
+    this.client.on('agent-interrupt', () => this.handleInterrupt());
+    this.client.on('agent-forget', () => this.handleForget());
 
     // Clear any notices generated during initial connection — the agent already
     // knows the initial member list from workspace state.
@@ -480,6 +482,36 @@ export class AgentRunner {
       }
     }
     return ids;
+  }
+
+  /** Handle an interrupt control message — kill running process and clear queue. */
+  private async handleInterrupt(): Promise<void> {
+    this.logger.info('Interrupt received');
+    this.clearSchedule();
+    this.messageQueue = [];
+    this.pendingNotices = [];
+    const interrupted = await this.adapter.interrupt();
+    if (interrupted) {
+      this.logger.info('Running process was interrupted');
+    }
+    // Reset processing state so the agent can accept new messages
+    this.processing = false;
+    this.forkInProgress = false;
+    this.setStatus('idle');
+  }
+
+  /** Handle a forget control message — reset session and clear all state. */
+  private async handleForget(): Promise<void> {
+    this.logger.info('Forget received — resetting session');
+    // Interrupt first if busy
+    this.clearSchedule();
+    this.messageQueue = [];
+    this.pendingNotices = [];
+    await this.adapter.resetSession();
+    this.processedMessageIds.clear();
+    this.processing = false;
+    this.forkInProgress = false;
+    this.setStatus('idle');
   }
 
   private persistLastSeenTimestamp(): void {

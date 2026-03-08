@@ -156,4 +156,32 @@ describe('getCommandContext', () => {
   it('returns null when input has extra content after a complete command', () => {
     expect(getCommandContext('/help foo', 9)).toBeNull();
   });
+
+  it('shows autocomplete for /agent i (partial interrupt)', () => {
+    expect(getCommandContext('/agent i', 8)).toEqual({ filter: 'agent i' });
+  });
+
+  it('returns null when /agent interrupt is fully typed', () => {
+    expect(getCommandContext('/agent interrupt', 16)).toBeNull();
+  });
+
+  it('returns null when /agent interrupt has arg typed', () => {
+    expect(getCommandContext('/agent interrupt bob', 19)).toBeNull();
+  });
+
+  it('returns null when /agent forget is fully typed', () => {
+    expect(getCommandContext('/agent forget', 13)).toBeNull();
+  });
+
+  it('shows autocomplete for /agent f (partial forget)', () => {
+    expect(getCommandContext('/agent f', 8)).toEqual({ filter: 'agent f' });
+  });
+});
+
+describe('SLASH_COMMANDS', () => {
+  it('includes agent interrupt and forget commands', () => {
+    const names = SLASH_COMMANDS.map(c => c.name);
+    expect(names).toContain('/agent interrupt');
+    expect(names).toContain('/agent forget');
+  });
 });

@@ -93,11 +93,13 @@ All endpoints are served by the workspace's server instance.
 | GET    | `/api/messages`  | Get messages (`?limit=100&before=timestamp`)         |
 
 ### Agents
-| Method | Path              | Description                              |
-|--------|-------------------|------------------------------------------|
-| POST   | `/api/agents`     | Create `{name, type, role?, persona?}`   |
-| GET    | `/api/agents`     | List all agents                          |
-| GET    | `/api/agents/:id` | Get agent by UUID or name                |
+| Method | Path                          | Description                              |
+|--------|-------------------------------|------------------------------------------|
+| POST   | `/api/agents`                 | Create `{name, type, role?, persona?}`   |
+| GET    | `/api/agents`                 | List all agents                          |
+| GET    | `/api/agents/:id`             | Get agent by UUID or name                |
+| POST   | `/api/agents/:id/interrupt`   | Interrupt agent's current task           |
+| POST   | `/api/agents/:id/forget`      | Reset agent's conversation session       |
 
 ### Humans
 | Method | Path              | Description              |
@@ -123,9 +125,11 @@ skynet workspace start [id]   # Start a specific workspace by name or UUID
 
 ### Agent Management
 ```bash
-skynet agent new   [--workspace <id>]  # Create agent (interactive)
-skynet agent list  [--workspace <id>]  # List agents
-skynet agent       [--workspace <id>]  # Select agent and start it
+skynet agent new        [--workspace <id>]  # Create agent (interactive)
+skynet agent list       [--workspace <id>]  # List agents
+skynet agent            [--workspace <id>]  # Select agent and start it
+skynet agent interrupt  <name-or-id>        # Interrupt agent's current task
+skynet agent forget     <name-or-id>        # Reset agent's conversation session
 ```
 
 ### Human Management
@@ -148,6 +152,8 @@ Within the chat TUI, these management commands are available:
 
 ```
 /agent list                    List agents
+/agent interrupt <name>        Interrupt agent's current task
+/agent forget <name>           Reset agent's conversation session
 /human list                    List humans
 ```
 

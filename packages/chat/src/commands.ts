@@ -9,10 +9,11 @@ export async function executeCommand(serverUrl: string, input: string): Promise<
 
   const category = parts[0];
   const subcommand = parts[1];
+  const arg = parts[2];
 
   switch (category) {
     case '/agent':
-      return handleAgentCommand(serverUrl, subcommand);
+      return handleAgentCommand(serverUrl, subcommand, arg);
     case '/human':
       return handleHumanCommand(serverUrl, subcommand);
     default:
@@ -20,7 +21,7 @@ export async function executeCommand(serverUrl: string, input: string): Promise<
   }
 }
 
-async function handleAgentCommand(serverUrl: string, sub: string | undefined): Promise<CommandResult> {
+async function handleAgentCommand(serverUrl: string, sub: string | undefined, arg?: string): Promise<CommandResult> {
   if (!sub || sub === 'list') {
     try {
       const res = await fetch(`${serverUrl}/api/agents`);
@@ -37,7 +38,41 @@ async function handleAgentCommand(serverUrl: string, sub: string | undefined): P
     }
   }
 
-  return { lines: ['Usage: /agent list'], error: true };
+  if (sub === 'interrupt' || sub === 'forget') {
+    if (!arg) {
+      return { lines: [`Usage: /agent ${sub} <name>`], error: true };
+    }
+    return sendAgentControl(serverUrl, sub, arg);
+  }
+
+  return { lines: ['Usage: /agent list | /agent interrupt <name> | /agent forget <name>'], error: true };
+}
+
+async function sendAgentControl(serverUrl: string, action: 'interrupt' | 'forget', nameOrId: string): Promise<CommandResult> {
+  try {
+    // Resolve agent name to ID
+    const listRes = await fetch(`${serverUrl}/api/agents`);
+    const agents = await listRes.json() as Array<{ id: string; name: string }>;
+    const agent = agents.find((a) => a.name === nameOrId || a.id === nameOrId || a.id.startsWith(nameOrId));
+    if (!agent) {
+      return { lines: [`Agent '${nameOrId}' not found.`], error: true };
+    }
+
+    const res = await fetch(`${serverUrl}/api/agents/${agent.id}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (res.ok) {
+      const label = action === 'interrupt' ? 'Interrupted' : 'Session cleared for';
+      return { lines: [`${label} agent '${agent.name}'.`] };
+    }
+    const body = await res.json() as { error?: string };
+    return { lines: [body.error ?? `Failed to ${action} agent.`], error: true };
+  } catch {
+    return { lines: ['Failed to connect to workspace.'], error: true };
+  }
 }
 
 async function handleHumanCommand(serverUrl: string, sub: string | undefined): Promise<CommandResult> {

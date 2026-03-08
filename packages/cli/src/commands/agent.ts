@@ -251,6 +251,64 @@ export function registerAgentCommand(program: Command): void {
     });
 
   agent
+    .command('interrupt <name-or-id>')
+    .description('Interrupt agent\'s current task')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
+    .action(async (nameOrId: string, opts: { workspace?: string }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+      const agents = await fetchAgents(url);
+      const agentProfile = resolveAgent(agents, nameOrId);
+
+      try {
+        const res = await fetch(`${url}/api/agents/${agentProfile.id}/interrupt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (res.ok) {
+          console.log(`Interrupt sent to agent '${agentProfile.name}'.`);
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed to interrupt: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to workspace at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  agent
+    .command('forget <name-or-id>')
+    .description('Clear agent\'s conversation history (start fresh)')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
+    .action(async (nameOrId: string, opts: { workspace?: string }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+      const agents = await fetchAgents(url);
+      const agentProfile = resolveAgent(agents, nameOrId);
+
+      try {
+        const res = await fetch(`${url}/api/agents/${agentProfile.id}/forget`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (res.ok) {
+          console.log(`Forget sent to agent '${agentProfile.name}'. Session reset.`);
+        } else {
+          const body = await res.json() as { error?: string };
+          console.error(`Failed to forget: ${body.error ?? res.statusText}`);
+          process.exit(1);
+        }
+      } catch {
+        console.error(`Failed to connect to workspace at ${url}`);
+        process.exit(1);
+      }
+    });
+
+  agent
     .command('list')
     .description('List all agents')
     .option('--workspace <name-or-id>', 'Workspace name or UUID')
