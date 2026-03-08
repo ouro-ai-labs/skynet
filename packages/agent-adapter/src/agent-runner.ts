@@ -23,6 +23,9 @@ import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
 import { buildSkynetIntro } from './skynet-intro.js';
 
+/** Default debounce window (ms) for batching idle-state chat messages. */
+const DEFAULT_DEBOUNCE_MS = 3000;
+
 export interface AgentRunnerOptions {
   serverUrl: string;
   adapter: AgentAdapter;
@@ -36,6 +39,13 @@ export interface AgentRunnerOptions {
   statePath?: string;
   /** Log file path. When set, agent logs are written to this file. */
   logFile?: string;
+  /**
+   * Debounce window (ms) for collecting chat messages before processing.
+   * When idle, the agent waits this long after the last incoming chat message
+   * before starting to process, allowing multiple messages to be batched.
+   * Set to 0 to disable debouncing. Defaults to 3000.
+   */
+  debounceMs?: number;
 }
 
 /** Max number of message IDs to track for deduplication. */
@@ -56,8 +66,12 @@ export class AgentRunner {
   private processedMessageIds = new Set<string>();
   /** Pending notices (e.g. member join/leave) to piggyback on the next message. */
   private pendingNotices: string[] = [];
+  /** Debounce timer for batching idle-state chat messages. */
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly debounceMs: number;
 
   constructor(private options: AgentRunnerOptions) {
+    this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     const agentCard: AgentCard = {
       id: options.agentId ?? randomUUID(),
       name: options.agentName ?? `${options.adapter.name}-${randomUUID().slice(0, 8)}`,
@@ -134,6 +148,7 @@ export class AgentRunner {
   }
 
   async stop(): Promise<void> {
+    this.clearDebounce();
     this.logger.info('Stopping agent');
     await this.adapter.dispose();
     await this.client.close();
@@ -175,7 +190,20 @@ export class AgentRunner {
     }
 
     this.messageQueue.push(msg);
-    this.processQueue();
+
+    // Task messages bypass debounce — process immediately
+    if (msg.type === MessageType.TASK_ASSIGN) {
+      this.clearDebounce();
+      this.processQueue();
+      return;
+    }
+
+    // When already busy, messages accumulate naturally in the queue;
+    // the processQueue while-loop will pick them up. No debounce needed.
+    if (this.processing) return;
+
+    // Idle + chat message: debounce to collect more messages before processing
+    this.scheduleProcessQueue();
   }
 
   /** Drain pending notices and return them as a single prefix string, or empty. */
@@ -227,6 +255,26 @@ export class AgentRunner {
       this.messageQueue.push(msg);
     } finally {
       this.forkInProgress = false;
+    }
+  }
+
+  /** Schedule processQueue after the debounce window. Resets on each call. */
+  private scheduleProcessQueue(): void {
+    if (this.debounceMs <= 0) {
+      this.processQueue();
+      return;
+    }
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      this.processQueue();
+    }, this.debounceMs);
+  }
+
+  private clearDebounce(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
   }
 
