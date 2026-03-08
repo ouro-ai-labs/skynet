@@ -3,7 +3,7 @@ import type { SkynetMessage, AgentCard, HumanProfile } from '@skynet/protocol';
 export interface Store {
   // Messages
   save(msg: SkynetMessage): void;
-  getMessages(limit?: number, before?: number): SkynetMessage[];
+  getMessages(limit?: number, before?: number, after?: number): SkynetMessage[];
   getById(id: string): SkynetMessage | undefined;
   /** Get recent messages where `to` or `mentions` includes `agentId`, optionally after `since` timestamp. */
   getMessagesFor(agentId: string, limit?: number, since?: number): SkynetMessage[];

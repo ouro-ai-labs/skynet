@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { AgentCard, AgentStatus, SkynetMessage } from '@skynet/protocol';
-import { serialize } from '@skynet/protocol';
+import { AgentType, serialize } from '@skynet/protocol';
 
 export interface ConnectedMember {
   agent: AgentCard;
@@ -51,6 +51,20 @@ export class MemberManager {
   broadcastRaw(raw: string, excludeAgentId?: string): void {
     for (const [id, member] of this.members) {
       if (id !== excludeAgentId && member.socket.readyState === member.socket.OPEN) {
+        member.socket.send(raw);
+      }
+    }
+  }
+
+  /** Send a message to all connected HUMAN members not already in the exclude set. */
+  sendToHumans(msg: SkynetMessage, excludeIds: Set<string>): void {
+    const raw = serialize(msg);
+    for (const [id, member] of this.members) {
+      if (
+        !excludeIds.has(id) &&
+        member.agent.type === AgentType.HUMAN &&
+        member.socket.readyState === member.socket.OPEN
+      ) {
         member.socket.send(raw);
       }
     }

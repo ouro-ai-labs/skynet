@@ -128,8 +128,10 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 
 - Server overwrites `from` via `createMessage()` to prevent spoofing
 - Persists the message
-- If `msg.to` is set: point-to-point delivery + echo back to sender as confirmation
-- If `msg.to` is null: broadcast to all members (including sender)
+- Routing is entirely **mention-driven** (the `msg.to` field is not used for routing):
+  - `@all` in mentions → broadcast to all members (including sender)
+  - Specific mentions → deliver to mentioned members + echo to sender
+  - **Human observers**: humans always receive all messages, even when not @mentioned, so they can see the full conversation flow
 
 ### HEARTBEAT
 

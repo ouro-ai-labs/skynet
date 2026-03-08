@@ -119,10 +119,10 @@ AgentRunner maintains an in-memory `Set` of recently processed message IDs (boun
 
 When the agent is busy processing a message, incoming messages are handled as follows:
 
-- **@mentioned messages** (where `msg.to === myId` or `msg.mentions` includes `myId`): if the adapter supports `quickReply()`, a forked reply is dispatched immediately. Maximum **1 concurrent fork** — additional @mentions are queued.
-- **Broadcast/system messages** (not directly targeting this agent): always queued for later processing.
+- **Chat messages from humans**: if the adapter supports `quickReply()`, a forked reply is dispatched immediately. Maximum **1 concurrent fork** — additional messages are queued.
+- **Chat messages from agents**: always queued for later batch processing (avoids duplicate/cascading responses).
 
-This prevents agents from missing urgent @mentions while working, without overwhelming the adapter with unlimited forks.
+This prevents agents from missing urgent human messages while working, without overwhelming the adapter with unlimited forks.
 
 **Batch Processing:**
 
@@ -135,7 +135,11 @@ You have N unread messages. Please respond to all of them in a single reply:
 [sender-2]: message text
 ```
 
-If all messages are from the same sender, the response is sent as a DM. If from multiple senders, it is broadcast.
+Responses are sent as mentions to all senders in the batch.
+
+**Debounce Window:**
+
+AgentRunner uses an age-based debounce mechanism to naturally batch messages that arrive close together. Each message records its arrival time; the queue is only processed once **all** messages have aged at least `debounceMs` (default 3000ms). This prevents ping-pong cascades between agents — when multiple messages arrive in quick succession, they are collected and handled in a single batch rather than triggering individual responses. Task messages bypass the debounce and are processed immediately. Set `debounceMs: 0` to disable.
 
 **Member Name Tracking:**
 

@@ -272,14 +272,17 @@ export class SkynetWorkspace {
     this.logger.info(`Agent joined: ${req.agent.name} (${agentId})${isReconnect ? ' [reconnect]' : ''}`);
 
     // Always send workspace state to the (re)connecting agent.
-    // Only include recent messages that mention or are addressed to this agent,
-    // filtered to messages newer than the client's last seen timestamp.
+    // Humans see all messages; agents only see messages mentioning them.
     const since = req.lastSeenTimestamp;
+    const isHuman = req.agent.type === AgentType.HUMAN;
+    const recentMessages = isHuman
+      ? this.store.getMessages(this.recentMentionsLimit, undefined, since)
+      : this.store.getMessagesFor(agentId, this.recentMentionsLimit, since);
     socket.send(JSON.stringify({
       event: 'workspace.state',
       data: {
         members: this.members.getMembers(),
-        recentMessages: this.store.getMessagesFor(agentId, this.recentMentionsLimit, since),
+        recentMessages,
       },
     }));
 
@@ -332,6 +335,9 @@ export class SkynetWorkspace {
         }
       }
     }
+
+    // Humans observe all messages — deliver to connected humans not already reached.
+    this.members.sendToHumans(fullMsg, delivered);
   }
 
   private handleHeartbeat(socket: WebSocket, data: { agentId: string; status: AgentStatus }): void {

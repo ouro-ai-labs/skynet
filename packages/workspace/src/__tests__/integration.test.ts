@@ -65,10 +65,11 @@ describe('Server integration', () => {
     await bob.close();
   });
 
-  it('mention reaches only the mentioned agent', async () => {
+  it('mention reaches only the mentioned agent (non-human agents excluded)', async () => {
     const alice = makeClient('alice-dm');
     const bob = makeClient('bob-dm');
-    const charlie = makeClient('charlie-dm');
+    // charlie is a non-human agent — should NOT receive messages not mentioning them
+    const charlie = makeClient('charlie-dm', AgentType.CLAUDE_CODE);
 
     await alice.connect();
     await bob.connect();
@@ -94,6 +95,33 @@ describe('Server integration', () => {
     await alice.close();
     await bob.close();
     await charlie.close();
+  });
+
+  it('humans see all messages even without being mentioned', async () => {
+    const agent1 = makeClient('agent-vis-1', AgentType.CLAUDE_CODE);
+    const agent2 = makeClient('agent-vis-2', AgentType.CLAUDE_CODE);
+    const human = makeClient('human-vis');
+
+    await agent1.connect();
+    await agent2.connect();
+    await human.connect();
+
+    const humanReceived: string[] = [];
+    human.on('chat', (msg: SkynetMessage) => {
+      humanReceived.push((msg.payload as { text: string }).text);
+    });
+
+    await sleep(50);
+    // agent1 sends to agent2 only — human not mentioned
+    agent1.chat('Agent-to-agent secret', [agent2.agent.id]);
+    await sleep(200);
+
+    // Human should still see it
+    expect(humanReceived).toContain('Agent-to-agent secret');
+
+    await agent1.close();
+    await agent2.close();
+    await human.close();
   });
 
   it('@all reaches all members', async () => {
@@ -155,11 +183,12 @@ describe('Server integration', () => {
     await alice.close();
   });
 
-  it('mentions reach all mentioned agents', async () => {
+  it('mentions reach all mentioned agents but not unmentioned non-human agents', async () => {
     const alice = makeClient('alice-mention');
     const bob = makeClient('bob-mention');
     const charlie = makeClient('charlie-mention');
-    const dave = makeClient('dave-mention');
+    // dave is a non-human agent — should NOT receive messages not mentioning them
+    const dave = makeClient('dave-mention', AgentType.CLAUDE_CODE);
 
     await alice.connect();
     await bob.connect();
@@ -377,9 +406,10 @@ describe('Server integration', () => {
     await alice.close();
   });
 
-  it('workspace.state only includes messages mentioning the connecting agent', async () => {
+  it('workspace.state for non-human agents only includes messages mentioning them', async () => {
     const alice = makeClient('alice-state');
-    const bob = makeClient('bob-state');
+    // bob is a non-human agent — should only see mentioned messages
+    const bob = makeClient('bob-state', AgentType.CLAUDE_CODE);
     await alice.connect();
     await sleep(50);
 
@@ -404,6 +434,27 @@ describe('Server integration', () => {
 
     await alice.close();
     await bob.close();
+  });
+
+  it('workspace.state for humans includes all recent messages', async () => {
+    const agent = makeClient('agent-state', AgentType.CLAUDE_CODE);
+    const human = makeClient('human-state');
+    await agent.connect();
+    await sleep(50);
+
+    // Message without any mention of human
+    agent.chat('Agent internal note');
+    await sleep(200);
+
+    // Human connects and should see all messages
+    const state = await human.connect();
+
+    const chatMessages = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMessages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toContain('Agent internal note');
+
+    await agent.close();
+    await human.close();
   });
 });
 
