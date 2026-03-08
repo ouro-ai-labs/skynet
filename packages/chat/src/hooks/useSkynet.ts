@@ -96,6 +96,14 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
           next.delete(p.agentId);
           return next;
         });
+        setBusyAgents((prev) => {
+          if (prev.has(p.agentId)) {
+            const next = new Map(prev);
+            next.delete(p.agentId);
+            return next;
+          }
+          return prev;
+        });
       }
       setMessages((prev) => [...prev, msg]);
     });
@@ -129,8 +137,23 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
       });
     });
 
+    client.on('workspace-state', (ws: WorkspaceState) => {
+      const memberMap = new Map<string, AgentCard>();
+      const busy = new Map<string, number>();
+      for (const m of ws.members) {
+        memberMap.set(m.id, m);
+        if (m.status === 'busy') {
+          busy.set(m.id, Date.now());
+        }
+      }
+      setMembers(memberMap);
+      setBusyAgents(busy);
+      setConnected(true);
+    });
+
     client.on('disconnected', () => {
       setConnected(false);
+      setBusyAgents(new Map());
       addSystemMessage('Disconnected from workspace. Will attempt to reconnect...');
     });
 
