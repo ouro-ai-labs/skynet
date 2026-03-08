@@ -5,6 +5,7 @@ import { App } from './components/App.js';
 export interface ChatTUIOptions {
   serverUrl: string;
   name: string;
+  id?: string;
 }
 
 export async function runChatTUI(opts: ChatTUIOptions): Promise<void> {
