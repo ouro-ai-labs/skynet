@@ -70,6 +70,10 @@ export class MemberManager {
     }
   }
 
+  getStatus(agentId: string): AgentStatus | undefined {
+    return this.members.get(agentId)?.agent.status;
+  }
+
   updateStatus(agentId: string, status: AgentStatus): void {
     const member = this.members.get(agentId);
     if (member) {

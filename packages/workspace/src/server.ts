@@ -11,7 +11,6 @@ import {
   type JoinRequest,
   type AgentJoinPayload,
   type AgentLeavePayload,
-  type TypingEvent,
   AgentType,
   MessageType,
   ClientAction,
@@ -240,9 +239,6 @@ export class SkynetWorkspace {
       case ClientAction.HEARTBEAT:
         this.handleHeartbeat(socket, envelope.data as { agentId: string; status: AgentStatus });
         break;
-      case ClientAction.TYPING:
-        this.handleTyping(socket, envelope.data as TypingEvent);
-        break;
       default:
         socket.send(JSON.stringify({ event: 'error', data: { message: `Unknown action: ${envelope.action}` } }));
     }
@@ -358,20 +354,19 @@ export class SkynetWorkspace {
     const agentId = this.socketAgentMap.get(socket);
     if (!agentId) return;
 
+    const prevStatus = this.members.getStatus(agentId);
     this.members.updateStatus(data.agentId, data.status);
 
+    // Broadcast status change to all other members so UIs can show "thinking..."
+    if (prevStatus !== data.status) {
+      const event = JSON.stringify({
+        event: 'status-change',
+        data: { agentId, status: data.status },
+      });
+      this.members.broadcastRaw(event, agentId);
+    }
+
     socket.send(JSON.stringify({ event: 'heartbeat.ack', data: { timestamp: Date.now() } }));
-  }
-
-  private handleTyping(socket: WebSocket, data: TypingEvent): void {
-    const agentId = this.socketAgentMap.get(socket);
-    if (!agentId) return;
-
-    const event = JSON.stringify({
-      event: 'typing',
-      data: { agentId, isTyping: data.isTyping },
-    });
-    this.members.broadcastRaw(event, agentId);
   }
 
   /** Explicit LEAVE action — immediate departure, no grace period. */

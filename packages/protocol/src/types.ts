@@ -127,12 +127,6 @@ export enum ClientAction {
   LEAVE = 'leave',
   SEND = 'send',
   HEARTBEAT = 'heartbeat',
-  TYPING = 'typing',
-}
-
-export interface TypingEvent {
-  agentId: string;
-  isTyping: boolean;
 }
 
 export interface ClientEnvelope {

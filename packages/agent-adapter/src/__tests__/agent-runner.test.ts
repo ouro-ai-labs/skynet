@@ -43,7 +43,7 @@ vi.mock('@skynet/sdk', () => {
     }
 
     sendMessage() {}
-    setTyping() {}
+    sendHeartbeatNow() {}
     updateTask() {}
     reportTaskResult() {}
   }

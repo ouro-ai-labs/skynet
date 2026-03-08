@@ -23,7 +23,7 @@ export interface SkynetState {
   messages: SkynetMessage[];
   systemMessages: string[];
   workspaceState: WorkspaceState | null;
-  typingAgents: Map<string, number>;
+  busyAgents: Map<string, number>;
 }
 
 export interface UseSkynetReturn {
@@ -44,8 +44,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
   const [messages, setMessages] = useState<SkynetMessage[]>([]);
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState | null>(null);
-  const [typingAgents, setTypingAgents] = useState<Map<string, number>>(new Map());
-  const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [busyAgents, setBusyAgents] = useState<Map<string, number>>(new Map());
 
   const addSystemMessage = useCallback((text: string) => {
     setSystemMessages((prev) => [...prev, text]);
@@ -97,44 +96,18 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
           return next;
         });
       }
-      // Clear typing indicator when agent sends a message
-      setTypingAgents((prev) => {
-        if (prev.has(msg.from)) {
-          const next = new Map(prev);
-          next.delete(msg.from);
-          return next;
-        }
-        return prev;
-      });
       setMessages((prev) => [...prev, msg]);
     });
 
-    client.on('typing', (data: { agentId: string; isTyping: boolean }) => {
-      const timers = typingTimersRef.current;
-      // Clear any existing expiry timer for this agent
-      const existing = timers.get(data.agentId);
-      if (existing) {
-        clearTimeout(existing);
-        timers.delete(data.agentId);
-      }
-
-      if (data.isTyping) {
-        setTypingAgents((prev) => {
+    client.on('status-change', (data: { agentId: string; status: string }) => {
+      if (data.status === 'busy') {
+        setBusyAgents((prev) => {
           const next = new Map(prev);
           next.set(data.agentId, Date.now());
           return next;
         });
-        // Auto-expire after 30s if no update
-        timers.set(data.agentId, setTimeout(() => {
-          timers.delete(data.agentId);
-          setTypingAgents((prev) => {
-            const next = new Map(prev);
-            next.delete(data.agentId);
-            return next;
-          });
-        }, 30000));
       } else {
-        setTypingAgents((prev) => {
+        setBusyAgents((prev) => {
           if (prev.has(data.agentId)) {
             const next = new Map(prev);
             next.delete(data.agentId);
@@ -163,10 +136,6 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
     });
 
     return () => {
-      for (const timer of typingTimersRef.current.values()) {
-        clearTimeout(timer);
-      }
-      typingTimersRef.current.clear();
       client.close().catch(() => {});
     };
   }, [opts.serverUrl, opts.name, addSystemMessage]);
@@ -182,7 +151,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
   }, []);
 
   return {
-    state: { connected, connecting, error, members, messages, systemMessages, workspaceState, typingAgents },
+    state: { connected, connecting, error, members, messages, systemMessages, workspaceState, busyAgents },
     sendChat,
     close,
     agentId: agentIdRef.current,
