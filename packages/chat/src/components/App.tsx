@@ -152,12 +152,12 @@ export function App({ options }: AppProps): React.ReactElement {
 
   const typingNames = useMemo(() => {
     const names: string[] = [];
-    for (const [id] of state.typingAgents) {
+    for (const [id] of state.busyAgents) {
       const card = state.members.get(id);
       if (card) names.push(card.name);
     }
     return names;
-  }, [state.typingAgents, state.members]);
+  }, [state.busyAgents, state.members]);
 
   // Loading state
   if (state.connecting) {

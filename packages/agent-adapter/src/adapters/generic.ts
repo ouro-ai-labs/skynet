@@ -85,7 +85,7 @@ export class GenericAdapter extends AgentAdapter {
     const result = await execaCommand(cmd, {
       cwd: this.config.projectRoot,
       shell: shell ?? true,
-      timeout: this.config.timeout ?? 300_000,
+      timeout: this.config.timeout ?? 1_200_000,
     });
     return result.stdout;
   }

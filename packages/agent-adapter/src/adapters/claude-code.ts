@@ -134,15 +134,26 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       args.push('--session-id', this.sessionId);
     }
 
-    const result = await execa('claude', args, {
-      cwd: this.projectRoot,
-      stdin: 'ignore',
-      env: spawnEnv(),
-      timeout: 300_000, // 5 min timeout
-    });
+    const isFirstCall = !this.sessionStarted;
+    try {
+      const result = await execa('claude', args, {
+        cwd: this.projectRoot,
+        stdin: 'ignore',
+        env: spawnEnv(),
+        timeout: 1_200_000, // 20 min timeout
+      });
 
-    this.sessionStarted = true;
+      this.sessionStarted = true;
 
-    return result.stdout;
+      return result.stdout;
+    } catch (err) {
+      // If this was the first call (--session-id), the session was created on disk
+      // even though it timed out. Mark it as started so subsequent calls use --resume
+      // instead of --session-id, avoiding "Session ID already in use" errors.
+      if (isFirstCall) {
+        this.sessionStarted = true;
+      }
+      throw err;
+    }
   }
 }

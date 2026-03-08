@@ -358,7 +358,7 @@ export class AgentRunner {
 
     this.processing = true;
     this.client.agent.status = 'busy';
-    this.client.setTyping(true);
+    this.client.sendHeartbeatNow();
 
     // Process leading tasks
     while (this.messageQueue.length > 0 && this.messageQueue[0].msg.type === MessageType.TASK_ASSIGN) {
@@ -406,8 +406,8 @@ export class AgentRunner {
       }
     }
 
-    this.client.setTyping(false);
     this.client.agent.status = 'idle';
+    this.client.sendHeartbeatNow();
     this.processing = false;
     this.persistLastSeenTimestamp();
 

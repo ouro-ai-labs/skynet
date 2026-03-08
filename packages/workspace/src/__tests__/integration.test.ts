@@ -387,50 +387,71 @@ describe('Server integration', () => {
     await bob.close();
   });
 
-  it('typing indicator is broadcast to other members', async () => {
-    const alice = await makeClient(PORT, 'alice-typing');
-    const bob = await makeClient(PORT, 'bob-typing');
+  it('status change is broadcast to other members via heartbeat', async () => {
+    const alice = await makeClient(PORT, 'alice-status');
+    const bob = await makeClient(PORT, 'bob-status');
 
     await alice.connect();
     await bob.connect();
     await sleep(50);
 
-    const typingEvents: Array<{ agentId: string; isTyping: boolean }> = [];
-    bob.on('typing', (data: { agentId: string; isTyping: boolean }) => {
-      typingEvents.push(data);
+    const statusEvents: Array<{ agentId: string; status: string }> = [];
+    bob.on('status-change', (data: { agentId: string; status: string }) => {
+      statusEvents.push(data);
     });
 
-    alice.setTyping(true);
+    // Simulate heartbeat with status change (idle → busy)
+    alice.agent.status = 'busy';
+    (alice as unknown as { send(e: { action: string; data: unknown }): void }).send({
+      action: 'heartbeat',
+      data: { agentId: alice.agent.id, status: 'busy' },
+    });
     await sleep(100);
 
-    expect(typingEvents).toHaveLength(1);
-    expect(typingEvents[0].agentId).toBe(alice.agent.id);
-    expect(typingEvents[0].isTyping).toBe(true);
+    expect(statusEvents).toHaveLength(1);
+    expect(statusEvents[0].agentId).toBe(alice.agent.id);
+    expect(statusEvents[0].status).toBe('busy');
 
-    alice.setTyping(false);
+    // Same status heartbeat — should NOT broadcast again
+    (alice as unknown as { send(e: { action: string; data: unknown }): void }).send({
+      action: 'heartbeat',
+      data: { agentId: alice.agent.id, status: 'busy' },
+    });
     await sleep(100);
 
-    expect(typingEvents).toHaveLength(2);
-    expect(typingEvents[1].isTyping).toBe(false);
+    expect(statusEvents).toHaveLength(1);
+
+    // Status change back to idle
+    (alice as unknown as { send(e: { action: string; data: unknown }): void }).send({
+      action: 'heartbeat',
+      data: { agentId: alice.agent.id, status: 'idle' },
+    });
+    await sleep(100);
+
+    expect(statusEvents).toHaveLength(2);
+    expect(statusEvents[1].status).toBe('idle');
 
     await alice.close();
     await bob.close();
   });
 
-  it('typing indicator is not echoed back to sender', async () => {
-    const alice = await makeClient(PORT, 'alice-typing-echo');
+  it('status change is not echoed back to sender', async () => {
+    const alice = await makeClient(PORT, 'alice-status-echo');
     await alice.connect();
     await sleep(50);
 
-    const typingEvents: Array<{ agentId: string; isTyping: boolean }> = [];
-    alice.on('typing', (data: { agentId: string; isTyping: boolean }) => {
-      typingEvents.push(data);
+    const statusEvents: Array<{ agentId: string; status: string }> = [];
+    alice.on('status-change', (data: { agentId: string; status: string }) => {
+      statusEvents.push(data);
     });
 
-    alice.setTyping(true);
+    (alice as unknown as { send(e: { action: string; data: unknown }): void }).send({
+      action: 'heartbeat',
+      data: { agentId: alice.agent.id, status: 'busy' },
+    });
     await sleep(100);
 
-    expect(typingEvents).toHaveLength(0);
+    expect(statusEvents).toHaveLength(0);
 
     await alice.close();
   });

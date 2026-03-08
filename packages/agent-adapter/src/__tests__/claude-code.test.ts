@@ -48,6 +48,24 @@ describe('ClaudeCodeAdapter session continuity', () => {
     expect(args).not.toContain('--resume');
   });
 
+  it('marks session as started even if first call fails (avoids session ID conflict)', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // First call fails (e.g. timeout)
+    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Command timed out'));
+
+    await expect(adapter.handleMessage(makeMsg())).rejects.toThrow('Command timed out');
+
+    // Second call should use --resume (not --session-id) to avoid "Session ID already in use"
+    (execa as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
+    await adapter.handleMessage(makeMsg({ text: 'retry' }));
+
+    const secondArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1] as string[];
+    expect(secondArgs).toContain('--resume');
+    expect(secondArgs).not.toContain('--session-id');
+  });
+
   it('subsequent calls use --resume with same session ID', async () => {
     const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
@@ -134,7 +152,7 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     expect(execa).toHaveBeenCalledWith(
       'claude',
       expect.arrayContaining(['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'text']),
-      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 300_000 }),
+      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 1_200_000 }),
     );
     expect(result).toBe('mock response');
   });

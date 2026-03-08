@@ -95,8 +95,8 @@ export class SkynetClient extends EventEmitter {
             }
             // On reconnection, emit so listeners can refresh their state
             this.emit('workspace-state', evt.data as WorkspaceState);
-          } else if (evt.event === 'typing') {
-            this.emit('typing', evt.data);
+          } else if (evt.event === 'status-change') {
+            this.emit('status-change', evt.data);
           } else if (evt.event === 'error') {
             // If connect() hasn't resolved yet, reject it instead of emitting
             // (emitting 'error' with no listener throws an uncaught exception)
@@ -226,10 +226,11 @@ export class SkynetClient extends EventEmitter {
     });
   }
 
-  setTyping(isTyping: boolean): void {
+  /** Send a heartbeat immediately (e.g. on status change) without waiting for the next interval. */
+  sendHeartbeatNow(): void {
     this.send({
-      action: ClientAction.TYPING,
-      data: { agentId: this.agent.id, isTyping },
+      action: ClientAction.HEARTBEAT,
+      data: { agentId: this.agent.id, status: this.agent.status },
     });
   }
 
