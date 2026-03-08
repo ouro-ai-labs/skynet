@@ -5,7 +5,7 @@ export interface Store {
   save(msg: SkynetMessage): void;
   getMessages(limit?: number, before?: number, after?: number): SkynetMessage[];
   getById(id: string): SkynetMessage | undefined;
-  /** Get recent messages where `to` or `mentions` includes `agentId`, optionally after `since` timestamp. */
+  /** Get recent messages where `mentions` includes `agentId`, optionally after `since` timestamp. */
   getMessagesFor(agentId: string, limit?: number, since?: number): SkynetMessage[];
 
   // Agents

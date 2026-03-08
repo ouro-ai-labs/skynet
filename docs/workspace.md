@@ -63,7 +63,6 @@ CREATE TABLE messages (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
   "from" TEXT NOT NULL,
-  "to" TEXT,
   timestamp INTEGER NOT NULL,
   payload TEXT NOT NULL,    -- JSON serialized
   reply_to TEXT,
@@ -128,7 +127,7 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 
 - Server overwrites `from` via `createMessage()` to prevent spoofing
 - Persists the message
-- Routing is entirely **mention-driven** (the `msg.to` field is not used for routing):
+- Routing is entirely **mention-driven**:
   - `@all` in mentions → broadcast to all members (including sender)
   - Specific mentions → deliver to mentioned members + echo to sender
   - **Human observers**: humans always receive all messages, even when not @mentioned, so they can see the full conversation flow

@@ -15,7 +15,6 @@ function makeMsg(overrides: Partial<{ text: string; from: string }> = {}) {
     id: 'msg-1',
     type: MessageType.CHAT as const,
     from: overrides.from ?? 'human-123',
-    to: null,
     timestamp: Date.now(),
     payload: { text: overrides.text ?? 'hello' },
   };

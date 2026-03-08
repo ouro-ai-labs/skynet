@@ -179,7 +179,6 @@ export class SkynetClient extends EventEmitter {
   chat(text: string, mentions?: string[]): void {
     this.sendMessage({
       type: MessageType.CHAT,
-      to: null,
       payload: { text },
       ...(mentions && mentions.length > 0 ? { mentions } : {}),
     });
@@ -188,7 +187,6 @@ export class SkynetClient extends EventEmitter {
   assignTask(taskId: string, title: string, description: string, assignee?: string): void {
     this.sendMessage({
       type: MessageType.TASK_ASSIGN,
-      to: assignee ?? null,
       payload: { taskId, title, description, assignee, status: 'pending' },
     });
   }
@@ -196,7 +194,6 @@ export class SkynetClient extends EventEmitter {
   updateTask(taskId: string, status: string, assignee?: string): void {
     this.sendMessage({
       type: MessageType.TASK_UPDATE,
-      to: assignee ?? null,
       payload: { taskId, status },
     });
   }
@@ -204,7 +201,6 @@ export class SkynetClient extends EventEmitter {
   reportTaskResult(taskId: string, success: boolean, summary: string, filesChanged?: string[]): void {
     this.sendMessage({
       type: MessageType.TASK_RESULT,
-      to: null,
       payload: { taskId, success, summary, filesChanged },
     });
   }
@@ -212,7 +208,6 @@ export class SkynetClient extends EventEmitter {
   shareContext(files?: Array<{ path: string; content?: string }>, metadata?: Record<string, unknown>): void {
     this.sendMessage({
       type: MessageType.CONTEXT_SHARE,
-      to: null,
       payload: { files, metadata },
     });
   }

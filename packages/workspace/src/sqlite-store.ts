@@ -16,7 +16,6 @@ export class SqliteStore implements Store {
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
         "from" TEXT NOT NULL,
-        "to" TEXT,
         timestamp INTEGER NOT NULL,
         payload TEXT NOT NULL,
         reply_to TEXT,
@@ -46,13 +45,12 @@ export class SqliteStore implements Store {
 
   save(msg: SkynetMessage): void {
     this.db.prepare(`
-      INSERT OR REPLACE INTO messages (id, type, "from", "to", timestamp, payload, reply_to, mentions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO messages (id, type, "from", timestamp, payload, reply_to, mentions)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       msg.id,
       msg.type,
       msg.from,
-      msg.to,
       msg.timestamp,
       JSON.stringify(msg.payload),
       msg.replyTo ?? null,
@@ -162,7 +160,6 @@ export class SqliteStore implements Store {
       id: row.id as string,
       type: row.type as SkynetMessage['type'],
       from: row.from as string,
-      to: (row.to as string) || null,
       timestamp: row.timestamp as number,
       payload: JSON.parse(row.payload as string),
       replyTo: (row.reply_to as string) || undefined,
