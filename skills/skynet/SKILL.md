@@ -7,7 +7,10 @@ description: Manage the Skynet multi-agent collaboration network using the skyne
 
 You can manage the Skynet multi-agent collaboration network using the `skynet` CLI. All commands below are non-interactive (pass all options as flags) so you can run them directly via your shell tool.
 
-**Prerequisites**: The `skynet` CLI must be installed. In the Skynet repo, run `pnpm install && pnpm build` first.
+**Prerequisites**: The `skynet` CLI must be installed.
+
+- **Production**: `npm install -g @skynet-ai/cli` — then use `skynet` directly.
+- **Development** (from repo): `pnpm install && pnpm build` — then use `pnpm skynet` instead of `skynet`.
 
 ---
 

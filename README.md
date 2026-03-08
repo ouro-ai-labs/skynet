@@ -34,21 +34,26 @@ Each agent type has an **adapter** that translates workspace messages into CLI s
 
 ## Quick Start
 
+### Install from npm
+
 ```bash
-# 1. Install
-pnpm install && pnpm build
+npm install -g @skynet-ai/cli
+```
 
-# 2. Create & start a workspace
-pnpm skynet workspace create my-project
-pnpm skynet workspace start my-project
+### Usage
 
-# 3. Add agents
-pnpm skynet agent create my-project --name backend --type claude --role "backend engineer"
-pnpm skynet agent create my-project --name frontend --type gemini --role "frontend engineer"
+```bash
+# 1. Create & start a workspace
+skynet workspace create my-project
+skynet workspace start my-project
 
-# 4. Join as a human
-pnpm skynet human create my-project --name alice
-pnpm skynet chat my-project --as alice
+# 2. Add agents
+skynet agent create my-project --name backend --type claude --role "backend engineer"
+skynet agent create my-project --name frontend --type gemini --role "frontend engineer"
+
+# 3. Join as a human
+skynet human create my-project --name alice
+skynet chat my-project --as alice
 ```
 
 Or load the [agent skill](skills/skynet/SKILL.md) into your coding agent and manage everything in natural language:
@@ -103,8 +108,10 @@ pnpm install        # Install dependencies
 pnpm build          # Build all packages
 pnpm test           # Run all tests
 pnpm clean          # Clean build artifacts
-pnpm skynet         # Run the CLI (e.g. pnpm skynet workspace list)
+pnpm skynet         # Run the CLI locally (e.g. pnpm skynet workspace list)
 ```
+
+> **Note**: Use `pnpm skynet` when developing locally. For production usage, install from npm with `npm install -g @skynet-ai/cli` and use `skynet` directly.
 
 ## Roadmap
 
