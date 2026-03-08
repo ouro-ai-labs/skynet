@@ -202,6 +202,7 @@ describe('AgentRunner pending notices', () => {
       serverUrl: 'ws://localhost:0',
       adapter,
       agentName: 'test-agent',
+      debounceMs: 0,
     });
     await runner.start();
   });
@@ -287,6 +288,7 @@ describe('AgentRunner pending notices', () => {
       serverUrl: 'ws://localhost:0',
       adapter: freshAdapter,
       agentName: 'fresh-agent',
+      debounceMs: 0,
     });
 
     // start() clears notices, so any join events from initial state won't leak
@@ -337,6 +339,7 @@ describe('AgentRunner fork dispatch', () => {
     runner = new AgentRunner({
       serverUrl: 'ws://localhost:0',
       adapter,
+      debounceMs: 0,
     });
     await runner.start();
   });
@@ -660,6 +663,7 @@ describe('AgentRunner batch processing', () => {
     runner = new AgentRunner({
       serverUrl: 'ws://localhost:0',
       adapter,
+      debounceMs: 0,
     });
     await runner.start();
   });
@@ -775,6 +779,7 @@ describe('AgentRunner state persistence', () => {
       serverUrl: 'ws://localhost:0',
       adapter,
       statePath,
+      debounceMs: 0,
     });
     await runner.start();
 
@@ -808,11 +813,176 @@ describe('AgentRunner state persistence', () => {
       serverUrl: 'ws://localhost:0',
       adapter,
       statePath,
+      debounceMs: 0,
     });
     await runner.start();
 
     // The client should have been constructed with the persisted timestamp
     const client = getClient(runner);
     expect((client as unknown as { lastSeenTimestamp: number }).lastSeenTimestamp).toBe(99000);
+  });
+});
+
+describe('AgentRunner debounce', () => {
+  it('delays processing of idle chat messages by debounce window', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 200,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+
+    // Should NOT have processed yet (within debounce window)
+    await new Promise(r => setTimeout(r, 50));
+    expect(adapter.handleMessageCalls).toHaveLength(0);
+
+    // After debounce window, should be processed
+    await new Promise(r => setTimeout(r, 200));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+  });
+
+  it('batches multiple chat messages arriving within debounce window', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 200,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    // Send 3 messages within the debounce window
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'second', mentions: [runner.agentId] });
+    const msg3 = makeChatMsg({ from: 'user-a', text: 'third', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+
+    await new Promise(r => setTimeout(r, 50));
+    client.emit('chat', msg2);
+
+    await new Promise(r => setTimeout(r, 50));
+    client.emit('chat', msg3);
+
+    // Still within debounce window of last message — nothing processed yet
+    await new Promise(r => setTimeout(r, 50));
+    expect(adapter.handleMessageCalls).toHaveLength(0);
+
+    // After debounce fires, all 3 should be batched into one call
+    await new Promise(r => setTimeout(r, 250));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+    const batchText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
+    expect(batchText).toContain('3 unread messages');
+    expect(batchText).toContain('first');
+    expect(batchText).toContain('second');
+    expect(batchText).toContain('third');
+  });
+
+  it('task messages bypass debounce and flush pending chat messages', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 500,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    // Queue a chat message (debounce starts)
+    const msg = makeChatMsg({ from: 'user-a', text: 'chat before task', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+
+    // Immediately send a task — should bypass debounce
+    const taskMsg = makeTaskMsg();
+    client.emit('task-assign', taskMsg);
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Chat message should have been processed (flushed by task), plus task handled
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+    const chatText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
+    expect(chatText).toContain('chat before task');
+  });
+
+  it('debounce does not apply when agent is already busy', async () => {
+    const adapter = new FakeAdapter();
+    adapter.handleDelay = 200;
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0, // Disable debounce for first message to make it start immediately
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    // First message starts processing immediately (debounceMs: 0)
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 10));
+
+    // Agent is now busy — second message should queue without debounce
+    const msg2 = makeChatMsg({ from: 'user-b', text: 'second', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+
+    // Wait for both to process
+    await new Promise(r => setTimeout(r, 400));
+
+    // Both should have been processed
+    expect(adapter.handleMessageCalls).toHaveLength(2);
+  });
+
+  it('stop() clears debounce timer and prevents processing', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 200,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+
+    // Stop before debounce fires
+    await runner.stop();
+
+    // Wait past the debounce window
+    await new Promise(r => setTimeout(r, 300));
+
+    // Should not have been processed
+    expect(adapter.handleMessageCalls).toHaveLength(0);
+  });
+
+  it('debounceMs: 0 disables debounce (immediate processing)', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 10));
+    expect(adapter.handleMessageCalls).toHaveLength(1);
+  });
+
+  it('defaults to DEFAULT_DEBOUNCE_MS when debounceMs is not set', () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+    });
+    // Access private field to verify default
+    const ms = (runner as unknown as { debounceMs: number }).debounceMs;
+    expect(ms).toBe(3000);
   });
 });

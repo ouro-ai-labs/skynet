@@ -96,11 +96,13 @@ describe('E2E: multi-agent collaboration', () => {
       serverUrl: `http://localhost:${PORT}`,
       adapter: new FakeAdapter('agent-1'),
       agentName: 'agent-1',
+      debounceMs: 0,
     });
     runner2 = new AgentRunner({
       serverUrl: `http://localhost:${PORT}`,
       adapter: new FakeAdapter('agent-2'),
       agentName: 'agent-2',
+      debounceMs: 0,
     });
 
     await runner1.start();
@@ -239,6 +241,7 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
       serverUrl: baseUrl,
       adapter: new FakeAdapter('lifecycle-1'),
       agentName: 'lifecycle-agent-1',
+      debounceMs: 0,
     });
     await runner.start();
 
@@ -533,6 +536,7 @@ describe('E2E: AgentRunner persists and restores lastSeenTimestamp', () => {
       agentId,
       agentName: 'persist-agent',
       statePath,
+      debounceMs: 0,
     });
     await runner1.start();
 
@@ -571,6 +575,7 @@ describe('E2E: AgentRunner persists and restores lastSeenTimestamp', () => {
       agentId,
       agentName: 'persist-agent',
       statePath,
+      debounceMs: 0,
     });
     const reconnectState = await runner2.start();
 
