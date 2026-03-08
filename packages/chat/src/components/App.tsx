@@ -256,8 +256,10 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text>  @name message   Direct message</Text>
             <Text />
             <Text bold> Management</Text>
-            <Text>  /agent list     List agents</Text>
-            <Text>  /human list     List humans</Text>
+            <Text>  /agent list          List agents</Text>
+            <Text>  /agent interrupt     Interrupt agent</Text>
+            <Text>  /agent forget        Reset agent session</Text>
+            <Text>  /human list          List humans</Text>
             <Text />
             <Text bold> Input</Text>
             <Text>  Up/Down         Input history</Text>

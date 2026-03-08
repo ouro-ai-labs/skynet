@@ -331,3 +331,80 @@ describe('ClaudeCodeAdapter quickReply (session fork)', () => {
     expect(result).toBe('mock response');
   });
 });
+
+describe('ClaudeCodeAdapter interrupt', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns false when no process is running', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    const result = await adapter.interrupt();
+    expect(result).toBe(false);
+  });
+
+  it('tracks the running process and clears it after completion', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // After handleMessage completes, runningProcess should be null
+    await adapter.handleMessage(makeMsg());
+
+    // No running process → interrupt returns false
+    const result = await adapter.interrupt();
+    expect(result).toBe(false);
+  });
+});
+
+describe('ClaudeCodeAdapter resetSession', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('creates a new session ID after reset', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Start a session
+    await adapter.handleMessage(makeMsg());
+    const firstArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    const firstSessionId = firstArgs[firstArgs.indexOf('--session-id') + 1];
+
+    // Reset
+    await adapter.resetSession();
+
+    // Next call should use --session-id (not --resume) with a NEW session ID
+    await adapter.handleMessage(makeMsg({ text: 'after reset' }));
+    const secondArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1] as string[];
+    expect(secondArgs).toContain('--session-id');
+    expect(secondArgs).not.toContain('--resume');
+
+    const secondSessionId = secondArgs[secondArgs.indexOf('--session-id') + 1];
+    expect(secondSessionId).not.toBe(firstSessionId);
+  });
+
+  it('supportsQuickReply returns false after reset', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Start session
+    await adapter.handleMessage(makeMsg());
+    expect(adapter.supportsQuickReply()).toBe(true);
+
+    // Reset
+    await adapter.resetSession();
+    expect(adapter.supportsQuickReply()).toBe(false);
+  });
+});

@@ -145,6 +145,12 @@ export class SkynetClient extends EventEmitter {
           case MessageType.FILE_CHANGE:
             this.emit('file-change', msg);
             break;
+          case MessageType.AGENT_INTERRUPT:
+            this.emit('agent-interrupt', msg);
+            break;
+          case MessageType.AGENT_FORGET:
+            this.emit('agent-forget', msg);
+            break;
         }
       });
 

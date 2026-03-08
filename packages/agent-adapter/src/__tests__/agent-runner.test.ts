@@ -1026,3 +1026,191 @@ describe('AgentRunner debounce', () => {
     expect(ms).toBe(3000);
   });
 });
+
+describe('AgentRunner interrupt', () => {
+  let adapter: FakeAdapter;
+  let runner: AgentRunner;
+
+  beforeEach(async () => {
+    adapter = new FakeAdapter();
+    adapter.handleDelay = 200;
+    runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+  });
+
+  it('clears message queue on interrupt', async () => {
+    const client = getClient(runner);
+
+    // Start processing a message (takes 200ms)
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 10));
+
+    // Queue another message
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'more work', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+
+    // Interrupt
+    client.emit('agent-interrupt', {
+      id: 'ctrl-1',
+      type: 'agent.interrupt',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    // Queue should be empty and agent should be idle
+    const queue = (runner as unknown as { messageQueue: unknown[] }).messageQueue;
+    expect(queue).toHaveLength(0);
+
+    // Wait for any remaining processing to settle
+    await new Promise(r => setTimeout(r, 250));
+  });
+
+  it('sets status to idle after interrupt', async () => {
+    const client = getClient(runner);
+
+    // Start processing
+    const msg = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 10));
+
+    // Interrupt
+    client.emit('agent-interrupt', {
+      id: 'ctrl-2',
+      type: 'agent.interrupt',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    const processing = (runner as unknown as { processing: boolean }).processing;
+    expect(processing).toBe(false);
+  });
+
+  it('can accept new messages after interrupt', async () => {
+    const client = getClient(runner);
+
+    // Start processing (takes 200ms)
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'first', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 10));
+
+    // Interrupt
+    client.emit('agent-interrupt', {
+      id: 'ctrl-3',
+      type: 'agent.interrupt',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    // Reset delay so new message completes quickly
+    adapter.handleDelay = 0;
+
+    // Send a new message — should be processed normally
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'after interrupt', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+    await new Promise(r => setTimeout(r, 50));
+
+    // The adapter should have received the new message
+    const hasAfterInterrupt = adapter.handleMessageCalls.some(
+      m => (m.payload as { text: string }).text === 'after interrupt'
+    );
+    expect(hasAfterInterrupt).toBe(true);
+  });
+});
+
+describe('AgentRunner forget', () => {
+  let adapter: FakeAdapter;
+  let runner: AgentRunner;
+
+  beforeEach(async () => {
+    adapter = new FakeAdapter();
+    runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+  });
+
+  it('clears message queue and processed IDs on forget', async () => {
+    const client = getClient(runner);
+
+    // Process a message so processedMessageIds is populated
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    const processedIds = (runner as unknown as { processedMessageIds: Set<string> }).processedMessageIds;
+    expect(processedIds.size).toBeGreaterThan(0);
+
+    // Forget
+    client.emit('agent-forget', {
+      id: 'ctrl-4',
+      type: 'agent.forget',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(processedIds.size).toBe(0);
+    const queue = (runner as unknown as { messageQueue: unknown[] }).messageQueue;
+    expect(queue).toHaveLength(0);
+  });
+
+  it('resets processing state on forget', async () => {
+    const client = getClient(runner);
+
+    // Forget
+    client.emit('agent-forget', {
+      id: 'ctrl-5',
+      type: 'agent.forget',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    const processing = (runner as unknown as { processing: boolean }).processing;
+    expect(processing).toBe(false);
+  });
+
+  it('agent can process new messages after forget', async () => {
+    const client = getClient(runner);
+
+    // Process a message
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'before forget', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Forget
+    client.emit('agent-forget', {
+      id: 'ctrl-6',
+      type: 'agent.forget',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    // Send new message
+    const msg2 = makeChatMsg({ from: 'user-a', text: 'after forget', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+    await new Promise(r => setTimeout(r, 50));
+
+    const hasAfterForget = adapter.handleMessageCalls.some(
+      m => (m.payload as { text: string }).text === 'after forget'
+    );
+    expect(hasAfterForget).toBe(true);
+  });
+});

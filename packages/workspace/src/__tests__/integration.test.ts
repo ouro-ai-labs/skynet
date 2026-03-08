@@ -761,4 +761,95 @@ describe('Server HTTP API', () => {
 
     await paginatorClient.close();
   });
+
+  it('interrupt endpoint sends control message to connected agent', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'interrupt-agent', type: 'claude-code' }),
+    });
+    const agent = await createRes.json() as { id: string };
+
+    const client = new SkynetClient({
+      serverUrl: `http://localhost:${API_PORT}`,
+      agent: { id: agent.id, name: 'interrupt-agent', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+    });
+    await client.connect();
+
+    const received: SkynetMessage[] = [];
+    client.on('agent-interrupt', (msg: SkynetMessage) => received.push(msg));
+
+    await sleep(50);
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}/interrupt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.ok).toBe(true);
+
+    await sleep(100);
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('agent.interrupt');
+
+    await client.close();
+  });
+
+  it('forget endpoint sends control message to connected agent', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'forget-agent', type: 'claude-code' }),
+    });
+    const agent = await createRes.json() as { id: string };
+
+    const client = new SkynetClient({
+      serverUrl: `http://localhost:${API_PORT}`,
+      agent: { id: agent.id, name: 'forget-agent', type: AgentType.CLAUDE_CODE },
+      reconnect: false,
+    });
+    await client.connect();
+
+    const received: SkynetMessage[] = [];
+    client.on('agent-forget', (msg: SkynetMessage) => received.push(msg));
+
+    await sleep(50);
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}/forget`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.ok).toBe(true);
+
+    await sleep(100);
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('agent.forget');
+
+    await client.close();
+  });
+
+  it('interrupt returns 409 for disconnected agent', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'offline-interrupt', type: 'claude-code' }),
+    });
+    const agent = await createRes.json() as { id: string };
+
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}/interrupt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('forget returns 404 for non-existent agent', async () => {
+    const res = await fetch(`http://localhost:${API_PORT}/api/agents/nonexistent/forget`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(404);
+  });
 });

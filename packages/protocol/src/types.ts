@@ -48,6 +48,10 @@ export enum MessageType {
   TASK_UPDATE = 'task.update',
   TASK_RESULT = 'task.result',
 
+  // Agent control
+  AGENT_INTERRUPT = 'agent.interrupt',
+  AGENT_FORGET = 'agent.forget',
+
   // Context sharing
   CONTEXT_SHARE = 'context.share',
   FILE_CHANGE = 'file.change',
@@ -107,6 +111,15 @@ export interface TaskResultPayload {
 export interface ContextSharePayload {
   files?: Array<{ path: string; content?: string }>;
   metadata?: Record<string, unknown>;
+}
+
+export interface AgentInterruptPayload {
+  agentId: string;
+  reason?: string;
+}
+
+export interface AgentForgetPayload {
+  agentId: string;
 }
 
 export interface FileChangePayload {

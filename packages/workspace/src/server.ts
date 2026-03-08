@@ -11,6 +11,8 @@ import {
   type JoinRequest,
   type AgentJoinPayload,
   type AgentLeavePayload,
+  type AgentInterruptPayload,
+  type AgentForgetPayload,
   AgentType,
   MessageType,
   ClientAction,
@@ -62,6 +64,7 @@ export class SkynetWorkspace {
 
     this.registerHealthRoutes();
     this.registerAgentRoutes();
+    this.registerAgentControlRoutes();
     this.registerHumanRoutes();
     this.registerMessageRoutes();
     this.registerNameRoutes();
@@ -146,6 +149,56 @@ export class SkynetWorkspace {
       this.store.deleteAgent(agent.id);
       return reply.status(200).send({ deleted: agent });
     });
+  }
+
+  private registerAgentControlRoutes(): void {
+    // Interrupt agent — cancel its current task/processing
+    this.fastify.post<{ Params: { id: string }; Body: { reason?: string } }>(
+      '/api/agents/:id/interrupt',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const member = this.members.getMember(agent.id);
+        if (!member) {
+          return reply.status(409).send({ error: 'Agent is not connected' });
+        }
+        const msg = createMessage({
+          type: MessageType.AGENT_INTERRUPT,
+          from: agent.id,
+          payload: { agentId: agent.id, reason: req.body?.reason } satisfies AgentInterruptPayload,
+          mentions: [agent.id],
+        });
+        this.members.sendTo(agent.id, msg);
+        this.logger.info(`Interrupt sent to agent: ${agent.name} (${agent.id})`);
+        return { ok: true, agentId: agent.id };
+      },
+    );
+
+    // Forget agent conversation — clear its context/session
+    this.fastify.post<{ Params: { id: string } }>(
+      '/api/agents/:id/forget',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const member = this.members.getMember(agent.id);
+        if (!member) {
+          return reply.status(409).send({ error: 'Agent is not connected' });
+        }
+        const msg = createMessage({
+          type: MessageType.AGENT_FORGET,
+          from: agent.id,
+          payload: { agentId: agent.id } satisfies AgentForgetPayload,
+          mentions: [agent.id],
+        });
+        this.members.sendTo(agent.id, msg);
+        this.logger.info(`Forget sent to agent: ${agent.name} (${agent.id})`);
+        return { ok: true, agentId: agent.id };
+      },
+    );
   }
 
   private registerHumanRoutes(): void {

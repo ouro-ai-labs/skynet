@@ -31,6 +31,22 @@ export abstract class AgentAdapter {
     throw new Error('quickReply not implemented');
   }
 
+  /**
+   * Interrupt the currently running process (e.g. kill child process).
+   * Returns true if something was interrupted, false if nothing was running.
+   */
+  async interrupt(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Reset the session/conversation context so the agent starts fresh.
+   * The adapter remains usable after this call.
+   */
+  async resetSession(): Promise<void> {
+    // Default: no-op — subclasses override if they maintain session state.
+  }
+
   /** Clean up resources (kill child processes, etc.) */
   abstract dispose(): Promise<void>;
 }
