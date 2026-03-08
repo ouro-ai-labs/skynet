@@ -41,6 +41,32 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Register a human via HTTP API and return a SkynetClient ready to connect. */
+async function registerHuman(baseUrl: string, name: string): Promise<SkynetClient> {
+  const res = await fetch(`${baseUrl}/api/humans`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const entity = await res.json() as { id: string };
+  return new SkynetClient({
+    serverUrl: baseUrl,
+    agent: { id: entity.id, name, type: AgentType.HUMAN },
+    reconnect: false,
+  });
+}
+
+/** Register an agent via HTTP API and return its ID. */
+async function registerAgent(baseUrl: string, name: string, type: string = 'claude-code'): Promise<string> {
+  const res = await fetch(`${baseUrl}/api/agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, type }),
+  });
+  const entity = await res.json() as { id: string };
+  return entity.id;
+}
+
 function collectMessages(
   client: SkynetClient,
   count: number,
@@ -91,7 +117,7 @@ describe('E2E: multi-agent collaboration', () => {
     server = new SkynetWorkspace({ port: PORT, store: new SqliteStore(':memory:'), disconnectGraceMs: 100 });
     await server.start();
 
-    // Create 2 AgentRunners with FakeAdapters
+    // Create 2 AgentRunners with FakeAdapters (auto-registers via HTTP)
     runner1 = new AgentRunner({
       serverUrl: `http://localhost:${PORT}`,
       adapter: new FakeAdapter('agent-1'),
@@ -108,16 +134,8 @@ describe('E2E: multi-agent collaboration', () => {
     await runner1.start();
     await runner2.start();
 
-    // Create human client
-    humanClient = new SkynetClient({
-      serverUrl: `http://localhost:${PORT}`,
-      agent: {
-        id: randomUUID(),
-        name: 'human',
-        type: AgentType.HUMAN,
-      },
-      reconnect: false,
-    });
+    // Create human client (register via HTTP first)
+    humanClient = await registerHuman(`http://localhost:${PORT}`, 'human');
     await humanClient.connect();
 
     // Let connections stabilize
@@ -226,6 +244,7 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
       body: JSON.stringify({ name: 'lifecycle-human' }),
     });
     expect(createHuman.status).toBe(201);
+    const humanProfile = await createHuman.json() as { id: string };
 
     // 2. Verify entities exist via list APIs
     const agentsRes = await fetch(`${baseUrl}/api/agents`);
@@ -248,7 +267,7 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
     const humanClient = new SkynetClient({
       serverUrl: baseUrl,
       agent: {
-        id: randomUUID(),
+        id: humanProfile.id,
         name: 'lifecycle-human',
         type: AgentType.HUMAN,
       },
@@ -323,15 +342,11 @@ describe('E2E: workspace.state only returns mentioned messages for connecting ag
     const baseUrl = `http://localhost:${MENTION_PORT}`;
 
     // Human sends various messages before the agent connects
-    const human = new SkynetClient({
-      serverUrl: baseUrl,
-      agent: { id: randomUUID(), name: 'human-mention', type: AgentType.HUMAN },
-      reconnect: false,
-    });
+    const human = await registerHuman(baseUrl, 'human-mention');
     await human.connect();
     await sleep(50);
 
-    const agentId = randomUUID();
+    const agentId = await registerAgent(baseUrl, 'target-agent');
 
     // Messages without mention (not addressed to agent)
     human.chat('General broadcast 1');
@@ -374,12 +389,8 @@ describe('E2E: workspace.state only returns mentioned messages for connecting ag
   it('recentMentionsLimit caps the number of returned messages', async () => {
     const baseUrl = `http://localhost:${MENTION_PORT}`;
 
-    const agentId = randomUUID();
-    const human = new SkynetClient({
-      serverUrl: baseUrl,
-      agent: { id: randomUUID(), name: 'human-limit', type: AgentType.HUMAN },
-      reconnect: false,
-    });
+    const agentId = await registerAgent(baseUrl, 'limit-agent');
+    const human = await registerHuman(baseUrl, 'human-limit');
     await human.connect();
     await sleep(50);
 
@@ -428,13 +439,9 @@ describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
 
   it('agent reconnecting with lastSeenTimestamp skips old messages', async () => {
     const baseUrl = `http://localhost:${SEEN_PORT}`;
-    const agentId = randomUUID();
+    const agentId = await registerAgent(baseUrl, 'seen-agent');
 
-    const human = new SkynetClient({
-      serverUrl: baseUrl,
-      agent: { id: randomUUID(), name: 'human-seen', type: AgentType.HUMAN },
-      reconnect: false,
-    });
+    const human = await registerHuman(baseUrl, 'human-seen');
     await human.connect();
     await sleep(50);
 
@@ -471,13 +478,9 @@ describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
 
   it('agent with lastSeenTimestamp=0 gets all recent mentions', async () => {
     const baseUrl = `http://localhost:${SEEN_PORT}`;
-    const agentId = randomUUID();
+    const agentId = await registerAgent(baseUrl, 'fresh-agent');
 
-    const human = new SkynetClient({
-      serverUrl: baseUrl,
-      agent: { id: randomUUID(), name: 'human-zero', type: AgentType.HUMAN },
-      reconnect: false,
-    });
+    const human = await registerHuman(baseUrl, 'human-zero');
     await human.connect();
     await sleep(50);
 
@@ -526,26 +529,21 @@ describe('E2E: AgentRunner persists and restores lastSeenTimestamp', () => {
   it('AgentRunner persists state and uses it on restart to skip old messages', async () => {
     const baseUrl = `http://localhost:${PERSIST_PORT}`;
     const statePath = join(testDir, 'agent-state.json');
-    const agentId = randomUUID();
 
     // --- Phase 1: Agent connects, processes messages, stops ---
     const adapter1 = new FakeAdapter('persist-agent');
     const runner1 = new AgentRunner({
       serverUrl: baseUrl,
       adapter: adapter1,
-      agentId,
       agentName: 'persist-agent',
       statePath,
       debounceMs: 0,
     });
     await runner1.start();
+    const agentId = runner1.agentId;
 
     // Human sends a DM to the agent
-    const human = new SkynetClient({
-      serverUrl: baseUrl,
-      agent: { id: randomUUID(), name: 'human-persist', type: AgentType.HUMAN },
-      reconnect: false,
-    });
+    const human = await registerHuman(baseUrl, 'human-persist');
     await human.connect();
     await sleep(50);
 
@@ -605,10 +603,12 @@ describe('E2E: heartbeat updates agent status', () => {
   });
 
   it('heartbeat updates status visible via members API', async () => {
+    const agentId = await registerAgent(`http://localhost:${HB_PORT}`, 'hb-agent', 'generic');
+
     const client = new SkynetClient({
       serverUrl: `http://localhost:${HB_PORT}`,
       agent: {
-        id: randomUUID(),
+        id: agentId,
         name: 'hb-agent',
         type: AgentType.GENERIC,
         status: 'idle',

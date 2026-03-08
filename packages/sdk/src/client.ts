@@ -98,7 +98,15 @@ export class SkynetClient extends EventEmitter {
           } else if (evt.event === 'typing') {
             this.emit('typing', evt.data);
           } else if (evt.event === 'error') {
-            this.emit('error', evt.data);
+            // If connect() hasn't resolved yet, reject it instead of emitting
+            // (emitting 'error' with no listener throws an uncaught exception)
+            if (!resolved) {
+              resolved = true;
+              const errData = evt.data as { message?: string };
+              reject(new Error(errData.message ?? 'Server error'));
+            } else {
+              this.emit('error', evt.data);
+            }
           }
           this.emit('server-event', evt);
           return;
@@ -143,6 +151,12 @@ export class SkynetClient extends EventEmitter {
       this.ws.on('close', () => {
         this._connected = false;
         this.stopHeartbeat();
+
+        // Reject the connect() promise if closed before workspace.state was received
+        if (!resolved) {
+          resolved = true;
+          reject(new Error('Connection closed before workspace state was received'));
+        }
 
         if (this._reconnecting) {
           // During reconnection, don't emit 'disconnected' again — just schedule next attempt
