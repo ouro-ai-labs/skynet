@@ -14,6 +14,24 @@ function spawnEnv(): Record<string, string | undefined> {
   return { ...process.env, CLAUDECODE: undefined };
 }
 
+/**
+ * Sanitize execa errors to avoid leaking the full command line (which includes
+ * --append-system-prompt with the entire persona) when errors are broadcast.
+ * Execa errors have a `shortMessage` that omits the command; we prefer that.
+ */
+function sanitizeExecaError(err: unknown): Error {
+  if (err instanceof Error) {
+    // execa errors expose `shortMessage` without the full command string
+    const short = (err as { shortMessage?: string }).shortMessage;
+    if (short && short !== err.message) {
+      const sanitized = new Error(short);
+      sanitized.name = err.name;
+      return sanitized;
+    }
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
 export class ClaudeCodeAdapter extends AgentAdapter {
   readonly type = AgentType.CLAUDE_CODE;
   readonly name = 'claude-code';
@@ -81,14 +99,18 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       args.push('--model', this.model);
     }
 
-    const result = await execa('claude', args, {
-      cwd: this.projectRoot,
-      stdin: 'ignore',
-      env: spawnEnv(),
-      timeout: 60_000, // 1 min timeout for quick replies
-    });
+    try {
+      const result = await execa('claude', args, {
+        cwd: this.projectRoot,
+        stdin: 'ignore',
+        env: spawnEnv(),
+        timeout: 60_000, // 1 min timeout for quick replies
+      });
 
-    return result.stdout;
+      return result.stdout;
+    } catch (err) {
+      throw sanitizeExecaError(err);
+    }
   }
 
   async dispose(): Promise<void> {
@@ -153,7 +175,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       if (isFirstCall) {
         this.sessionStarted = true;
       }
-      throw err;
+      throw sanitizeExecaError(err);
     }
   }
 }

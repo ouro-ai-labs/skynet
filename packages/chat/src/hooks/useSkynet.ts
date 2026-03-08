@@ -13,6 +13,7 @@ import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 export interface UseSkynetOptions {
   serverUrl: string;
   name: string;
+  id?: string;
 }
 
 export interface SkynetState {
@@ -34,7 +35,7 @@ export interface UseSkynetReturn {
 }
 
 export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
-  const agentIdRef = useRef(randomUUID());
+  const agentIdRef = useRef(opts.id ?? randomUUID());
   const clientRef = useRef<SkynetClient | null>(null);
 
   const [connected, setConnected] = useState(false);
@@ -116,6 +117,16 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
           return prev;
         });
       }
+      // Update member status in local state
+      setMembers((prev) => {
+        const member = prev.get(data.agentId);
+        if (member) {
+          const next = new Map(prev);
+          next.set(data.agentId, { ...member, status: data.status as AgentCard['status'] });
+          return next;
+        }
+        return prev;
+      });
     });
 
     client.on('disconnected', () => {

@@ -9,7 +9,7 @@ export enum AgentType {
   GENERIC = 'generic',
 }
 
-export type AgentStatus = 'idle' | 'busy' | 'offline';
+export type AgentStatus = 'idle' | 'busy' | 'offline' | 'error';
 
 export interface AgentCard {
   id: string;

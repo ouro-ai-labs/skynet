@@ -13,6 +13,8 @@ function statusBadge(status: AgentStatus | undefined): string {
       return 'idle';
     case 'busy':
       return 'busy';
+    case 'error':
+      return 'error';
     case 'offline':
       return 'offline';
     default:

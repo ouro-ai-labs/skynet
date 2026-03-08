@@ -170,6 +170,12 @@ export class AgentRunner {
     return this.client.agent.id;
   }
 
+  /** Update agent status and broadcast via heartbeat. */
+  private setStatus(status: import('@skynet/protocol').AgentStatus): void {
+    this.client.agent.status = status;
+    this.client.sendHeartbeatNow();
+  }
+
   /** Register the agent via HTTP API if it doesn't already exist in the workspace. */
   private async ensureRegistered(): Promise<void> {
     const { serverUrl } = this.options;
@@ -357,8 +363,7 @@ export class AgentRunner {
     }
 
     this.processing = true;
-    this.client.agent.status = 'busy';
-    this.client.sendHeartbeatNow();
+    this.setStatus('busy');
 
     // Process leading tasks
     while (this.messageQueue.length > 0 && this.messageQueue[0].msg.type === MessageType.TASK_ASSIGN) {
@@ -366,9 +371,8 @@ export class AgentRunner {
       try {
         await this.handleTask(msg);
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
         this.logger.error(`Error processing task from ${msg.from}:`, err);
-        this.client.chat(`Error processing task: ${errorMsg}`, [msg.from]);
+        this.setStatus('error');
       }
     }
 
@@ -400,14 +404,12 @@ export class AgentRunner {
           await this.handleBatchMessages(chatBatch, notices);
         }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
         this.logger.error('Error processing messages:', err);
-        this.client.chat(`Error processing messages: ${errorMsg}`, [chatBatch[0].from]);
+        this.setStatus('error');
       }
     }
 
-    this.client.agent.status = 'idle';
-    this.client.sendHeartbeatNow();
+    this.setStatus('idle');
     this.processing = false;
     this.persistLastSeenTimestamp();
 
