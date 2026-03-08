@@ -46,12 +46,11 @@ vi.mock('@skynet/sdk', () => {
 
 // ── Helpers ──
 
-function makeChatMsg(overrides: Partial<{ from: string; text: string; to: string | null; mentions: string[] }> = {}): SkynetMessage {
+function makeChatMsg(overrides: Partial<{ from: string; text: string; mentions: string[] }> = {}): SkynetMessage {
   return {
     id: `msg-${Math.random().toString(36).slice(2)}`,
     type: MessageType.CHAT,
     from: overrides.from ?? 'human-1',
-    to: overrides.to ?? null,
     timestamp: Date.now(),
     payload: { text: overrides.text ?? 'hello' },
     ...(overrides.mentions ? { mentions: overrides.mentions } : {}),
@@ -63,7 +62,6 @@ function makeTaskMsg(from = 'coordinator-1'): SkynetMessage {
     id: `msg-${Math.random().toString(36).slice(2)}`,
     type: MessageType.TASK_ASSIGN,
     from,
-    to: null,
     timestamp: Date.now(),
     payload: {
       taskId: 'task-1',
@@ -138,7 +136,6 @@ function registerMember(runner: AgentRunner, id: string, name: string, type: Age
     id: `join-${id}`,
     type: 'agent.join',
     from: 'server',
-    to: null,
     timestamp: Date.now(),
     payload: { agent: { id, name, type } },
   });
@@ -215,7 +212,6 @@ describe('AgentRunner pending notices', () => {
       id: 'join-msg',
       type: 'agent.join',
       from: 'server',
-      to: null,
       timestamp: Date.now(),
       payload: { agent: { id: 'new-1', name: 'newcomer', type: 'claude-code' } },
     });
@@ -239,7 +235,6 @@ describe('AgentRunner pending notices', () => {
       id: 'join-msg-2',
       type: 'agent.join',
       from: 'server',
-      to: null,
       timestamp: Date.now(),
       payload: { agent: { id: 'leaving-1', name: 'leaver', type: 'claude-code' } },
     });
@@ -254,7 +249,6 @@ describe('AgentRunner pending notices', () => {
       id: 'leave-msg',
       type: 'agent.leave',
       from: 'server',
-      to: null,
       timestamp: Date.now(),
       payload: { agentId: 'leaving-1' },
     });

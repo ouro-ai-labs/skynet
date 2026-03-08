@@ -19,7 +19,6 @@ export function createChatMessage(
   return createMessage({
     type: MessageType.CHAT,
     from,
-    to: null,
     payload: { text },
     ...(mentions && mentions.length > 0 ? { mentions } : {}),
   });

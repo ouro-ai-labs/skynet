@@ -291,7 +291,6 @@ export class SkynetWorkspace {
       const joinMsg = createMessage({
         type: MessageType.AGENT_JOIN,
         from: agentId,
-        to: null,
         payload: { agent: req.agent } satisfies AgentJoinPayload,
       });
       this.store.save(joinMsg);
@@ -313,7 +312,7 @@ export class SkynetWorkspace {
     });
 
     this.store.save(fullMsg);
-    this.logger.debug(`Message from=${agentId} to=${fullMsg.to ?? 'broadcast'} type=${fullMsg.type}`);
+    this.logger.debug(`Message from=${agentId} type=${fullMsg.type}`);
 
     // Routing is driven entirely by mentions.
     // @all → broadcast to all members; otherwise deliver only to mentioned members + echo to sender.
@@ -422,7 +421,6 @@ export class SkynetWorkspace {
     const leaveMsg = createMessage({
       type: MessageType.AGENT_LEAVE,
       from: agentId,
-      to: null,
       payload: { agentId } satisfies AgentLeavePayload,
     });
     this.store.save(leaveMsg);

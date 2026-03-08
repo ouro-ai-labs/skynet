@@ -53,7 +53,6 @@ describe('SqliteStore', () => {
       const msg = createMessage({
         type: MessageType.CHAT,
         from: 'alice',
-        to: null,
         timestamp: 1000 + i,
         payload: { text: `msg ${i}` },
       });
@@ -120,7 +119,6 @@ describe('SqliteStore', () => {
       const msg = createMessage({
         type: MessageType.CHAT,
         from: 'alice',
-        to: null,
         timestamp: 1000 + i,
         payload: { text: `msg ${i}` },
       });
@@ -172,7 +170,6 @@ describe('SqliteStore', () => {
       const msg = createMessage({
         type: MessageType.CHAT,
         from: 'alice',
-        to: null,
         timestamp: 1000 + i,
         payload: { text: `dm ${i}` },
         mentions: ['bob-id'],

@@ -7,7 +7,6 @@ describe('createMessage', () => {
     const msg = createMessage({
       type: MessageType.CHAT,
       from: 'agent-1',
-      to: null,
       payload: { text: 'hello' },
     });
 
@@ -16,7 +15,6 @@ describe('createMessage', () => {
     expect(msg.timestamp).toBeGreaterThan(0);
     expect(msg.type).toBe(MessageType.CHAT);
     expect(msg.from).toBe('agent-1');
-    expect(msg.to).toBeNull();
   });
 
   it('preserves provided id and timestamp', () => {
@@ -25,7 +23,6 @@ describe('createMessage', () => {
       timestamp: 12345,
       type: MessageType.CHAT,
       from: 'agent-1',
-      to: null,
       payload: { text: 'hello' },
     });
 
@@ -40,14 +37,11 @@ describe('createChatMessage', () => {
 
     expect(msg.type).toBe(MessageType.CHAT);
     expect(msg.from).toBe('alice');
-    expect(msg.to).toBeNull();
     expect(msg.payload).toEqual({ text: 'Hello!' });
   });
 
   it('includes mentions when provided', () => {
     const msg = createChatMessage('alice', 'Hey @bob @charlie', ['bob-id', 'charlie-id']);
-
-    expect(msg.to).toBeNull();
     expect(msg.mentions).toEqual(['bob-id', 'charlie-id']);
   });
 

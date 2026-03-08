@@ -9,7 +9,6 @@ interface SkynetMessage {
   id: string;              // UUID
   type: MessageType;       // See enum below
   from: string;            // Agent ID
-  to: string | null;       // Deprecated — not used for routing (see mentions)
   timestamp: number;
   payload: unknown;        // Varies by type
   replyTo?: string;        // Reply to a specific message
@@ -17,7 +16,7 @@ interface SkynetMessage {
 }
 ```
 
-The `mentions` field drives all message routing. Mentioned agents receive the message; agents without a mention do not. The `to` field is retained for backward compatibility but is **not used** by the server for routing.
+The `mentions` field drives all message routing. Mentioned agents receive the message; agents without a mention do not.
 
 ## Message Types
 

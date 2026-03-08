@@ -57,11 +57,10 @@ export interface SkynetMessage {
   id: string;
   type: MessageType;
   from: string;
-  to: string | null;
   timestamp: number;
   payload: unknown;
   replyTo?: string;
-  /** Agent IDs additionally mentioned via @name — they receive the message even if not the primary `to` target. */
+  /** Agent IDs mentioned via @name — mentioned agents receive the message. */
   mentions?: string[];
 }
 
