@@ -14,6 +14,11 @@ import {
   MENTION_ALL,
   extractMentionNames,
 } from '@skynet/protocol';
+
+interface MemberInfo {
+  name: string;
+  type: AgentType;
+}
 import { SkynetClient, type WorkspaceState } from '@skynet/sdk';
 import type { AgentAdapter } from './base-adapter.js';
 import { buildSkynetIntro } from './skynet-intro.js';
@@ -46,7 +51,7 @@ export class AgentRunner {
   private processing = false;
   private forkInProgress = false;
   private messageQueue: SkynetMessage[] = [];
-  private memberNames = new Map<string, string>();
+  private memberInfo = new Map<string, MemberInfo>();
   /** Recently processed message IDs to prevent duplicate handling. */
   private processedMessageIds = new Set<string>();
   /** Pending notices (e.g. member join/leave) to piggyback on the next message. */
@@ -92,28 +97,29 @@ export class AgentRunner {
     const state = await this.client.connect();
     this.logger.info(`Connected, ${state.members.length} members online`);
 
-    // Build initial member name map from workspace state
+    // Build initial member info map from workspace state
     for (const member of state.members) {
-      this.memberNames.set(member.id, member.name);
+      this.memberInfo.set(member.id, { name: member.name, type: member.type });
     }
 
     this.client.on('agent-join', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentJoinPayload;
-      this.memberNames.set(payload.agent.id, payload.agent.name);
+      this.memberInfo.set(payload.agent.id, { name: payload.agent.name, type: payload.agent.type });
       this.pendingNotices.push(`[System] ${payload.agent.name} has joined the workspace.`);
     });
     this.client.on('agent-leave', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentLeavePayload;
-      const name = this.memberNames.get(payload.agentId) ?? payload.agentId;
+      const info = this.memberInfo.get(payload.agentId);
+      const name = info?.name ?? payload.agentId;
       this.pendingNotices.push(`[System] ${name} has left the workspace.`);
-      this.memberNames.delete(payload.agentId);
+      this.memberInfo.delete(payload.agentId);
     });
 
-    // Refresh member names on reconnection
+    // Refresh member info on reconnection
     this.client.on('workspace-state', (ws: WorkspaceState) => {
-      this.memberNames.clear();
+      this.memberInfo.clear();
       for (const member of ws.members) {
-        this.memberNames.set(member.id, member.name);
+        this.memberInfo.set(member.id, { name: member.name, type: member.type });
       }
     });
 
@@ -153,10 +159,14 @@ export class AgentRunner {
     // Only process messages that mention this agent (or @all)
     if (msg.type === MessageType.CHAT && !this.isMessageForMe(msg)) return;
 
-    // When busy: only fork for @mentioned chat messages, max 1 concurrent fork
+    // When busy: only fork for chat messages from humans, max 1 concurrent fork.
+    // Agent-to-agent messages are queued and batched to avoid duplicate responses.
+    const senderInfo = this.memberInfo.get(msg.from);
+    const isHumanSender = senderInfo?.type === AgentType.HUMAN;
     if (
       this.processing &&
       msg.type === MessageType.CHAT &&
+      isHumanSender &&
       this.adapter.supportsQuickReply() &&
       !this.forkInProgress
     ) {
@@ -197,7 +207,7 @@ export class AgentRunner {
 
   private async handleForkedReply(msg: SkynetMessage): Promise<void> {
     this.forkInProgress = true;
-    const senderName = this.memberNames.get(msg.from) ?? msg.from;
+    const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
     const text = (msg.payload as ChatPayload).text;
     const notices = this.flushNotices();
     try {
@@ -256,7 +266,7 @@ export class AgentRunner {
         if (chatBatch.length === 1) {
           // Single message — process normally
           const msg = chatBatch[0];
-          const senderName = this.memberNames.get(msg.from) ?? msg.from;
+          const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
           const msgToSend = notices
             ? { ...msg, payload: { text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } as ChatPayload }
             : msg;
@@ -288,7 +298,7 @@ export class AgentRunner {
   private async handleBatchMessages(messages: SkynetMessage[], notices = ''): Promise<void> {
     // Build a combined message with all texts
     const lines = messages.map((msg) => {
-      const senderName = this.memberNames.get(msg.from) ?? msg.from;
+      const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
       const text = (msg.payload as ChatPayload).text;
       return `[${senderName}]: ${text}`;
     });
@@ -303,7 +313,7 @@ export class AgentRunner {
       },
     };
 
-    const senderName = this.memberNames.get(messages[0].from) ?? messages[0].from;
+    const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;
     const response = await this.adapter.handleMessage(batchMsg, senderName);
 
     if (response && response.trim() !== NO_REPLY) {
@@ -327,8 +337,8 @@ export class AgentRunner {
         ids.push(MENTION_ALL);
         continue;
       }
-      for (const [agentId, agentName] of this.memberNames) {
-        if (agentName.toLowerCase() === name && agentId !== selfId) {
+      for (const [agentId, info] of this.memberInfo) {
+        if (info.name.toLowerCase() === name && agentId !== selfId) {
           ids.push(agentId);
           break;
         }

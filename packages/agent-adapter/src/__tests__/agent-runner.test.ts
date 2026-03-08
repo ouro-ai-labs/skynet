@@ -131,6 +131,21 @@ function getClient(runner: AgentRunner): MockClient {
   return (runner as unknown as { client: MockClient }).client;
 }
 
+/** Register a member in the runner's memberInfo map via agent-join event. */
+function registerMember(runner: AgentRunner, id: string, name: string, type: AgentType): void {
+  const client = getClient(runner);
+  client.emit('agent-join', {
+    id: `join-${id}`,
+    type: 'agent.join',
+    from: 'server',
+    to: null,
+    timestamp: Date.now(),
+    payload: { agent: { id, name, type } },
+  });
+  // Drain the pending notice so it doesn't leak into tests
+  (runner as unknown as { pendingNotices: string[] }).pendingNotices = [];
+}
+
 // ── Tests ──
 
 describe('buildSkynetIntro', () => {
@@ -359,9 +374,13 @@ describe('AgentRunner fork dispatch', () => {
     expect(adapter.handleMessageCalls).toHaveLength(1);
   });
 
-  it('busy + @mentioned chat + supportsQuickReply=true → uses quickReply', async () => {
+  it('busy + @mentioned chat from human + supportsQuickReply=true → uses quickReply', async () => {
     adapter.handleDelay = 100;
     adapter.setSupportsQuickReply(true);
+
+    // Register human senders
+    registerMember(runner, 'user-a', 'UserA', AgentType.HUMAN);
+    registerMember(runner, 'user-b', 'UserB', AgentType.HUMAN);
 
     const client = getClient(runner);
 
@@ -372,7 +391,7 @@ describe('AgentRunner fork dispatch', () => {
     // Allow processQueue to start (but not finish due to delay)
     await new Promise(r => setTimeout(r, 10));
 
-    // Second message arrives while busy — @mentioned this agent
+    // Second message arrives while busy — @mentioned this agent, from human
     const msg2 = makeChatMsg({ from: 'user-b', text: 'how is progress?', mentions: [runner.agentId] });
     client.emit('chat', msg2);
 
@@ -387,6 +406,35 @@ describe('AgentRunner fork dispatch', () => {
 
     // Wait for first message to finish
     await new Promise(r => setTimeout(r, 150));
+  });
+
+  it('busy + @mentioned chat from agent + supportsQuickReply=true → queues (no fork)', async () => {
+    adapter.handleDelay = 100;
+    adapter.setSupportsQuickReply(true);
+
+    // Register an agent sender (not human)
+    registerMember(runner, 'agent-x', 'AgentX', AgentType.CLAUDE_CODE);
+
+    const client = getClient(runner);
+
+    // First message makes runner busy (from a human)
+    registerMember(runner, 'user-a', 'UserA', AgentType.HUMAN);
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'work', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+    await new Promise(r => setTimeout(r, 10));
+
+    // Agent message arrives while busy — should queue, not fork
+    const msg2 = makeChatMsg({ from: 'agent-x', text: 'agent chat', mentions: [runner.agentId] });
+    client.emit('chat', msg2);
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(adapter.quickReplyCalls).toHaveLength(0);
+
+    // Wait for queue to drain
+    await new Promise(r => setTimeout(r, 200));
+
+    // Both processed via handleMessage (no fork)
+    expect(adapter.handleMessageCalls).toHaveLength(2);
   });
 
   it('busy + message without @mention → ignored entirely', async () => {
@@ -413,9 +461,12 @@ describe('AgentRunner fork dispatch', () => {
     expect(adapter.handleMessageCalls).toHaveLength(1);
   });
 
-  it('busy + @mentioned via mentions array → forks', async () => {
+  it('busy + @mentioned via mentions array from human → forks', async () => {
     adapter.handleDelay = 100;
     adapter.setSupportsQuickReply(true);
+
+    registerMember(runner, 'user-a', 'UserA', AgentType.HUMAN);
+    registerMember(runner, 'user-b', 'UserB', AgentType.HUMAN);
 
     const client = getClient(runner);
 
@@ -423,7 +474,7 @@ describe('AgentRunner fork dispatch', () => {
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
-    // Message mentions this agent (via mentions array)
+    // Message mentions this agent (via mentions array), from human
     const msg2 = makeChatMsg({ from: 'user-b', text: 'hey agent', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
@@ -433,9 +484,13 @@ describe('AgentRunner fork dispatch', () => {
     await new Promise(r => setTimeout(r, 150));
   });
 
-  it('busy + max 1 concurrent fork → second @mention queues', async () => {
+  it('busy + max 1 concurrent fork → second @mention from human queues', async () => {
     adapter.handleDelay = 200;
     adapter.setSupportsQuickReply(true);
+
+    registerMember(runner, 'user-a', 'UserA', AgentType.HUMAN);
+    registerMember(runner, 'user-b', 'UserB', AgentType.HUMAN);
+    registerMember(runner, 'user-c', 'UserC', AgentType.HUMAN);
 
     // Make quickReply slow so we can test concurrency
     adapter.quickReply = async (prompt: string) => {
@@ -451,12 +506,12 @@ describe('AgentRunner fork dispatch', () => {
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
-    // Second message: @mentioned → should fork
+    // Second message: @mentioned from human → should fork
     const msg2 = makeChatMsg({ from: 'user-b', text: 'first mention', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
 
-    // Third message: @mentioned → fork in progress, should queue
+    // Third message: @mentioned from human → fork in progress, should queue
     const msg3 = makeChatMsg({ from: 'user-c', text: 'second mention', mentions: [runner.agentId] });
     client.emit('chat', msg3);
     await new Promise(r => setTimeout(r, 10));
@@ -520,6 +575,9 @@ describe('AgentRunner fork dispatch', () => {
     adapter.handleDelay = 100;
     adapter.setSupportsQuickReply(true);
 
+    registerMember(runner, 'user-a', 'UserA', AgentType.HUMAN);
+    registerMember(runner, 'user-b', 'UserB', AgentType.HUMAN);
+
     // Make quickReply throw
     let quickReplyCallCount = 0;
     adapter.quickReply = async (_prompt: string) => {
@@ -533,7 +591,7 @@ describe('AgentRunner fork dispatch', () => {
     client.emit('chat', msg1);
     await new Promise(r => setTimeout(r, 10));
 
-    // @mentioned — will attempt fork
+    // @mentioned from human — will attempt fork
     const msg2 = makeChatMsg({ from: 'user-b', text: 'status?', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 10));
