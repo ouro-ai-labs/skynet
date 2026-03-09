@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
 import { type SkynetMessage, extractMentionNames, MENTION_ALL } from '@skynet-ai/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
@@ -121,33 +121,56 @@ export function App({ options }: AppProps): React.ReactElement {
     }
   });
 
-  // Build static items list
-  const staticItems = useMemo((): StaticItem[] => {
-    const items: StaticItem[] = [];
+  // Build static items as an append-only list.
+  // Ink's <Static> tracks rendered items by index, so the array must only grow —
+  // rebuilding it from scratch causes items at shifted indices to re-render or
+  // become invisible.
+  const [staticItems, setStaticItems] = useState<StaticItem[]>([]);
+  const processedRef = useRef({
+    messageCount: 0,
+    sysCount: 0,
+    memberCounter: 0,
+    cmdCount: 0,
+  });
 
-    for (const msg of state.messages) {
-      items.push({ key: msg.id, type: 'message', message: msg });
+  useEffect(() => {
+    const p = processedRef.current;
+    const newItems: StaticItem[] = [];
+
+    // Append new messages
+    for (let i = p.messageCount; i < state.messages.length; i++) {
+      const msg = state.messages[i];
+      newItems.push({ key: msg.id, type: 'message', message: msg });
     }
+    p.messageCount = state.messages.length;
 
-    for (let i = 0; i < state.systemMessages.length; i++) {
-      items.push({ key: `sys-${i}`, type: 'system', text: state.systemMessages[i] });
+    // Append new system messages
+    for (let i = p.sysCount; i < state.systemMessages.length; i++) {
+      newItems.push({ key: `sys-${i}`, type: 'system', text: state.systemMessages[i] });
     }
+    p.sysCount = state.systemMessages.length;
 
-    if (memberListCounter > 0) {
+    // Append member list if newly requested
+    if (memberListCounter > p.memberCounter) {
       const lines = formatMemberList(state.members, agentId);
-      items.push({ key: `members-${memberListCounter}`, type: 'members', memberLines: lines });
+      newItems.push({ key: `members-${memberListCounter}`, type: 'members', memberLines: lines });
+      p.memberCounter = memberListCounter;
     }
 
-    for (let i = 0; i < commandOutputs.length; i++) {
-      items.push({
+    // Append new command outputs
+    for (let i = p.cmdCount; i < commandOutputs.length; i++) {
+      newItems.push({
         key: `cmd-${i}`,
         type: 'command-output',
         commandLines: commandOutputs[i].lines,
         commandError: commandOutputs[i].error,
       });
     }
+    p.cmdCount = commandOutputs.length;
 
-    return items;
+    if (newItems.length > 0) {
+      setStaticItems((prev) => [...prev, ...newItems]);
+    }
   }, [state.messages, state.systemMessages, state.members, agentId, memberListCounter, commandOutputs]);
 
   const typingNames = useMemo(() => {
