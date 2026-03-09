@@ -30,7 +30,7 @@ export interface SkynetWorkspaceOptions {
   store: Store;
   /** Grace period (ms) before broadcasting AGENT_LEAVE after socket close. Default: 300000 (5 minutes). */
   disconnectGraceMs?: number;
-  /** Max number of recent mentioned/DM messages to include in workspace.state. Default: 3. */
+  /** Max number of recent mentioned/DM messages for agents in workspace.state. Default: 3. Humans always receive up to 100. */
   recentMentionsLimit?: number;
   /** Log file path. When set, server logs are written to this file. */
   logFile?: string;
@@ -339,8 +339,9 @@ export class SkynetWorkspace {
     // Always send workspace state to the (re)connecting agent.
     // Humans see all messages; agents only see messages mentioning them.
     const since = req.lastSeenTimestamp;
+    const humanHistoryLimit = 100;
     const recentMessages = isHuman
-      ? this.store.getMessages(this.recentMentionsLimit, undefined, since)
+      ? this.store.getMessages(humanHistoryLimit, undefined, since)
       : this.store.getMessagesFor(agentId, this.recentMentionsLimit, since);
     socket.send(JSON.stringify({
       event: 'workspace.state',
