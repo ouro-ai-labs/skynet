@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import { type SkynetMessage, extractMentionNames, MENTION_ALL } from '@skynet-ai/protocol';
+import { type SkynetMessage, type Attachment, extractMentionNames, MENTION_ALL } from '@skynet-ai/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -59,7 +59,7 @@ export function App({ options }: AppProps): React.ReactElement {
   const [memberListCounter, setMemberListCounter] = useState(0);
   const [commandOutputs, setCommandOutputs] = useState<Array<{ lines: string[]; error?: boolean }>>([]);
 
-  const handleSubmit = useCallback((text: string) => {
+  const handleSubmit = useCallback((text: string, attachments: Attachment[]) => {
     const cmd = text.toLowerCase().trim();
 
     if (cmd === '/quit' || cmd === '/exit' || cmd === '/q') {
@@ -107,11 +107,9 @@ export function App({ options }: AppProps): React.ReactElement {
       }
     }
 
-    if (resolvedIds.length > 0) {
-      sendChat(text, resolvedIds);
-    } else {
-      sendChat(text);
-    }
+    const mentions = resolvedIds.length > 0 ? resolvedIds : undefined;
+    const atts = attachments.length > 0 ? attachments : undefined;
+    sendChat(text, mentions, atts);
   }, [state.members, sendChat, close, exit]);
 
   // Ctrl+C to exit
@@ -287,6 +285,7 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text bold> Input</Text>
             <Text>  Up/Down         Input history</Text>
             <Text>  @name           Autocomplete member</Text>
+            <Text>  Ctrl+V          Paste image from clipboard</Text>
             <Text>  Ctrl+C          Exit</Text>
             <Text />
             <Text dimColor>Press /help again to close</Text>

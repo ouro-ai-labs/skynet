@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   AgentType,
   type AgentCard,
+  type Attachment,
   type SkynetMessage,
   type AgentJoinPayload,
   type AgentLeavePayload,
@@ -29,7 +30,7 @@ export interface SkynetState {
 
 export interface UseSkynetReturn {
   state: SkynetState;
-  sendChat: (text: string, mentions?: string[]) => void;
+  sendChat: (text: string, mentions?: string[], attachments?: Attachment[]) => void;
   close: () => Promise<void>;
   agentId: string;
 }
@@ -174,8 +175,8 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
     };
   }, [opts.serverUrl, opts.name, addSystemMessage]);
 
-  const sendChat = useCallback((text: string, mentions?: string[]) => {
-    clientRef.current?.chat(text, mentions);
+  const sendChat = useCallback((text: string, mentions?: string[], attachments?: Attachment[]) => {
+    clientRef.current?.chat(text, mentions, attachments);
   }, []);
 
   const close = useCallback(async () => {

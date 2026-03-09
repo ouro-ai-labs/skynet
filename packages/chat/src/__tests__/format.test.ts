@@ -401,6 +401,58 @@ describe('formatMemberList', () => {
   });
 });
 
+describe('formatMessage with attachments', () => {
+  const resolve = makeResolver();
+
+  it('shows attachment indicator for chat with image attachment', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: {
+        text: 'Check this screenshot',
+        attachments: [{
+          type: 'image' as const,
+          mimeType: 'image/png',
+          name: 'screenshot.png',
+          data: 'aGVsbG8=', // "hello" in base64
+          size: 128 * 1024, // 128KB
+        }],
+      },
+    });
+    const lines = formatMessage(msg, resolve);
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('screenshot.png');
+    expect(allPlain).toContain('128KB');
+  });
+
+  it('shows multiple attachment indicators', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: {
+        text: 'Two images',
+        attachments: [
+          { type: 'image' as const, mimeType: 'image/png', name: 'a.png', data: '', size: 1024 },
+          { type: 'image' as const, mimeType: 'image/png', name: 'b.png', data: '', size: 2048 },
+        ],
+      },
+    });
+    const lines = formatMessage(msg, resolve);
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).toContain('a.png');
+    expect(allPlain).toContain('b.png');
+  });
+
+  it('does not show attachment section when no attachments', () => {
+    const msg = makeMsg({
+      type: MessageType.CHAT,
+      payload: { text: 'No images here' },
+    });
+    const lines = formatMessage(msg, resolve);
+    const allPlain = lines.map(stripAnsi).join('\n');
+    expect(allPlain).not.toContain('[');
+    expect(allPlain).not.toContain('KB');
+  });
+});
+
 describe('AGENT_LABELS', () => {
   it('has labels for all AgentType values', () => {
     for (const type of Object.values(AgentType)) {

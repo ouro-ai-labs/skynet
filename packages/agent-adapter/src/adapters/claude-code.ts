@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { writeFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execa, execaCommand, type ResultPromise } from 'execa';
-import { AgentType, type SkynetMessage, type TaskPayload, MessageType } from '@skynet-ai/protocol';
+import { AgentType, type SkynetMessage, type ChatPayload, type TaskPayload, MessageType } from '@skynet-ai/protocol';
 import { AgentAdapter, type TaskResult } from '../base-adapter.js';
 
 export interface ClaudeCodeOptions {
@@ -61,7 +64,15 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
   async handleMessage(msg: SkynetMessage, senderName?: string): Promise<string> {
     const prompt = this.messageToPrompt(msg, senderName);
-    return this.runClaude(prompt);
+    const images = await this.extractImagePaths(msg);
+    try {
+      return await this.runClaude(prompt, images);
+    } finally {
+      // Clean up temp image files
+      for (const p of images) {
+        await unlink(p).catch(() => {});
+      }
+    }
   }
 
   async executeTask(task: TaskPayload): Promise<TaskResult> {
@@ -140,7 +151,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     const sender = senderName ?? msg.from;
     switch (msg.type) {
       case MessageType.CHAT: {
-        const payload = msg.payload as { text: string };
+        const payload = msg.payload as ChatPayload;
         return `Message from ${sender}: ${payload.text}`;
       }
       case MessageType.TASK_ASSIGN: {
@@ -152,8 +163,29 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
-  private async runClaude(prompt: string): Promise<string> {
+  /** Write base64-encoded image attachments to temp files for CLI consumption. */
+  private async extractImagePaths(msg: SkynetMessage): Promise<string[]> {
+    if (msg.type !== MessageType.CHAT) return [];
+    const payload = msg.payload as ChatPayload;
+    if (!payload.attachments?.length) return [];
+
+    const paths: string[] = [];
+    for (const att of payload.attachments) {
+      if (att.type !== 'image') continue;
+      const ext = att.mimeType.split('/')[1] ?? 'png';
+      const tmpPath = join(tmpdir(), `skynet-img-${randomUUID()}.${ext}`);
+      await writeFile(tmpPath, Buffer.from(att.data, 'base64'));
+      paths.push(tmpPath);
+    }
+    return paths;
+  }
+
+  private async runClaude(prompt: string, images: string[] = []): Promise<string> {
     const args = ['-p', prompt, '--output-format', 'text', '--dangerously-skip-permissions'];
+
+    for (const imgPath of images) {
+      args.push('--image', imgPath);
+    }
 
     if (this.allowedTools?.length) {
       args.push('--allowedTools', this.allowedTools.join(','));
