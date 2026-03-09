@@ -50,10 +50,12 @@ async function handleAgentCommand(serverUrl: string, sub: string | undefined, ar
 
 async function sendAgentControl(serverUrl: string, action: 'interrupt' | 'forget', nameOrId: string): Promise<CommandResult> {
   try {
+    // Strip leading '@' so both "name" and "@name" work
+    const resolved = nameOrId.startsWith('@') ? nameOrId.slice(1) : nameOrId;
     // Resolve agent name to ID
     const listRes = await fetch(`${serverUrl}/api/agents`);
     const agents = await listRes.json() as Array<{ id: string; name: string }>;
-    const agent = agents.find((a) => a.name === nameOrId || a.id === nameOrId || a.id.startsWith(nameOrId));
+    const agent = agents.find((a) => a.name === resolved || a.id === resolved || a.id.startsWith(resolved));
     if (!agent) {
       return { lines: [`Agent '${nameOrId}' not found.`], error: true };
     }
