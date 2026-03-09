@@ -126,6 +126,41 @@ Require explicit confirmation first:
 - [ ] `pnpm lint` passes (when configured)
 - [ ] PR description follows template
 
+## PR Title Format (Required)
+
+PR titles are used to auto-generate release notes. Use this format:
+
+```
+<type>(<scope>): <short description>
+```
+
+**Types** (pick one):
+
+| Type       | When to use                                      |
+| ---------- | ------------------------------------------------ |
+| `feat`     | New user-facing feature                          |
+| `fix`      | Bug fix                                          |
+| `docs`     | Documentation only                               |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `test`     | Adding or updating tests                         |
+| `chore`    | Build, CI, dependency updates, or housekeeping   |
+| `perf`     | Performance improvement                          |
+
+**Scope** (optional): the package or area affected — e.g., `cli`, `chat`, `protocol`, `sdk`, `workspace`, `coordinator`, `adapter`, `monitor`.
+
+**Examples**:
+
+- `feat(chat): support image paste via Ctrl+V`
+- `fix(workspace): handle reconnection race condition`
+- `chore(ci): add release workflow`
+- `docs: update architecture diagram`
+
+**Rules**:
+
+- Use lowercase; no trailing period.
+- Keep it under 70 characters.
+- Use imperative mood ("add", not "added" or "adds").
+
 ## PR Description Template (Required)
 
 ## Summary
