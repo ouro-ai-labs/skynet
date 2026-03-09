@@ -21,12 +21,18 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm build
 
       - run: pnpm test
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm -r publish --no-git-checks
 
       - name: Create GitHub Release
         env:
