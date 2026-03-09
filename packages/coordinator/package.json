@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/coordinator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Task assignment, file locks, and git worktree management for Skynet",
   "type": "module",
   "main": "dist/index.js",
