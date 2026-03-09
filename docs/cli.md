@@ -106,6 +106,7 @@ skynet agent new --workspace <name-or-id> --name coder --type claude-code --role
 | `--type <type>` | Agent type: `claude-code`, `gemini-cli`, `codex-cli`, `generic` |
 | `--role <role>` | Agent role description (optional) |
 | `--persona <persona>` | Persona description (optional) |
+| `--workdir <path>` | Custom working directory (default: `~/.skynet/<ws>/<id>/work`) |
 
 The command auto-detects which agent CLIs are available on your system and presents them as choices in interactive mode.
 
@@ -328,5 +329,6 @@ skynet status
 │   ├── data.db                   # SQLite message store
 │   └── <agent-uuid>/
 │       ├── profile.md            # Agent profile
-│       └── work/                 # Agent working directory
+│       ├── agent.json            # Local config (custom workdir, etc.)
+│       └── work/                 # Agent working directory (default)
 ```

@@ -1,11 +1,29 @@
-import { join } from 'node:path';
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { Command } from 'commander';
 import { AgentType } from '@skynet-ai/protocol';
 import type { AgentCard } from '@skynet-ai/protocol';
 import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet-ai/agent-adapter';
 import { getWorkspaceDir } from '../config.js';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
+
+interface AgentLocalConfig {
+  workDir?: string;
+}
+
+function loadAgentLocalConfig(agentDir: string): AgentLocalConfig {
+  const configPath = join(agentDir, 'agent.json');
+  if (!existsSync(configPath)) return {};
+  try {
+    return JSON.parse(readFileSync(configPath, 'utf-8')) as AgentLocalConfig;
+  } catch {
+    return {};
+  }
+}
+
+function saveAgentLocalConfig(agentDir: string, config: AgentLocalConfig): void {
+  writeFileSync(join(agentDir, 'agent.json'), JSON.stringify(config, null, 2) + '\n', 'utf-8');
+}
 
 async function fetchAgents(url: string): Promise<AgentCard[]> {
   try {
@@ -28,7 +46,9 @@ function resolveAgent(agents: AgentCard[], nameOrId: string): AgentCard {
 
 async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl: string): Promise<void> {
   const wsDir = getWorkspaceDir(workspaceId);
-  const workDir = join(wsDir, agentProfile.id, 'work');
+  const agentDir = join(wsDir, agentProfile.id);
+  const localConfig = loadAgentLocalConfig(agentDir);
+  const workDir = localConfig.workDir ?? join(agentDir, 'work');
   const logFile = join(wsDir, 'logs', `${agentProfile.id}.log`);
 
   const adapter = createAdapter(agentProfile.type as AgentType, workDir);
@@ -111,6 +131,7 @@ export function registerAgentCommand(program: Command): void {
     .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, generic')
     .option('--role <role>', 'Agent role')
     .option('--persona <persona>', 'Persona description')
+    .option('--workdir <path>', 'Custom working directory for the agent (default: ~/.skynet/<ws>/<id>/work)')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
@@ -177,7 +198,16 @@ export function registerAgentCommand(program: Command): void {
 
           // Create local agent directory and profile
           const agentDir = join(getWorkspaceDir(workspace.id), body.id);
-          mkdirSync(join(agentDir, 'work'), { recursive: true });
+          mkdirSync(agentDir, { recursive: true });
+          const customWorkDir = opts.workdir ? resolve(opts.workdir) : undefined;
+          const effectiveWorkDir = customWorkDir ?? join(agentDir, 'work');
+          mkdirSync(effectiveWorkDir, { recursive: true });
+
+          // Save local config (workDir only if custom)
+          if (customWorkDir) {
+            saveAgentLocalConfig(agentDir, { workDir: customWorkDir });
+            console.log(`Working directory: ${customWorkDir}`);
+          }
 
           const profile = [
             `# ${body.name}`,
