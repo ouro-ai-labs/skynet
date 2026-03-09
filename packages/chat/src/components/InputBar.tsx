@@ -1,6 +1,6 @@
-import React, { useReducer, useRef, useCallback } from 'react';
+import React, { useReducer, useRef, useCallback, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { AgentCard } from '@skynet-ai/protocol';
+import type { AgentCard, Attachment } from '@skynet-ai/protocol';
 import {
   inputReducer,
   initialInputState,
@@ -8,15 +8,19 @@ import {
   getCommandContext,
   SLASH_COMMANDS,
 } from '../inputState.js';
+import { readClipboardImage, formatSize } from '../clipboard.js';
 
 interface InputBarProps {
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, attachments: Attachment[]) => void;
   members: Map<string, AgentCard>;
 }
 
 export function InputBar({ onSubmit, members }: InputBarProps): React.ReactElement {
   const [state, dispatch] = useReducer(inputReducer, initialInputState);
   const historyRef = useRef<string[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pasteStatus, setPasteStatus] = useState<string | null>(null);
+  const pastingRef = useRef(false);
 
   const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex, commandFilter, commandSelectedIndex } = state;
 
@@ -83,8 +87,41 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     setValueAndAutocomplete(newValue, newCursor);
   }, [commandCandidates, commandSelectedIndex, setValueAndAutocomplete]);
 
+  const handlePaste = useCallback(async () => {
+    if (pastingRef.current) return;
+    pastingRef.current = true;
+    setPasteStatus('Reading clipboard...');
+    try {
+      const result = await readClipboardImage();
+      if (result) {
+        setAttachments((prev) => [...prev, result.attachment]);
+        setPasteStatus(null);
+      } else {
+        setPasteStatus('No image in clipboard');
+        setTimeout(() => setPasteStatus(null), 2000);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Paste failed';
+      setPasteStatus(msg);
+      setTimeout(() => setPasteStatus(null), 3000);
+    } finally {
+      pastingRef.current = false;
+    }
+  }, []);
+
   useInput((input, key) => {
+    // Ctrl+V: paste image from clipboard
+    if (key.ctrl && input === 'v') {
+      handlePaste();
+      return;
+    }
+
     if (key.escape) {
+      // Remove last attachment if any, otherwise dismiss autocomplete
+      if (attachments.length > 0) {
+        setAttachments((prev) => prev.slice(0, -1));
+        return;
+      }
       if (mentionFilter !== null) {
         dispatch({ type: 'SET_MENTION', filter: null, start: 0, selectedIndex: 0 });
       }
@@ -113,11 +150,12 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
         acceptCommand();
         return;
       }
-      if (value.trim()) {
+      if (value.trim() || attachments.length > 0) {
         historyRef.current.push(value);
-        onSubmit(value);
+        onSubmit(value, attachments);
       }
       dispatch({ type: 'RESET' });
+      setAttachments([]);
       return;
     }
 
@@ -177,6 +215,9 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
       if (cursorPos > 0) {
         const newValue = value.slice(0, cursorPos - 1) + value.slice(cursorPos);
         setValueAndAutocomplete(newValue, cursorPos - 1);
+      } else if (value.length === 0 && attachments.length > 0) {
+        // Backspace on empty input removes last attachment
+        setAttachments((prev) => prev.slice(0, -1));
       }
       return;
     }
@@ -203,6 +244,7 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
 
     if (key.ctrl && input === 'u') {
       dispatch({ type: 'RESET' });
+      setAttachments([]);
       return;
     }
 
@@ -266,6 +308,23 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
             </Text>
           ))}
           <Text dimColor>Tab/Enter to select, Esc to dismiss</Text>
+        </Box>
+      )}
+      {/* Attachment indicators */}
+      {attachments.length > 0 && (
+        <Box paddingX={1} gap={1}>
+          {attachments.map((att, i) => (
+            <Text key={i} color="magenta">
+              [{att.name} {formatSize(att.size)}]
+            </Text>
+          ))}
+          <Text dimColor>Esc to remove</Text>
+        </Box>
+      )}
+      {/* Paste status message */}
+      {pasteStatus && (
+        <Box paddingX={1}>
+          <Text color="yellow">{pasteStatus}</Text>
         </Box>
       )}
       <Box paddingX={1}>

@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import {
   AgentType,
   type AgentCard,
+  type Attachment,
   type SkynetMessage,
   type ChatPayload,
   type AgentJoinPayload,
@@ -150,8 +151,27 @@ export function formatChat(msg: SkynetMessage, resolve: AgentResolver, width?: n
       lines.push(`${BODY_CONTINUATION}${bodyLines[i]}`);
     }
   }
+
+  // Show attachment indicators
+  if (p.attachments && p.attachments.length > 0) {
+    for (const att of p.attachments) {
+      lines.push(`${BODY_CONTINUATION}${formatAttachmentIndicator(att)}`);
+    }
+  }
+
   lines.push('');
   return lines;
+}
+
+function formatAttachmentIndicator(att: Attachment): string {
+  const sizeStr = formatAttachmentSize(att.size);
+  return chalk.magenta(`[${att.name} ${sizeStr}]`);
+}
+
+function formatAttachmentSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 export function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): string[] {

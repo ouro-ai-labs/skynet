@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import {
   type SkynetMessage,
   type AgentCard,
+  type Attachment,
   type JoinRequest,
   type ServerEvent,
   ClientAction,
@@ -196,10 +197,13 @@ export class SkynetClient extends EventEmitter {
     this.send({ action: ClientAction.SEND, data: fullMsg });
   }
 
-  chat(text: string, mentions?: string[]): void {
+  chat(text: string, mentions?: string[], attachments?: Attachment[]): void {
     this.sendMessage({
       type: MessageType.CHAT,
-      payload: { text },
+      payload: {
+        text,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      },
       ...(mentions && mentions.length > 0 ? { mentions } : {}),
     });
   }

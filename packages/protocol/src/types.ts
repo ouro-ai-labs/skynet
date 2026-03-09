@@ -68,10 +68,28 @@ export interface SkynetMessage {
   mentions?: string[];
 }
 
+// ── Attachment Types ──
+
+export type AttachmentType = 'image';
+
+export interface Attachment {
+  type: AttachmentType;
+  mimeType: string;
+  name: string;
+  /** Base64-encoded file data. */
+  data: string;
+  /** Original file size in bytes. */
+  size: number;
+}
+
+/** Maximum attachment size in bytes (5 MB). */
+export const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
+
 // ── Payload Types ──
 
 export interface ChatPayload {
   text: string;
+  attachments?: Attachment[];
 }
 
 export interface AgentJoinPayload {
