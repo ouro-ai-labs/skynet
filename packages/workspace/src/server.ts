@@ -125,8 +125,14 @@ export class SkynetWorkspace {
       },
     );
 
-    // List agents
-    this.fastify.get('/api/agents', async () => this.store.listAgents());
+    // List agents (merge runtime status from connected members)
+    this.fastify.get('/api/agents', async () => {
+      const agents = this.store.listAgents();
+      return agents.map((a) => {
+        const status = this.members.getStatus(a.id);
+        return { ...a, status: status ?? 'offline' };
+      });
+    });
 
     // Get agent by ID or name
     this.fastify.get<{ Params: { id: string } }>('/api/agents/:id', async (req, reply) => {

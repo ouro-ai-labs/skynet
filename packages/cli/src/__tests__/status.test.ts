@@ -37,9 +37,9 @@ describe('status command', () => {
         { id: 'a1', name: 'claude-1', type: AgentType.CLAUDE_CODE, status: 'busy' },
       ]))
       .mockResolvedValueOnce(makeFetchResponse([
-        // Registered agents
-        { id: 'a1', name: 'claude-1', type: AgentType.CLAUDE_CODE, role: 'backend', persona: 'Careful and thorough' },
-        { id: 'a2', name: 'gemini-1', type: AgentType.GEMINI_CLI, role: 'frontend' },
+        // Registered agents (API now includes runtime status)
+        { id: 'a1', name: 'claude-1', type: AgentType.CLAUDE_CODE, role: 'backend', persona: 'Careful and thorough', status: 'busy' },
+        { id: 'a2', name: 'gemini-1', type: AgentType.GEMINI_CLI, role: 'frontend', status: 'offline' },
       ]))
       .mockResolvedValueOnce(makeFetchResponse([]));
 
@@ -102,7 +102,7 @@ describe('status command', () => {
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce(makeFetchResponse([]))
       .mockResolvedValueOnce(makeFetchResponse([
-        { id: 'a1', name: 'agent-1', type: AgentType.GENERIC, persona: longPersona },
+        { id: 'a1', name: 'agent-1', type: AgentType.GENERIC, persona: longPersona, status: 'offline' },
       ]))
       .mockResolvedValueOnce(makeFetchResponse([]));
 

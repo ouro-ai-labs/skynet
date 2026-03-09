@@ -102,10 +102,13 @@ export function registerAgentCommand(program: Command): void {
         type: 'list',
         name: 'selected',
         message: 'Select agent:',
-        choices: agents.map((a) => ({
-          name: `${a.name} (${a.type})${a.role ? ` - ${a.role}` : ''}`,
-          value: a,
-        })),
+        choices: agents.map((a) => {
+          const icon = a.status === 'busy' ? '\u{1F7E1}' : a.status === 'error' ? '\u{1F534}' : a.status === 'idle' ? '\u{1F7E2}' : '\u26AB';
+          return {
+            name: `${icon} ${a.name} (${a.type})${a.role ? ` - ${a.role}` : ''}`,
+            value: a,
+          };
+        }),
       }]);
 
       await runAgent(selected as AgentCard, workspace.id, url);
@@ -357,7 +360,8 @@ export function registerAgentCommand(program: Command): void {
 
         console.log(`Agents (${agents.length}):`);
         for (const a of agents) {
-          console.log(`  - ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id}]`);
+          const icon = a.status === 'busy' ? '\u{1F7E1}' : a.status === 'error' ? '\u{1F534}' : a.status === 'idle' ? '\u{1F7E2}' : '\u26AB';
+          console.log(`  ${icon} ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id}]`);
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
