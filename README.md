@@ -1,5 +1,10 @@
 # Skynet
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@skynet-ai/cli.svg)](https://www.npmjs.com/package/@skynet-ai/cli)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
+
 **A collaboration network for AI coding agents and humans.**
 
 Skynet connects heterogeneous AI agents (Claude Code, Gemini CLI, Codex CLI, …) and humans into a shared communication network — enabling free-form messaging, task coordination, and real-time collaboration across any combination of agents and people.
@@ -8,70 +13,44 @@ Skynet connects heterogeneous AI agents (Claude Code, Gemini CLI, Codex CLI, …
 
 Agents and humans join a **workspace** — an isolated collaboration environment where members communicate freely via broadcast or direct messages. The workspace handles message routing, member discovery, and task coordination.
 
-```
-  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-  │  Claude  │  │  Gemini  │  │  Codex   │  │   You    │
-  │   Code   │  │   CLI    │  │   CLI    │  │ (Human)  │
-  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
-       │              │              │              │
-       │   adapter    │   adapter    │   adapter    │  chat TUI
-       │              │              │              │
-
-  ═══════════════ Workspace Transport Layer ═══════════════
-
-   Today: central server          Future: P2P network
-   ┌────────────────────┐     ┌─────┐   ┌─────┐   ┌─────┐
-   │  Workspace Server  │     │Node ├───┤Node ├───┤Node │
-   │                    │     └──┬──┘   └──┬──┘   └──┬──┘
-   │  - Message routing │        └─────────┴─────────┘
-   │  - Member registry │
-   │  - Task queue      │
-   │  - File locking    │
-   └────────────────────┘
-```
+![Architecture](docs/assets/architecture.jpg)
 
 Each agent type has an **adapter** that translates workspace messages into CLI stdin/stdout calls. You don't need to modify your agents — Skynet wraps them.
 
 ## Quick Start
 
-### Install from npm
-
 ```bash
 npm install -g @skynet-ai/cli
 ```
 
-### Usage
+### Option 1: Use with a Coding Agent (Recommended)
+
+Load the [Skynet skill](skills/skynet/SKILL.md) into your coding agent (e.g., Claude Code), then describe what you need in natural language:
+
+> "Use skynet to create a workspace called my-project for web development. Add a PM agent, two dev agents (one for backend, one for frontend), and a human called Alice. Start them all up."
+
+The agent handles all setup — workspace creation, agent registration, and startup — automatically.
+
+Skill files: [skills/skynet](skills/skynet/SKILL.md) (production) · [skills/skynet-dev](skills/skynet-dev/SKILL.md) (local dev)
+
+### Option 2: CLI Manual Setup
 
 ```bash
 # 1. Create & start a workspace
-skynet workspace create my-project
+skynet workspace new --name my-project
 skynet workspace start my-project
 
 # 2. Add agents
-skynet agent create my-project --name backend --type claude --role "backend engineer"
-skynet agent create my-project --name frontend --type gemini --role "frontend engineer"
+skynet agent new --name pm --type claude-code --role "project manager"
+skynet agent new --name backend --type claude-code --role "backend engineer"
+skynet agent new --name frontend --type claude-code --role "frontend engineer"
 
-# 3. Join as a human
-skynet human create my-project --name alice
-skynet chat my-project --as alice
+# 3. Add a human & join chat
+skynet human new --name alice
+skynet chat --name alice
 ```
 
-Or load the agent skill into your coding agent and manage everything in natural language:
-
-- [skills/skynet](skills/skynet/SKILL.md) — for production use (`npm install -g @skynet-ai/cli`)
-- [skills/skynet-dev](skills/skynet-dev/SKILL.md) — for local development (`pnpm skynet`)
-
-> "Create a workspace called my-project, add a Claude agent named backend, and let me join as alice"
-
 For the complete CLI reference, see [docs/cli.md](docs/cli.md).
-
-## Why Skynet?
-
-| | Mix Agent Types | Agent-to-Agent Chat | Human in the Loop | Monitoring |
-|-|:---:|:---:|:---:|:---:|
-| Claude Code Teams | | | Limited | |
-| MCO / CrewAI | Partial | | | Partial |
-| **Skynet** | **Yes** | **Yes** | **Yes** | **Yes** |
 
 ## Packages
 
@@ -88,22 +67,6 @@ skynet/
 │   └── monitor/         # Web dashboard (Phase 2)
 ```
 
-## SDK Usage
-
-```typescript
-import { SkynetClient } from '@skynet-ai/sdk';
-import { AgentType } from '@skynet-ai/protocol';
-
-const client = new SkynetClient({
-  serverUrl: 'http://localhost:4117',
-  agent: { id: 'bot-1', name: 'my-bot', type: AgentType.GENERIC, capabilities: ['chat'], status: 'idle' },
-});
-
-await client.connect();
-client.on('chat', (msg) => console.log(`${msg.from}: ${msg.payload.text}`));
-client.chat('Hello!');
-```
-
 ## Development
 
 ```bash
@@ -118,13 +81,29 @@ pnpm skynet         # Run the CLI locally (e.g. pnpm skynet workspace list)
 
 ## Roadmap
 
-- **Phase 0** (done): Protocol, server, SDK — core messaging
-- **Phase 1** (done): Agent adapters, coordinator, CLI, chat TUI
-- **Phase 2** (in progress): Web monitoring dashboard
-- **Phase 3**: Cross-machine networking, auth, P2P
-- **Phase 4**: Intelligent task decomposition, auto conflict resolution, MCP server
+![Roadmap](docs/assets/roadmap.jpg)
 
-See [docs/phases.md](docs/phases.md) for the full roadmap.
+### Phase 1: Single-machine multi-agent collaboration (current)
+
+Multiple coding agents (Claude Code, Codex CLI, etc.) and humans collaborate on a single machine through a central workspace server.
+
+Use cases:
+- **Team simulation** — PM, Dev, QA agents working together on a project
+- **Role-playing** — architecture discussions, design debates, code reviews with diverse perspectives
+
+### Phase 2: LAN multi-machine collaboration
+
+Agents distributed across machines within a local network connect to a shared workspace, enabling cross-node coordination.
+
+Use cases:
+- **Distributed systems ops** — local agents deployed on each node, collaborating in real-time for monitoring, debugging, and incident response
+
+### Phase 3: WAN peer-to-peer network
+
+Agents form a decentralized P2P network across the internet — censorship-resistant, with no single point of failure.
+
+Use cases:
+- **Large-scale project collaboration** — long-running, geographically distributed, high-throughput multi-agent workflows
 
 ## Docs
 
