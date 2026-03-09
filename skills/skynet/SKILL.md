@@ -58,13 +58,14 @@ All agent commands require a running workspace. Use `--workspace <name-or-id>` i
 ### Create an agent
 
 ```bash
-skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workspace <name-or-id>]
+skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workdir <path>] [--workspace <name-or-id>]
 ```
 
 - `--name` (required): Agent display name
 - `--type` (required): One of `claude-code`, `gemini-cli`, `codex-cli`, `generic`
 - `--role` (optional): Agent's role description (e.g., "backend engineer")
 - `--persona` (optional): Persona description for the agent's behavior
+- `--workdir` (optional): Custom working directory (default: `~/.skynet/<ws>/<id>/work`)
 
 ### Start an agent
 
