@@ -25,12 +25,15 @@ async function handleAgentCommand(serverUrl: string, sub: string | undefined, ar
   if (!sub || sub === 'list') {
     try {
       const res = await fetch(`${serverUrl}/api/agents`);
-      const agents = await res.json() as Array<{ id: string; name: string; type: string; role?: string }>;
+      const agents = await res.json() as Array<{ id: string; name: string; type: string; role?: string; status?: string }>;
       if (agents.length === 0) return { lines: ['No agents.'] };
       return {
         lines: [
           `Agents (${agents.length}):`,
-          ...agents.map((a) => `  ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id.slice(0, 8)}]`),
+          ...agents.map((a) => {
+            const icon = a.status === 'busy' ? '\u{1F7E1}' : a.status === 'error' ? '\u{1F534}' : a.status === 'idle' ? '\u{1F7E2}' : '\u26AB';
+            return `  ${icon} ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id.slice(0, 8)}]`;
+          }),
         ],
       };
     } catch {

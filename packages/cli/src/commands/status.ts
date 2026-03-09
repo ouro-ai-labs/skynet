@@ -42,22 +42,19 @@ export function registerStatusCommand(program: Command): void {
         const agents = await agentsRes.json() as AgentCard[];
         const humans = await humansRes.json() as HumanProfile[];
 
-        // Build a map of connected member id → status
-        const onlineMap = new Map<string, AgentStatus>();
-        for (const m of members) {
-          onlineMap.set(m.id, m.status ?? 'idle');
-        }
+        // Build a set of connected member ids for human online check
+        const onlineIds = new Set(members.map((m) => m.id));
 
         console.log(`Skynet Workspace: ${workspace.name}`);
         console.log(`Server: ${url}`);
 
-        // ── Agents ──
+        // ── Agents (status already included from API) ──
         console.log(`\nAgents (${agents.length}):`);
         if (agents.length === 0) {
           console.log('  (none)');
         }
         for (const a of agents) {
-          const status = onlineMap.has(a.id) ? statusBadge(onlineMap.get(a.id)) : 'offline';
+          const status = statusBadge(a.status);
           const role = a.role ? ` | role: ${a.role}` : '';
           const persona = a.persona ? ` | persona: ${truncate(a.persona, 60)}` : '';
           console.log(`  ${a.name} [${status}]`);
@@ -70,7 +67,7 @@ export function registerStatusCommand(program: Command): void {
           console.log('  (none)');
         }
         for (const h of humans) {
-          const status = onlineMap.has(h.id) ? 'online' : 'offline';
+          const status = onlineIds.has(h.id) ? 'online' : 'offline';
           console.log(`  ${h.name} [${status}]`);
           console.log(`    id: ${h.id}`);
         }
