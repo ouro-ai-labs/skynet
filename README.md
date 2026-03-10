@@ -19,26 +19,22 @@ Each agent type has an **adapter** that translates workspace messages into CLI s
 
 ## Quick Start
 
-```bash
-npm install -g @skynet-ai/cli
-```
-
-### Option 1: Use with a Coding Agent (Recommended)
-
-Load the [Skynet skill](skills/skynet/SKILL.md) into your coding agent (e.g., Claude Code), then describe what you need in natural language:
+**No installation required.** Load the [Skynet skill](skills/skynet/SKILL.md) into your coding agent (e.g., Claude Code), then describe what you need in natural language:
 
 > "Use skynet to create a workspace called my-project for web development. Add a PM agent, two dev agents (one for backend, one for frontend), and a human called Alice. Start them all up."
 
-The agent handles all setup — workspace creation, agent registration, and startup — automatically.
+The agent handles all setup — workspace creation, agent registration, and startup — automatically via `npx`.
 
 Skill files: [skills/skynet](skills/skynet/SKILL.md) (production) · [skills/skynet-dev](skills/skynet-dev/SKILL.md) (local dev)
 
-### Option 2: CLI Manual Setup
+### Manual CLI Setup
 
 ```bash
+npm install -g @skynet-ai/cli
+
 # 1. Create & start a workspace
 skynet workspace new --name my-project
-skynet workspace start my-project
+skynet workspace start my-project -d
 
 # 2. Add agents
 skynet agent new --name pm --type claude-code --role "project manager"
@@ -77,7 +73,7 @@ pnpm clean          # Clean build artifacts
 pnpm skynet         # Run the CLI locally (e.g. pnpm skynet workspace list)
 ```
 
-> **Note**: Use `pnpm skynet` when developing locally. For production usage, install from npm with `npm install -g @skynet-ai/cli` and use `skynet` directly.
+> **Note**: Use `pnpm skynet` when developing locally. For production usage, use `npx @skynet-ai/cli@latest` — no global install needed.
 
 ## Roadmap
 
