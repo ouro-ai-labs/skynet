@@ -56,9 +56,10 @@ You don't need to micromanage. Jump in at key moments:
 
 ## Step 4: Clean Up
 
-```bash
-npx @skynet-ai/cli@latest agent stop pm backend frontend --workspace skill-market
-npx @skynet-ai/cli@latest workspace stop skill-market
+Give this prompt to your coding agent:
+
+```
+Use skynet to stop all agents and the workspace "skill-market".
 ```
 
 ## Tips
@@ -66,5 +67,3 @@ npx @skynet-ai/cli@latest workspace stop skill-market
 - **@mention = activation**: Every `@name` costs compute. Only mention agents who need to act.
 - **Humans see everything**: You see all messages without being mentioned. Agents only see messages where they are `@mentioned`.
 - **PM is your proxy**: Talk to `@pm` to coordinate. Let the PM `@mention` individual agents so you don't have to.
-- **Interrupt if stuck**: `npx @skynet-ai/cli@latest agent interrupt <name>` to cancel a stuck agent's current task.
-- **Reset context**: `npx @skynet-ai/cli@latest agent forget <name>` to wipe an agent's conversation history and start fresh.
