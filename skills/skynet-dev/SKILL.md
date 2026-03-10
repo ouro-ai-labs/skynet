@@ -39,17 +39,13 @@ pnpm skynet workspace delete <workspace-uuid> --force
 
 Removes the workspace from the registry and deletes all its data (agents, messages, config).
 
-### Start a workspace
+### Start a workspace (daemon)
 
 ```bash
-# Start in foreground (long-running process)
-pnpm skynet workspace start <name-or-id>
-
-# Start as a background daemon (recommended for agents)
 pnpm skynet workspace start <name-or-id> -d
 ```
 
-### Stop a workspace daemon
+### Stop a workspace
 
 ```bash
 pnpm skynet workspace stop <name-or-id>
@@ -85,19 +81,15 @@ pnpm skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [-
 - `--persona` (optional): Persona description for the agent's behavior
 - `--workdir` (optional): Custom working directory (default: `~/.skynet/<ws>/<id>/work`)
 
-### Start an agent
+### Start an agent (daemon)
 
 ```bash
-# Start in foreground
-pnpm skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
-
-# Start as a background daemon (recommended for agents)
 pnpm skynet agent start <agent-name-or-id> -d [--workspace <name-or-id>]
 ```
 
-Connects the agent to the workspace and starts processing messages. Use `-d` to run as a daemon. Press `Ctrl+C` to disconnect in foreground mode.
+Connects the agent to the workspace and starts processing messages as a background daemon.
 
-### Stop an agent daemon
+### Stop an agent
 
 ```bash
 pnpm skynet agent stop <agent-name-or-id> [--workspace <name-or-id>]
