@@ -334,13 +334,19 @@ export class SkynetWorkspace {
       this.pendingLeaves.delete(agentId);
     }
 
-    // Close the old socket if still open (prevent ghost connections)
-    if (existingMember && existingMember.socket !== socket && existingMember.socket.readyState === existingMember.socket.OPEN) {
-      existingMember.socket.close();
-    }
-
+    // Register the new socket FIRST, so any async close-event from the old socket
+    // sees the updated member and skips the leave logic.
     this.members.join(req.agent, socket);
     this.socketAgentMap.set(socket, agentId);
+
+    // Close the old socket AFTER registration (prevent ghost connections)
+    if (existingMember && existingMember.socket !== socket) {
+      // Remove old socket from map so its close handler finds no agentId and exits early
+      this.socketAgentMap.delete(existingMember.socket);
+      if (existingMember.socket.readyState === existingMember.socket.OPEN) {
+        existingMember.socket.close();
+      }
+    }
     this.logger.info(`Agent joined: ${req.agent.name} (${agentId})${isReconnect ? ' [reconnect]' : ''}`);
 
     // Always send workspace state to the (re)connecting agent.
