@@ -1,4 +1,4 @@
-export { AgentAdapter, type TaskResult } from './base-adapter.js';
+export { AgentAdapter, type TaskResult, type SessionState } from './base-adapter.js';
 export { ClaudeCodeAdapter, type ClaudeCodeOptions } from './adapters/claude-code.js';
 export { GeminiCliAdapter, type GeminiCliOptions } from './adapters/gemini-cli.js';
 export { CodexCliAdapter, type CodexCliOptions } from './adapters/codex-cli.js';

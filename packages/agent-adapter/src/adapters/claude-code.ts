@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execa, execaCommand, type ResultPromise } from 'execa';
 import { AgentType, type SkynetMessage, type ChatPayload, type TaskPayload, MessageType } from '@skynet-ai/protocol';
-import { AgentAdapter, type TaskResult } from '../base-adapter.js';
+import { AgentAdapter, type TaskResult, type SessionState } from '../base-adapter.js';
 
 export interface ClaudeCodeOptions {
   projectRoot: string;
@@ -141,6 +141,18 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     // Start a fresh session
     this.sessionId = randomUUID();
     this.sessionStarted = false;
+  }
+
+  override getSessionState(): SessionState {
+    return {
+      sessionId: this.sessionId,
+      sessionStarted: this.sessionStarted,
+    };
+  }
+
+  override restoreSessionState(state: SessionState): void {
+    this.sessionId = state.sessionId;
+    this.sessionStarted = state.sessionStarted;
   }
 
   async dispose(): Promise<void> {

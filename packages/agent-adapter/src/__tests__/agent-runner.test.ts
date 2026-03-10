@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { MessageType, MENTION_ALL } from '@skynet-ai/protocol';
 import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet-ai/protocol';
 import { AgentRunner } from '../agent-runner.js';
-import { AgentAdapter, type TaskResult } from '../base-adapter.js';
+import { AgentAdapter, type TaskResult, type SessionState } from '../base-adapter.js';
 import { AgentType } from '@skynet-ai/protocol';
 import { buildSkynetIntro } from '../skynet-intro.js';
 
@@ -87,9 +87,11 @@ class FakeAdapter extends AgentAdapter {
   handleResponse = 'handled';
   quickReplyResponse = 'quick reply';
   private _supportsQuickReply = false;
+  private _sessionState: SessionState | undefined;
 
   quickReplyCalls: string[] = [];
   handleMessageCalls: SkynetMessage[] = [];
+  restoredSessionState: SessionState | undefined;
 
   setSupportsQuickReply(v: boolean) {
     this._supportsQuickReply = v;
@@ -102,6 +104,19 @@ class FakeAdapter extends AgentAdapter {
   override async quickReply(prompt: string): Promise<string> {
     this.quickReplyCalls.push(prompt);
     return this.quickReplyResponse;
+  }
+
+  override getSessionState(): SessionState | undefined {
+    return this._sessionState;
+  }
+
+  override restoreSessionState(state: SessionState): void {
+    this._sessionState = state;
+    this.restoredSessionState = state;
+  }
+
+  setSessionState(state: SessionState): void {
+    this._sessionState = state;
   }
 
   async isAvailable() { return true; }
@@ -821,6 +836,73 @@ describe('AgentRunner state persistence', () => {
     // The client should have been constructed with the persisted timestamp
     const client = getClient(runner);
     expect((client as unknown as { lastSeenTimestamp: number }).lastSeenTimestamp).toBe(99000);
+  });
+
+  it('persists session state alongside lastSeenTimestamp', async () => {
+    const statePath = join(testDir, 'state.json');
+    const adapter = new FakeAdapter();
+    adapter.setSessionState({ sessionId: 'test-sid-1', sessionStarted: true });
+
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      statePath,
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(existsSync(statePath)).toBe(true);
+    const state = JSON.parse(readFileSync(statePath, 'utf-8'));
+    expect(state.session).toEqual({ sessionId: 'test-sid-1', sessionStarted: true });
+  });
+
+  it('restores session state from state file on start', async () => {
+    const statePath = join(testDir, 'state.json');
+
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(statePath, JSON.stringify({
+      lastSeenTimestamp: 50000,
+      session: { sessionId: 'persisted-sid', sessionStarted: true },
+    }));
+
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      statePath,
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    // Adapter should have received the restored session state
+    expect(adapter.restoredSessionState).toEqual({
+      sessionId: 'persisted-sid',
+      sessionStarted: true,
+    });
+  });
+
+  it('handles state file without session field gracefully', async () => {
+    const statePath = join(testDir, 'state.json');
+
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(statePath, JSON.stringify({ lastSeenTimestamp: 10000 }));
+
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      statePath,
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    // No session to restore — adapter should not have been called
+    expect(adapter.restoredSessionState).toBeUndefined();
   });
 });
 

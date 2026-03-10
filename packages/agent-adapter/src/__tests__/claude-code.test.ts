@@ -362,6 +362,75 @@ describe('ClaudeCodeAdapter interrupt', () => {
   });
 });
 
+describe('ClaudeCodeAdapter session state persistence', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('getSessionState returns current session ID and started flag', async () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    const stateBefore = adapter.getSessionState();
+    expect(stateBefore.sessionId).toBeTruthy();
+    expect(stateBefore.sessionStarted).toBe(false);
+
+    await adapter.handleMessage(makeMsg());
+    const stateAfter = adapter.getSessionState();
+    expect(stateAfter.sessionId).toBe(stateBefore.sessionId);
+    expect(stateAfter.sessionStarted).toBe(true);
+  });
+
+  it('restoreSessionState sets session ID and started flag', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    adapter.restoreSessionState({
+      sessionId: 'restored-session-id-123',
+      sessionStarted: true,
+    });
+
+    await adapter.handleMessage(makeMsg());
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    expect(args).toContain('--resume');
+    expect(args).toContain('restored-session-id-123');
+    expect(args).not.toContain('--session-id');
+  });
+
+  it('restoreSessionState with sessionStarted=false uses --session-id', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    adapter.restoreSessionState({
+      sessionId: 'restored-session-id-456',
+      sessionStarted: false,
+    });
+
+    await adapter.handleMessage(makeMsg());
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    expect(args).toContain('--session-id');
+    expect(args).toContain('restored-session-id-456');
+    expect(args).not.toContain('--resume');
+  });
+
+  it('supportsQuickReply reflects restored sessionStarted state', () => {
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    expect(adapter.supportsQuickReply()).toBe(false);
+
+    adapter.restoreSessionState({
+      sessionId: 'some-id',
+      sessionStarted: true,
+    });
+    expect(adapter.supportsQuickReply()).toBe(true);
+  });
+});
+
 describe('ClaudeCodeAdapter resetSession', () => {
   let tempDir: string;
 
