@@ -1,4 +1,4 @@
-import React, { useReducer, useRef, useCallback, useState } from 'react';
+import React, { useReducer, useRef, useCallback, useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { AgentCard, Attachment } from '@skynet-ai/protocol';
 import {
@@ -9,6 +9,7 @@ import {
   SLASH_COMMANDS,
 } from '../inputState.js';
 import { readClipboardImage, formatSize } from '../clipboard.js';
+import { useBracketedPaste } from '../hooks/useBracketedPaste.js';
 
 interface InputBarProps {
   onSubmit: (text: string, attachments: Attachment[]) => void;
@@ -22,7 +23,17 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
   const [pasteStatus, setPasteStatus] = useState<string | null>(null);
   const pastingRef = useRef(false);
 
+  const { pastedText, clearPaste } = useBracketedPaste();
   const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex, commandFilter, commandSelectedIndex } = state;
+
+  // Handle bracketed paste: insert pasted text at cursor position
+  useEffect(() => {
+    if (!pastedText) return;
+    const newValue = value.slice(0, cursorPos) + pastedText + value.slice(cursorPos);
+    const newCursor = cursorPos + pastedText.length;
+    dispatch({ type: 'SET_VALUE', value: newValue, cursorPos: newCursor });
+    clearPaste();
+  }, [pastedText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mentionCandidates = mentionFilter !== null
     ? [
@@ -329,7 +340,7 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
       )}
       <Box paddingX={1}>
         <Text color="cyan">{'\u276F'} </Text>
-        <Text>
+        <Text wrap="wrap">
           {before}
           <Text inverse color="cyan">{cursor}</Text>
           {after}

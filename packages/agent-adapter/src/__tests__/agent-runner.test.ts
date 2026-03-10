@@ -32,7 +32,11 @@ vi.mock('@skynet-ai/sdk', () => {
       this.lastSeenTimestamp = options.lastSeenTimestamp ?? 0;
     }
 
+    /** Optional callback invoked during connect(), before the promise resolves. */
+    onConnecting: (() => void) | null = null;
+
     async connect() {
+      if (this.onConnecting) this.onConnecting();
       return { members: [], recentMessages: [] };
     }
 
@@ -1294,5 +1298,50 @@ describe('AgentRunner forget', () => {
       m => (m.payload as { text: string }).text === 'after forget'
     );
     expect(hasAfterForget).toBe(true);
+  });
+});
+
+describe('AgentRunner agent-join race condition', () => {
+  it('captures agent-join events emitted during connect()', async () => {
+    const adapter = new FakeAdapter();
+    adapter.handleResponse = 'Hello @late-joiner welcome!';
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentName: 'test-agent',
+      debounceMs: 0,
+    });
+
+    const client = getClient(runner);
+
+    // Simulate an agent joining DURING connect() — before the promise resolves.
+    // This reproduces the race condition where agents that join between
+    // workspace.state and handler registration are missed.
+    (client as unknown as { onConnecting: (() => void) | null }).onConnecting = () => {
+      client.emit('agent-join', {
+        id: 'join-late',
+        type: 'agent.join',
+        from: 'server',
+        timestamp: Date.now(),
+        payload: { agent: { id: 'late-agent-id', name: 'late-joiner', type: AgentType.CLAUDE_CODE } },
+      });
+    };
+
+    await runner.start();
+
+    // Verify the late-joining agent is in memberInfo
+    const memberInfo = (runner as unknown as { memberInfo: Map<string, MemberInfo> }).memberInfo;
+    expect(memberInfo.has('late-agent-id')).toBe(true);
+    expect(memberInfo.get('late-agent-id')!.name).toBe('late-joiner');
+
+    // Verify @mention resolution works for the late joiner
+    const msg = makeChatMsg({ from: 'human-1', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    // The response contains @late-joiner, which should resolve to 'late-agent-id'
+    expect(client.chatCalls.length).toBeGreaterThan(0);
+    const lastCall = client.chatCalls[client.chatCalls.length - 1];
+    expect(lastCall.mentions).toContain('late-agent-id');
   });
 });

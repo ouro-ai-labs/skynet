@@ -125,14 +125,10 @@ export class AgentRunner {
     // The server rejects JOIN from unregistered agents.
     await this.ensureRegistered();
 
-    const state = await this.client.connect();
-    this.logger.info(`Connected, ${state.members.length} members online`);
-
-    // Build initial member info map from workspace state
-    for (const member of state.members) {
-      this.memberInfo.set(member.id, { name: member.name, type: member.type });
-    }
-
+    // Register event handlers BEFORE connect() to avoid a race condition:
+    // agents that join between the server sending workspace.state and the
+    // runner registering handlers would otherwise be missed, leaving
+    // memberInfo incomplete and breaking @mention resolution.
     this.client.on('agent-join', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentJoinPayload;
       this.memberInfo.set(payload.agent.id, { name: payload.agent.name, type: payload.agent.type });
@@ -158,6 +154,16 @@ export class AgentRunner {
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('agent-interrupt', () => this.handleInterrupt());
     this.client.on('agent-forget', () => this.handleForget());
+
+    const state = await this.client.connect();
+    this.logger.info(`Connected, ${state.members.length} members online`);
+
+    // Build initial member info map from workspace state.
+    // Any agent-join events that arrived during connect() have already been
+    // processed by the handler above, so merge rather than overwrite.
+    for (const member of state.members) {
+      this.memberInfo.set(member.id, { name: member.name, type: member.type });
+    }
 
     // Clear any notices generated during initial connection — the agent already
     // knows the initial member list from workspace state.
