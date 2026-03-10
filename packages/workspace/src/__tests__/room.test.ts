@@ -17,6 +17,7 @@ function mockAgent(id: string, name: string): AgentCard {
     id,
     name,
     type: AgentType.HUMAN,
+    status: 'offline',
   };
 }
 
@@ -113,7 +114,7 @@ describe('MemberManager', () => {
 
   it('updates agent status', () => {
     members.join(mockAgent('a1', 'alice'), mockSocket());
-    expect(members.getMember('a1')!.agent.status).toBeUndefined();
+    expect(members.getMember('a1')!.agent.status).toBe('offline');
 
     members.updateStatus('a1', 'busy');
     expect(members.getMember('a1')!.agent.status).toBe('busy');

@@ -213,6 +213,7 @@ describe('SqliteStore agents', () => {
       role: 'developer',
       persona: 'helpful',
       createdAt: Date.now(),
+      status: 'offline',
     });
 
     const agents = store.listAgents();
@@ -228,6 +229,7 @@ describe('SqliteStore agents', () => {
       name: 'Claude',
       type: AgentType.CLAUDE_CODE,
       createdAt: Date.now(),
+      status: 'offline',
     });
 
     const byId = store.getAgent('agent-1');
@@ -244,14 +246,14 @@ describe('SqliteStore agents', () => {
   });
 
   it('deletes agent by id', () => {
-    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now(), status: 'offline' });
     expect(store.deleteAgent('agent-1')).toBe(true);
     expect(store.getAgent('agent-1')).toBeUndefined();
     expect(store.listAgents()).toHaveLength(0);
   });
 
   it('does not delete agent by name', () => {
-    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now(), status: 'offline' });
     expect(store.deleteAgent('Claude')).toBe(false);
     expect(store.getAgent('agent-1')).toBeDefined();
   });
@@ -261,7 +263,7 @@ describe('SqliteStore agents', () => {
   });
 
   it('frees name after agent deletion', () => {
-    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    store.saveAgent({ id: 'agent-1', name: 'Claude', type: AgentType.CLAUDE_CODE, createdAt: Date.now(), status: 'offline' });
     expect(store.checkNameUnique('Claude')).toBe(false);
     store.deleteAgent('agent-1');
     expect(store.checkNameUnique('Claude')).toBe(true);
@@ -332,7 +334,7 @@ describe('SqliteStore name uniqueness', () => {
   });
 
   it('returns false when name is used by an agent', () => {
-    store.saveAgent({ id: 'agent-1', name: 'taken', type: AgentType.CLAUDE_CODE, createdAt: Date.now() });
+    store.saveAgent({ id: 'agent-1', name: 'taken', type: AgentType.CLAUDE_CODE, createdAt: Date.now(), status: 'offline' });
     expect(store.checkNameUnique('taken')).toBe(false);
   });
 

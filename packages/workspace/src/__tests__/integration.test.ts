@@ -24,7 +24,7 @@ async function makeClient(port: number, name: string, type = AgentType.HUMAN): P
   const entity = await res.json() as { id: string };
   return new SkynetClient({
     serverUrl: `http://localhost:${port}`,
-    agent: { id: entity.id, name, type },
+    agent: { id: entity.id, name, type, status: 'idle' as const },
     reconnect: false,
   });
 }
@@ -54,7 +54,7 @@ describe('Server integration', () => {
   it('rejects unregistered agent on WebSocket join', async () => {
     const client = new SkynetClient({
       serverUrl: `http://localhost:${PORT}`,
-      agent: { id: randomUUID(), name: 'ghost', type: AgentType.CLAUDE_CODE },
+      agent: { id: randomUUID(), name: 'ghost', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
     });
 
@@ -303,7 +303,7 @@ describe('Server integration', () => {
 
     const reconnectBob = new SkynetClient({
       serverUrl: `http://localhost:${PORT}`,
-      agent: { id: bobEntity.id, name: 'bob-recon', type: AgentType.HUMAN },
+      agent: { id: bobEntity.id, name: 'bob-recon', type: AgentType.HUMAN, status: 'idle' },
       reconnect: false,
     });
 
@@ -330,7 +330,7 @@ describe('Server integration', () => {
     // Immediately reconnect with the same agent ID (within grace period)
     const reconnectBob2 = new SkynetClient({
       serverUrl: `http://localhost:${PORT}`,
-      agent: { id: bobAgentId, name: 'bob-recon', type: AgentType.HUMAN },
+      agent: { id: bobAgentId, name: 'bob-recon', type: AgentType.HUMAN, status: 'idle' },
       reconnect: false,
     });
     await reconnectBob2.connect();
@@ -372,7 +372,7 @@ describe('Server integration', () => {
     // Bob connects with lastSeenTimestamp — should only get the newer message
     const bob = new SkynetClient({
       serverUrl: `http://localhost:${PORT}`,
-      agent: { id: bobId, name: 'bob-seen', type: AgentType.HUMAN },
+      agent: { id: bobId, name: 'bob-seen', type: AgentType.HUMAN, status: 'idle' },
       reconnect: false,
       lastSeenTimestamp: boundary,
     });
@@ -744,7 +744,7 @@ describe('Server HTTP API', () => {
 
     const paginatorClient = new SkynetClient({
       serverUrl: `http://localhost:${API_PORT}`,
-      agent: { id: entity.id, name: 'paginator', type: AgentType.HUMAN },
+      agent: { id: entity.id, name: 'paginator', type: AgentType.HUMAN, status: 'idle' },
       reconnect: false,
     });
     await paginatorClient.connect();
@@ -772,7 +772,7 @@ describe('Server HTTP API', () => {
 
     const client = new SkynetClient({
       serverUrl: `http://localhost:${API_PORT}`,
-      agent: { id: agent.id, name: 'interrupt-agent', type: AgentType.CLAUDE_CODE },
+      agent: { id: agent.id, name: 'interrupt-agent', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
     });
     await client.connect();
@@ -805,7 +805,7 @@ describe('Server HTTP API', () => {
 
     const client = new SkynetClient({
       serverUrl: `http://localhost:${API_PORT}`,
-      agent: { id: agent.id, name: 'forget-agent', type: AgentType.CLAUDE_CODE },
+      agent: { id: agent.id, name: 'forget-agent', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
     });
     await client.connect();

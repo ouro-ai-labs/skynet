@@ -119,6 +119,7 @@ export class SkynetWorkspace {
           role,
           persona,
           createdAt: Date.now(),
+          status: 'offline',
         };
         this.store.saveAgent(agent);
         return reply.status(201).send(agent);
@@ -130,7 +131,7 @@ export class SkynetWorkspace {
       const agents = this.store.listAgents();
       return agents.map((a) => {
         const status = this.members.getStatus(a.id);
-        return { ...a, status: status ?? 'offline' };
+        return { ...a, status: status ?? a.status };
       });
     });
 

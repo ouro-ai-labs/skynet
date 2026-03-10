@@ -51,7 +51,7 @@ async function registerHuman(baseUrl: string, name: string): Promise<SkynetClien
   const entity = await res.json() as { id: string };
   return new SkynetClient({
     serverUrl: baseUrl,
-    agent: { id: entity.id, name, type: AgentType.HUMAN },
+    agent: { id: entity.id, name, type: AgentType.HUMAN, status: 'idle' },
     reconnect: false,
   });
 }
@@ -270,6 +270,7 @@ describe('E2E: full lifecycle (API create → connect → chat → disconnect)',
         id: humanProfile.id,
         name: 'lifecycle-human',
         type: AgentType.HUMAN,
+        status: 'idle',
       },
       reconnect: false,
     });
@@ -368,7 +369,7 @@ describe('E2E: workspace.state only returns mentioned messages for connecting ag
     // Agent connects — should only see messages that mention it
     const agent = new SkynetClient({
       serverUrl: baseUrl,
-      agent: { id: agentId, name: 'target-agent', type: AgentType.CLAUDE_CODE },
+      agent: { id: agentId, name: 'target-agent', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
     });
     const state = await agent.connect();
@@ -402,7 +403,7 @@ describe('E2E: workspace.state only returns mentioned messages for connecting ag
 
     const agent = new SkynetClient({
       serverUrl: baseUrl,
-      agent: { id: agentId, name: 'limit-agent', type: AgentType.CLAUDE_CODE },
+      agent: { id: agentId, name: 'limit-agent', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
     });
     const state = await agent.connect();
@@ -460,7 +461,7 @@ describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
     // Agent connects with lastSeenTimestamp — should only see the newer message
     const agent = new SkynetClient({
       serverUrl: baseUrl,
-      agent: { id: agentId, name: 'seen-agent', type: AgentType.CLAUDE_CODE },
+      agent: { id: agentId, name: 'seen-agent', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
       lastSeenTimestamp: boundary,
     });
@@ -490,7 +491,7 @@ describe('E2E: lastSeenTimestamp filters already-processed messages', () => {
     // Agent connects without lastSeenTimestamp — should see the message
     const agent = new SkynetClient({
       serverUrl: baseUrl,
-      agent: { id: agentId, name: 'fresh-agent', type: AgentType.CLAUDE_CODE },
+      agent: { id: agentId, name: 'fresh-agent', type: AgentType.CLAUDE_CODE, status: 'idle' },
       reconnect: false,
     });
     const state = await agent.connect();
