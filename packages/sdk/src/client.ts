@@ -65,6 +65,18 @@ export class SkynetClient extends EventEmitter {
   }
 
   async connect(): Promise<WorkspaceState> {
+    // Clean up any previous WebSocket to prevent overlapping connections
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      this.ws.terminate();
+      this.ws = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.stopHeartbeat();
+
     return new Promise((resolve, reject) => {
       const wsUrl = this.serverUrl.replace(/^http/, 'ws') + '/ws';
       this.ws = new WebSocket(wsUrl);

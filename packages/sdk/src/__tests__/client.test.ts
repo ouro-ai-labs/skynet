@@ -144,6 +144,32 @@ describe('SkynetClient reconnection', () => {
     expect(reconnectCount).toBe(0);
   }, 10000);
 
+  it('cleans up old WebSocket when connect() is called again', async () => {
+    const p = nextPort();
+    const wss = new WebSocketServer({ port: p });
+    createJoinHandler(wss);
+    cleanups.push(() => closeServer(wss));
+
+    const client = createTestClient(p, { reconnect: false });
+    cleanups.push(() => client.close());
+    await client.connect();
+    expect(client.connected).toBe(true);
+
+    // Access the internal ws to verify cleanup
+    const oldWs = (client as unknown as { ws: { readyState: number } }).ws;
+
+    // Call connect() again (simulating what scheduleReconnect does)
+    await client.connect();
+    expect(client.connected).toBe(true);
+
+    const newWs = (client as unknown as { ws: { readyState: number } }).ws;
+
+    // Old WebSocket should have been terminated
+    expect(oldWs).not.toBe(newWs);
+    // readyState 2=CLOSING, 3=CLOSED
+    expect(oldWs.readyState).toBeGreaterThanOrEqual(2);
+  }, 10000);
+
   it('resets backoff after successful reconnection', async () => {
     const p = nextPort();
     let wss: WebSocketServer | null = new WebSocketServer({ port: p });

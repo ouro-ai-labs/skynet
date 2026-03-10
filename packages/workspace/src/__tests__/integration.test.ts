@@ -344,6 +344,50 @@ describe('Server integration', () => {
     await reconnectBob2.close();
   });
 
+  it('rapid reconnection does not cause reconnect loop', async () => {
+    const alice = await makeClient(PORT, 'alice-rapid');
+
+    const bobRes = await fetch(`http://localhost:${PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'bob-rapid' }),
+    });
+    const bobEntity = await bobRes.json() as { id: string };
+
+    await alice.connect();
+
+    const leaveEvents: string[] = [];
+    alice.on('agent-leave', (msg: SkynetMessage) => {
+      const payload = msg.payload as { agentId: string };
+      leaveEvents.push(payload.agentId);
+    });
+
+    // Rapidly reconnect bob 5 times to simulate the race condition
+    let lastBob: SkynetClient | null = null;
+    for (let i = 0; i < 5; i++) {
+      const bob = new SkynetClient({
+        serverUrl: `http://localhost:${PORT}`,
+        agent: { id: bobEntity.id, name: 'bob-rapid', type: AgentType.HUMAN, status: 'idle' },
+        reconnect: false,
+      });
+      await bob.connect();
+      if (lastBob) {
+        // Old client's socket was replaced server-side; just terminate it
+        (lastBob as unknown as { ws: { terminate: () => void } }).ws.terminate();
+      }
+      lastBob = bob;
+    }
+
+    // Wait for any grace period timers to fire
+    await sleep(500);
+
+    // No leave events should have been broadcast — bob never truly left
+    expect(leaveEvents).toHaveLength(0);
+
+    await alice.close();
+    if (lastBob) await lastBob.close();
+  });
+
   it('workspace.state respects lastSeenTimestamp from client', async () => {
     const alice = await makeClient(PORT, 'alice-seen');
     await alice.connect();
