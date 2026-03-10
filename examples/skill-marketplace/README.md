@@ -36,7 +36,7 @@ npx @skynet-ai/cli@latest chat --name me --workspace skill-market
 Paste this in the chat to start:
 
 ```
-@pm We're building a skill marketplace website where users can browse, publish, and install skills for AI agents. The MVP needs: (1) a browse page with search and category filters, (2) a skill detail page, and (3) a publish page. Please break this into tasks for @backend and @frontend, define the API contract between them, then kick things off. Start with backend API + seed data so frontend can develop against real endpoints.
+@pm We're building a skill marketplace website where users can browse, publish, and install skills for AI agents. The MVP needs: (1) a browse page with search and category filters, (2) a skill detail page, and (3) a publish page. Please break this into tasks for @backend and @frontend — define the API contract between them, then kick things off. Start with backend API + seed data so frontend can develop against real endpoints.
 ```
 
 The PM will create a task breakdown and assign work to `@backend` and `@frontend`. They will start coding autonomously.
