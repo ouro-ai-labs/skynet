@@ -26,7 +26,7 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
 
   const mentionCandidates = mentionFilter !== null
     ? [
-        ...('all'.startsWith(mentionFilter) ? [{ id: '__all__', name: 'all' } as AgentCard] : []),
+        ...('all'.startsWith(mentionFilter) ? [{ id: '__all__', name: 'all', type: 'generic' as AgentCard['type'], status: 'offline' } as AgentCard] : []),
         ...Array.from(members.values())
           .filter((m) => m.name.toLowerCase().startsWith(mentionFilter)),
       ].slice(0, 8)

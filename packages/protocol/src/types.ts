@@ -25,7 +25,7 @@ export interface AgentCard {
   // Runtime fields (set when connected)
   capabilities?: string[];
   projectRoot?: string;
-  status?: AgentStatus;
+  status: AgentStatus;
 }
 
 export interface HumanProfile {

@@ -175,6 +175,7 @@ export class SqliteStore implements Store {
       role: (row.role as string) || undefined,
       persona: (row.persona as string) || undefined,
       createdAt: row.created_at as number,
+      status: 'offline',
     };
   }
 

@@ -61,7 +61,7 @@ interface AgentCard {
   // Runtime fields (set when connected)
   capabilities?: string[];    // ["code-edit", "code-review", "test"]
   projectRoot?: string;
-  status?: AgentStatus;       // 'idle' | 'busy' | 'offline'
+  status: AgentStatus;        // 'idle' | 'busy' | 'offline' | 'error'
 }
 ```
 
