@@ -40,14 +40,30 @@ Removes the workspace from the registry and deletes all its data (agents, messag
 ### Start a workspace
 
 ```bash
-# Start by name or UUID
+# Start in foreground (long-running process)
 skynet workspace start <name-or-id>
 
-# If only one workspace exists, just run:
-skynet workspace start
+# Start as a background daemon (recommended for agents)
+skynet workspace start <name-or-id> -d
 ```
 
-> Note: This is a long-running process. Run it in the background or in a separate terminal.
+### Stop a workspace daemon
+
+```bash
+skynet workspace stop <name-or-id>
+```
+
+### Check workspace daemon status
+
+```bash
+skynet workspace status <name-or-id>
+```
+
+### View workspace logs
+
+```bash
+skynet workspace logs <name-or-id>
+```
 
 ---
 
@@ -70,10 +86,32 @@ skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [--pers
 ### Start an agent
 
 ```bash
+# Start in foreground
 skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
+
+# Start as a background daemon (recommended for agents)
+skynet agent start <agent-name-or-id> -d [--workspace <name-or-id>]
 ```
 
-Connects the agent to the workspace and starts processing messages. This is a long-running process — run it in the background or in a separate terminal. Press `Ctrl+C` to disconnect.
+Connects the agent to the workspace and starts processing messages. Use `-d` to run as a daemon. Press `Ctrl+C` to disconnect in foreground mode.
+
+### Stop an agent daemon
+
+```bash
+skynet agent stop <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+### Check agent daemon status
+
+```bash
+skynet agent status <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+### View agent logs
+
+```bash
+skynet agent logs <agent-name-or-id> [--workspace <name-or-id>]
+```
 
 ### Delete an agent
 
@@ -159,12 +197,13 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 ## Typical Workflow
 
 1. **Create a workspace**: `skynet workspace new --name my-project`
-2. **Start the workspace**: `skynet workspace start my-project` (keep running)
+2. **Start the workspace**: `skynet workspace start my-project -d`
 3. **Create agents**: `skynet agent new --name backend --type claude-code --role "backend engineer"`
-4. **Start the agent**: `skynet agent start backend` (keep running)
+4. **Start the agent**: `skynet agent start backend -d`
 5. **Create a human**: `skynet human new --name alice`
 6. **Human joins chat** (tell them to run): `skynet chat --name alice`
 7. **Check status**: `skynet status`
+8. **Stop when done**: `skynet agent stop backend && skynet workspace stop my-project`
 
 ---
 
