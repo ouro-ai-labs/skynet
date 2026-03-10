@@ -7,6 +7,12 @@ export interface TaskResult {
   error?: string;
 }
 
+/** Serializable session state for persistence across restarts. */
+export interface SessionState {
+  sessionId: string;
+  sessionStarted: boolean;
+}
+
 export abstract class AgentAdapter {
   abstract readonly type: AgentType;
   abstract readonly name: string;
@@ -44,6 +50,22 @@ export abstract class AgentAdapter {
    * The adapter remains usable after this call.
    */
   async resetSession(): Promise<void> {
+    // Default: no-op — subclasses override if they maintain session state.
+  }
+
+  /**
+   * Return serializable session state for persistence across restarts.
+   * Returns undefined if the adapter does not maintain session state.
+   */
+  getSessionState(): SessionState | undefined {
+    return undefined;
+  }
+
+  /**
+   * Restore session state from a previous run.
+   * Called before the first handleMessage() to resume an existing session.
+   */
+  restoreSessionState(_state: SessionState): void {
     // Default: no-op — subclasses override if they maintain session state.
   }
 

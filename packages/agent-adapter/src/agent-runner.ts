@@ -20,7 +20,7 @@ interface MemberInfo {
   type: AgentType;
 }
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
-import type { AgentAdapter } from './base-adapter.js';
+import type { AgentAdapter, SessionState } from './base-adapter.js';
 import { buildSkynetIntro } from './skynet-intro.js';
 
 /** Default debounce window (ms) — messages must age this long before processing. */
@@ -89,15 +89,21 @@ export class AgentRunner {
       persona: options.persona,
     };
 
-    const lastSeenTimestamp = this.loadLastSeenTimestamp();
+    this.adapter = options.adapter;
+
+    const { lastSeenTimestamp, session } = this.loadPersistedState();
+
+    // Restore adapter session state from a previous run so the agent
+    // can resume its Claude Code (or other CLI) conversation context.
+    if (session) {
+      this.adapter.restoreSessionState(session);
+    }
 
     this.client = new SkynetClient({
       serverUrl: options.serverUrl,
       agent: agentCard,
       lastSeenTimestamp,
     });
-
-    this.adapter = options.adapter;
     this.logger = new Logger(`agent:${agentCard.name}`, {
       filePath: options.logFile,
       level: 'debug',
@@ -413,7 +419,7 @@ export class AgentRunner {
 
     this.setStatus('idle');
     this.processing = false;
-    this.persistLastSeenTimestamp();
+    this.persistState();
 
     // If more messages arrived during processing, reschedule
     if (this.messageQueue.length > 0) {
@@ -514,16 +520,23 @@ export class AgentRunner {
     this.setStatus('idle');
   }
 
-  private persistLastSeenTimestamp(): void {
+  private persistState(): void {
     if (!this.options.statePath) return;
     try {
       const dir = dirname(this.options.statePath);
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
       }
+      const data: Record<string, unknown> = {
+        lastSeenTimestamp: this.client.lastSeenTimestamp,
+      };
+      const session = this.adapter.getSessionState();
+      if (session) {
+        data.session = session;
+      }
       writeFileSync(
         this.options.statePath,
-        JSON.stringify({ lastSeenTimestamp: this.client.lastSeenTimestamp }) + '\n',
+        JSON.stringify(data) + '\n',
         'utf-8',
       );
     } catch {
@@ -531,14 +544,19 @@ export class AgentRunner {
     }
   }
 
-  private loadLastSeenTimestamp(): number {
-    if (!this.options.statePath || !existsSync(this.options.statePath)) return 0;
+  private loadPersistedState(): { lastSeenTimestamp: number; session?: SessionState } {
+    if (!this.options.statePath || !existsSync(this.options.statePath)) {
+      return { lastSeenTimestamp: 0 };
+    }
     try {
       const raw = readFileSync(this.options.statePath, 'utf-8');
-      const data = JSON.parse(raw) as { lastSeenTimestamp?: number };
-      return data.lastSeenTimestamp ?? 0;
+      const data = JSON.parse(raw) as { lastSeenTimestamp?: number; session?: SessionState };
+      return {
+        lastSeenTimestamp: data.lastSeenTimestamp ?? 0,
+        session: data.session,
+      };
     } catch {
-      return 0;
+      return { lastSeenTimestamp: 0 };
     }
   }
 
