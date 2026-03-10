@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import { SkynetWorkspace, SqliteStore } from '@skynet-ai/workspace';
 import {
@@ -12,6 +13,7 @@ import {
   getWorkspaceDir,
   type WorkspaceEntry,
 } from '../config.js';
+import { spawnDaemon, getPidFilePath, getRunningPid, stopProcess } from '../daemon.js';
 
 async function startServer(workspace: WorkspaceEntry): Promise<void> {
   const wsDir = getWorkspaceDir(workspace.id);
@@ -33,24 +35,56 @@ async function startServer(workspace: WorkspaceEntry): Promise<void> {
   console.log(`Logs: ${logFile}`);
 }
 
+function startDaemon(workspace: WorkspaceEntry): void {
+  const pidFile = getPidFilePath(workspace.id, 'server');
+  const existingPid = getRunningPid(pidFile);
+  if (existingPid) {
+    console.error(`Workspace "${workspace.name}" is already running (pid: ${existingPid}).`);
+    process.exit(1);
+  }
+
+  const logFile = join(getWorkspaceDir(workspace.id), 'logs', 'server.log');
+  const pid = spawnDaemon([
+    'workspace',
+    '--workspace-id', workspace.id,
+  ], logFile);
+
+  console.log(`Workspace "${workspace.name}" started in background (pid: ${pid}).`);
+  console.log(`Logs: ${logFile}`);
+  console.log(`Stop with: skynet workspace stop ${workspace.name}`);
+}
+
+function resolveWorkspaceArg(identifier?: string): WorkspaceEntry {
+  if (identifier) {
+    const entry = getWorkspaceByIdOrName(identifier);
+    if (!entry) {
+      console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
+      process.exit(1);
+    }
+    return entry!;
+  }
+
+  const workspaces = listWorkspaces();
+  if (workspaces.length === 0) {
+    console.error('No workspaces configured. Run \'skynet workspace new\' to create one.');
+    process.exit(1);
+  }
+  if (workspaces.length > 1) {
+    console.error('Multiple workspaces found. Please specify which one.');
+    console.error('Run \'skynet workspace list\' to see available workspaces.');
+    process.exit(1);
+  }
+  return workspaces[0];
+}
+
 export function registerWorkspaceCommand(program: Command): void {
   const workspace = program
     .command('workspace')
     .description('Manage Skynet workspaces')
     .action(async () => {
       // Bare `skynet workspace`: start the only workspace, or error if multiple
-      const workspaces = listWorkspaces();
-      if (workspaces.length === 0) {
-        console.error('No workspaces configured. Run \'skynet workspace new\' to create one.');
-        process.exit(1);
-      }
-      if (workspaces.length > 1) {
-        console.error('Multiple workspaces found. Use \'skynet workspace start <name-or-id>\' to specify which one.');
-        console.error('Run \'skynet workspace list\' to see available workspaces.');
-        process.exit(1);
-      }
-
-      await startServer(workspaces[0]);
+      const entry = resolveWorkspaceArg();
+      await startServer(entry);
     });
 
   workspace
@@ -127,7 +161,10 @@ export function registerWorkspaceCommand(program: Command): void {
 
       console.log(`Workspaces (${workspaces.length}):`);
       for (const w of workspaces) {
-        console.log(`  - ${w.name} (${w.host}:${w.port}) [${w.id}]`);
+        const pidFile = getPidFilePath(w.id, 'server');
+        const pid = getRunningPid(pidFile);
+        const status = pid ? `running (pid: ${pid})` : 'stopped';
+        console.log(`  - ${w.name} (${w.host}:${w.port}) [${status}] [${w.id}]`);
       }
     });
 
@@ -142,7 +179,26 @@ export function registerWorkspaceCommand(program: Command): void {
         process.exit(1);
       }
 
-      if (!opts.force) {
+      // Stop the workspace if it's running as a daemon
+      const pidFile = getPidFilePath(entry.id, 'server');
+      const runningPid = getRunningPid(pidFile);
+      if (runningPid) {
+        if (!opts.force) {
+          const { default: inquirer } = await import('inquirer');
+          const { confirm } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
+            message: `Workspace '${entry.name}' is running (pid: ${runningPid}). Stop and delete it?`,
+            default: false,
+          }]);
+          if (!confirm) {
+            console.log('Cancelled.');
+            return;
+          }
+        }
+        await stopProcess(pidFile);
+        console.log('Workspace process stopped.');
+      } else if (!opts.force) {
         const { default: inquirer } = await import('inquirer');
         const { confirm } = await inquirer.prompt([{
           type: 'confirm',
@@ -165,30 +221,67 @@ export function registerWorkspaceCommand(program: Command): void {
     .description('Start a workspace by name or UUID')
     .argument('[name-or-id]', 'Workspace name or UUID')
     .option('--workspace <name-or-id>', 'Workspace name or UUID')
-    .action(async (nameOrId?: string, opts?: { workspace?: string }) => {
-      const identifier = nameOrId ?? opts?.workspace;
-      let entry: WorkspaceEntry | undefined;
+    .option('-d, --daemon', 'Run in background as a daemon process')
+    .action(async (nameOrId?: string, opts?: { workspace?: string; daemon?: boolean }) => {
+      const entry = resolveWorkspaceArg(nameOrId ?? opts?.workspace);
 
-      if (identifier) {
-        entry = getWorkspaceByIdOrName(identifier);
-        if (!entry) {
-          console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
-          process.exit(1);
-        }
+      if (opts?.daemon) {
+        startDaemon(entry);
       } else {
-        const workspaces = listWorkspaces();
-        if (workspaces.length === 0) {
-          console.error('No workspaces configured. Run \'skynet workspace new\' to create one.');
-          process.exit(1);
-        }
-        if (workspaces.length > 1) {
-          console.error('Multiple workspaces found. Use \'skynet workspace start <name-or-id>\' to specify which one.');
-          console.error('Run \'skynet workspace list\' to see available workspaces.');
-          process.exit(1);
-        }
-        entry = workspaces[0];
+        await startServer(entry);
       }
+    });
 
-      await startServer(entry!);
+  workspace
+    .command('stop')
+    .description('Stop a workspace daemon')
+    .argument('[name-or-id]', 'Workspace name or UUID')
+    .action(async (nameOrId?: string) => {
+      const entry = resolveWorkspaceArg(nameOrId);
+      const pidFile = getPidFilePath(entry.id, 'server');
+      const stopped = await stopProcess(pidFile);
+
+      if (stopped) {
+        console.log(`Workspace "${entry.name}" stopped.`);
+      } else {
+        console.log(`Workspace "${entry.name}" is not running.`);
+      }
+    });
+
+  workspace
+    .command('status')
+    .description('Show workspace daemon status')
+    .argument('[name-or-id]', 'Workspace name or UUID')
+    .action((nameOrId?: string) => {
+      const entry = resolveWorkspaceArg(nameOrId);
+      const pidFile = getPidFilePath(entry.id, 'server');
+      const pid = getRunningPid(pidFile);
+
+      if (pid) {
+        console.log(`Workspace "${entry.name}" is running (pid: ${pid}).`);
+      } else {
+        console.log(`Workspace "${entry.name}" is not running.`);
+      }
+    });
+
+  workspace
+    .command('logs')
+    .description('Tail workspace server logs')
+    .argument('[name-or-id]', 'Workspace name or UUID')
+    .option('-n, --lines <count>', 'Number of lines to show', '50')
+    .option('-f, --follow', 'Follow log output', true)
+    .action((nameOrId: string | undefined, opts: { lines: string; follow: boolean }) => {
+      const entry = resolveWorkspaceArg(nameOrId);
+      const logFile = join(getWorkspaceDir(entry.id), 'logs', 'server.log');
+
+      const args = ['-n', opts.lines];
+      if (opts.follow) args.push('-f');
+      args.push(logFile);
+
+      const tail = spawn('tail', args, { stdio: 'inherit' });
+      process.on('SIGINT', () => {
+        tail.kill();
+        process.exit(0);
+      });
     });
 }

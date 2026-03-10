@@ -1,11 +1,13 @@
 import { join, resolve } from 'node:path';
 import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import { AgentType } from '@skynet-ai/protocol';
 import type { AgentCard } from '@skynet-ai/protocol';
 import { detectAvailableAgents, createAdapter, AgentRunner } from '@skynet-ai/agent-adapter';
 import { getWorkspaceDir } from '../config.js';
 import { selectWorkspace, getServerUrl } from '../utils/workspace-select.js';
+import { spawnDaemon, getPidFilePath, getRunningPid, stopProcess } from '../daemon.js';
 
 interface AgentLocalConfig {
   workDir?: string;
@@ -79,6 +81,27 @@ async function runAgent(agentProfile: AgentCard, workspaceId: string, serverUrl:
   await new Promise(() => {});
 }
 
+function startAgentDaemon(agentProfile: AgentCard, workspaceId: string, serverUrl: string): void {
+  const pidFile = getPidFilePath(workspaceId, 'agent', agentProfile.id);
+  const existingPid = getRunningPid(pidFile);
+  if (existingPid) {
+    console.error(`Agent "${agentProfile.name}" is already running (pid: ${existingPid}).`);
+    process.exit(1);
+  }
+
+  const logFile = join(getWorkspaceDir(workspaceId), 'logs', `${agentProfile.id}.log`);
+  const pid = spawnDaemon([
+    'agent',
+    '--workspace-id', workspaceId,
+    '--agent-id', agentProfile.id,
+    '--server-url', serverUrl,
+  ], logFile);
+
+  console.log(`Agent "${agentProfile.name}" started in background (pid: ${pid}).`);
+  console.log(`Logs: ${logFile}`);
+  console.log(`Stop with: skynet agent stop ${agentProfile.name}`);
+}
+
 export function registerAgentCommand(program: Command): void {
   const agent = program
     .command('agent')
@@ -118,12 +141,18 @@ export function registerAgentCommand(program: Command): void {
     .command('start <name-or-id>')
     .description('Start an agent by name or UUID')
     .option('--workspace <name-or-id>', 'Workspace name or UUID')
-    .action(async (nameOrId: string, opts: { workspace?: string }) => {
+    .option('-d, --daemon', 'Run in background as a daemon process')
+    .action(async (nameOrId: string, opts: { workspace?: string; daemon?: boolean }) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
       const agents = await fetchAgents(url);
       const agentProfile = resolveAgent(agents, nameOrId);
-      await runAgent(agentProfile, workspace.id, url);
+
+      if (opts.daemon) {
+        startAgentDaemon(agentProfile, workspace.id, url);
+      } else {
+        await runAgent(agentProfile, workspace.id, url);
+      }
     });
 
   agent
@@ -249,6 +278,14 @@ export function registerAgentCommand(program: Command): void {
         }
         const agentProfile = await getRes.json() as AgentCard;
 
+        // Stop daemon if running
+        const pidFile = getPidFilePath(workspace.id, 'agent', agentProfile.id);
+        const runningPid = getRunningPid(pidFile);
+        if (runningPid) {
+          await stopProcess(pidFile);
+          console.log(`Agent daemon stopped (pid: ${runningPid}).`);
+        }
+
         if (!opts.force) {
           const { default: inquirer } = await import('inquirer');
           const { confirm } = await inquirer.prompt([{
@@ -360,12 +397,80 @@ export function registerAgentCommand(program: Command): void {
 
         console.log(`Agents (${agents.length}):`);
         for (const a of agents) {
+          const pidFile = getPidFilePath(workspace.id, 'agent', a.id);
+          const daemonPid = getRunningPid(pidFile);
           const icon = a.status === 'busy' ? '\u{1F7E1}' : a.status === 'error' ? '\u{1F534}' : a.status === 'idle' ? '\u{1F7E2}' : '\u26AB';
-          console.log(`  ${icon} ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id}]`);
+          const daemonInfo = daemonPid ? ` (daemon pid: ${daemonPid})` : '';
+          console.log(`  ${icon} ${a.name} (${a.type})${a.role ? ` [${a.role}]` : ''} [${a.id}]${daemonInfo}`);
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
         process.exit(1);
       }
+    });
+
+  agent
+    .command('stop <name-or-id>')
+    .description('Stop an agent daemon')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
+    .action(async (nameOrId: string, opts: { workspace?: string }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+      const agents = await fetchAgents(url);
+      const agentProfile = resolveAgent(agents, nameOrId);
+
+      const pidFile = getPidFilePath(workspace.id, 'agent', agentProfile.id);
+      const stopped = await stopProcess(pidFile);
+
+      if (stopped) {
+        console.log(`Agent "${agentProfile.name}" stopped.`);
+      } else {
+        console.log(`Agent "${agentProfile.name}" is not running as a daemon.`);
+      }
+    });
+
+  agent
+    .command('status <name-or-id>')
+    .description('Show agent daemon status')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
+    .action(async (nameOrId: string, opts: { workspace?: string }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+      const agents = await fetchAgents(url);
+      const agentProfile = resolveAgent(agents, nameOrId);
+
+      const pidFile = getPidFilePath(workspace.id, 'agent', agentProfile.id);
+      const pid = getRunningPid(pidFile);
+
+      if (pid) {
+        console.log(`Agent "${agentProfile.name}" is running as daemon (pid: ${pid}).`);
+      } else {
+        console.log(`Agent "${agentProfile.name}" is not running as a daemon.`);
+      }
+    });
+
+  agent
+    .command('logs <name-or-id>')
+    .description('Tail agent logs')
+    .option('--workspace <name-or-id>', 'Workspace name or UUID')
+    .option('-n, --lines <count>', 'Number of lines to show', '50')
+    .option('-f, --follow', 'Follow log output', true)
+    .action(async (nameOrId: string, opts: { workspace?: string; lines: string; follow: boolean }) => {
+      const workspace = selectWorkspace(opts);
+      const url = getServerUrl(workspace);
+      const agents = await fetchAgents(url);
+      const agentProfile = resolveAgent(agents, nameOrId);
+
+      const logFile = join(getWorkspaceDir(workspace.id), 'logs', `${agentProfile.id}.log`);
+
+      const args = ['-n', opts.lines];
+      if (opts.follow) args.push('-f');
+      args.push(logFile);
+
+      const tail = spawn('tail', args, { stdio: 'inherit' });
+      process.on('SIGINT', () => {
+        tail.kill();
+        process.exit(0);
+      });
     });
 }

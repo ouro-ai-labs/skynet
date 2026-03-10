@@ -42,14 +42,30 @@ Removes the workspace from the registry and deletes all its data (agents, messag
 ### Start a workspace
 
 ```bash
-# Start by name or UUID
+# Start in foreground (long-running process)
 pnpm skynet workspace start <name-or-id>
 
-# If only one workspace exists, just run:
-pnpm skynet workspace start
+# Start as a background daemon (recommended for agents)
+pnpm skynet workspace start <name-or-id> -d
 ```
 
-> Note: This is a long-running process. Run it in the background or in a separate terminal.
+### Stop a workspace daemon
+
+```bash
+pnpm skynet workspace stop <name-or-id>
+```
+
+### Check workspace daemon status
+
+```bash
+pnpm skynet workspace status <name-or-id>
+```
+
+### View workspace logs
+
+```bash
+pnpm skynet workspace logs <name-or-id>
+```
 
 ---
 
@@ -72,10 +88,32 @@ pnpm skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [-
 ### Start an agent
 
 ```bash
+# Start in foreground
 pnpm skynet agent start <agent-name-or-id> [--workspace <name-or-id>]
+
+# Start as a background daemon (recommended for agents)
+pnpm skynet agent start <agent-name-or-id> -d [--workspace <name-or-id>]
 ```
 
-Connects the agent to the workspace and starts processing messages. This is a long-running process — run it in the background or in a separate terminal. Press `Ctrl+C` to disconnect.
+Connects the agent to the workspace and starts processing messages. Use `-d` to run as a daemon. Press `Ctrl+C` to disconnect in foreground mode.
+
+### Stop an agent daemon
+
+```bash
+pnpm skynet agent stop <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+### Check agent daemon status
+
+```bash
+pnpm skynet agent status <agent-name-or-id> [--workspace <name-or-id>]
+```
+
+### View agent logs
+
+```bash
+pnpm skynet agent logs <agent-name-or-id> [--workspace <name-or-id>]
+```
 
 ### Delete an agent
 
@@ -162,12 +200,13 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 
 1. **Build**: `pnpm install && pnpm build`
 2. **Create a workspace**: `pnpm skynet workspace new --name my-project`
-3. **Start the workspace**: `pnpm skynet workspace start my-project` (keep running)
+3. **Start the workspace**: `pnpm skynet workspace start my-project -d`
 4. **Create agents**: `pnpm skynet agent new --name backend --type claude-code --role "backend engineer"`
-5. **Start the agent**: `pnpm skynet agent start backend` (keep running)
+5. **Start the agent**: `pnpm skynet agent start backend -d`
 6. **Create a human**: `pnpm skynet human new --name alice`
 7. **Human joins chat** (tell them to run): `pnpm skynet chat --name alice`
 8. **Check status**: `pnpm skynet status`
+9. **Stop when done**: `pnpm skynet agent stop backend && pnpm skynet workspace stop my-project`
 
 ---
 

@@ -42,22 +42,55 @@ skynet workspace list
 
 ### `skynet workspace start [name-or-id]`
 
-Start a workspace server. Accepts a workspace name or UUID as a positional argument, or via `--workspace <name-or-id>`.
+Start a workspace server. Accepts a workspace name or UUID as a positional argument, or via `--workspace <name-or-id>`. By default runs in the foreground; use `-d` to run as a background daemon.
 
 ```bash
-# Start by name
+# Start in foreground (default)
 skynet workspace start my-project
 
-# Start by UUID
-skynet workspace start e68fa4c2-37d6-40e0-b62b-1c572a5e4489
+# Start as a background daemon
+skynet workspace start my-project -d
 
 # Auto-select (only works when a single workspace exists)
 skynet workspace start
+skynet workspace start -d
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID (alternative to positional arg) |
+| `-d, --daemon` | Run in background as a daemon process |
+
+### `skynet workspace stop [name-or-id]`
+
+Stop a workspace daemon process.
+
+```bash
+skynet workspace stop my-project
+```
+
+### `skynet workspace status [name-or-id]`
+
+Show whether the workspace daemon is running and its PID.
+
+```bash
+skynet workspace status my-project
+```
+
+### `skynet workspace logs [name-or-id]`
+
+Tail the workspace server log file.
+
+```bash
+skynet workspace logs my-project
+skynet workspace logs my-project -n 100    # Show last 100 lines
+skynet workspace logs my-project --no-follow  # Don't follow
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-n, --lines <count>` | Number of lines to show | `50` |
+| `-f, --follow` | Follow log output | `true` |
 
 ### `skynet workspace delete <id>`
 
@@ -112,19 +145,59 @@ The command auto-detects which agent CLIs are available on your system and prese
 
 ### `skynet agent start <name-or-id>`
 
-Start an agent by name or UUID. Connects to the workspace via WebSocket and begins processing messages. This is a long-running process. Press `Ctrl+C` to disconnect.
+Start an agent by name or UUID. Connects to the workspace via WebSocket and begins processing messages. By default runs in the foreground; use `-d` to run as a background daemon. Press `Ctrl+C` to disconnect in foreground mode.
 
 ```bash
-# Start by name
+# Start in foreground (default)
 skynet agent start coder
 
-# Start by UUID
-skynet agent start a1b2c3d4-...
+# Start as a background daemon
+skynet agent start coder -d
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID |
+| `-d, --daemon` | Run in background as a daemon process |
+
+### `skynet agent stop <name-or-id>`
+
+Stop an agent daemon process.
+
+```bash
+skynet agent stop coder --workspace <name-or-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+
+### `skynet agent status <name-or-id>`
+
+Show whether the agent daemon is running and its PID.
+
+```bash
+skynet agent status coder --workspace <name-or-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+
+### `skynet agent logs <name-or-id>`
+
+Tail the agent log file.
+
+```bash
+skynet agent logs coder --workspace <name-or-id>
+skynet agent logs coder -n 100    # Show last 100 lines
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--workspace <name-or-id>` | Workspace name or UUID | |
+| `-n, --lines <count>` | Number of lines to show | `50` |
+| `-f, --follow` | Follow log output | `true` |
 
 ### `skynet agent list`
 
@@ -294,7 +367,7 @@ Output includes:
 # 1. Create a workspace
 skynet workspace new --name my-project --port 4117
 
-# 2. Start the workspace server
+# 2. Start the workspace server (foreground)
 skynet workspace start my-project
 
 # 3. Register participants (in another terminal)
@@ -309,6 +382,28 @@ skynet chat
 
 # 6. Check workspace status
 skynet status
+```
+
+### Daemon Workflow
+
+Use `-d` to run workspace and agents in the background without occupying terminals:
+
+```bash
+# 1. Create and start workspace in background
+skynet workspace new --name my-project --port 4117
+skynet workspace start my-project -d
+
+# 2. Register and start agents in background
+skynet agent new --name coder --type claude-code --role "full-stack developer"
+skynet agent start coder -d
+
+# 3. Check status / view logs
+skynet workspace status my-project
+skynet agent logs coder
+
+# 4. Stop everything when done
+skynet agent stop coder
+skynet workspace stop my-project
 ```
 
 ---
@@ -327,6 +422,12 @@ skynet status
 ├── <workspace-uuid>/
 │   ├── config.json               # Workspace connection config
 │   ├── data.db                   # SQLite message store
+│   ├── logs/
+│   │   ├── server.log            # Workspace server logs
+│   │   └── <agent-uuid>.log      # Agent logs
+│   ├── pids/
+│   │   ├── server.pid            # Workspace daemon PID
+│   │   └── agent-<agent-uuid>.pid  # Agent daemon PID
 │   └── <agent-uuid>/
 │       ├── profile.md            # Agent profile
 │       ├── agent.json            # Local config (custom workdir, etc.)
