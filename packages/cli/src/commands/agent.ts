@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { Command } from 'commander';
 import { AgentType } from '@skynet-ai/protocol';
 import type { AgentCard } from '@skynet-ai/protocol';
@@ -25,6 +25,79 @@ function loadAgentLocalConfig(agentDir: string): AgentLocalConfig {
 
 function saveAgentLocalConfig(agentDir: string, config: AgentLocalConfig): void {
   writeFileSync(join(agentDir, 'agent.json'), JSON.stringify(config, null, 2) + '\n', 'utf-8');
+}
+
+/** Maps skynet AgentType to the agent name used by `npx skills add -a`. */
+const SKILLS_AGENT_MAP: Record<string, string> = {
+  [AgentType.CLAUDE_CODE]: 'claude-code',
+  [AgentType.GEMINI_CLI]: 'gemini-cli',
+  [AgentType.CODEX_CLI]: 'codex-cli',
+  [AgentType.GENERIC]: 'claude-code', // fallback: install as claude-code layout
+};
+
+interface SkillSpec {
+  source: string;
+  skillName?: string;
+}
+
+/**
+ * Parse a skill specifier in the format `source[:skill-name]`.
+ * The source may contain colons (e.g. `https://github.com/...`), so we only
+ * split on the *last* colon that is not part of a URL scheme (`://`).
+ */
+export function parseSkillSpec(raw: string): SkillSpec {
+  // Find the last colon that is not part of `://`
+  let splitIdx = -1;
+  for (let i = raw.length - 1; i >= 0; i--) {
+    if (raw[i] === ':') {
+      // Skip `://` patterns (colon followed by //)
+      if (i + 2 < raw.length && raw[i + 1] === '/' && raw[i + 2] === '/') {
+        continue;
+      }
+      // Skip Windows drive letters like C:
+      if (i === 1 && /^[a-zA-Z]$/.test(raw[0])) {
+        continue;
+      }
+      splitIdx = i;
+      break;
+    }
+  }
+  if (splitIdx === -1) {
+    return { source: raw };
+  }
+  return {
+    source: raw.slice(0, splitIdx),
+    skillName: raw.slice(splitIdx + 1) || undefined,
+  };
+}
+
+/**
+ * Install skills into an agent's working directory via `npx skills add`.
+ * Warns on failure but does not throw — skill installation should not block agent creation.
+ */
+export async function installSkills(
+  specs: string[],
+  agentType: string,
+  workDir: string,
+): Promise<void> {
+  if (specs.length === 0) return;
+
+  const targetAgent = SKILLS_AGENT_MAP[agentType] ?? 'claude-code';
+
+  for (const raw of specs) {
+    const { source, skillName } = parseSkillSpec(raw);
+    const args = ['skills', 'add', source, '-a', targetAgent, '-y'];
+    if (skillName) {
+      args.push('-s', skillName);
+    }
+
+    console.log(`Installing skill: ${raw} ...`);
+    try {
+      execFileSync('npx', args, { cwd: workDir, stdio: 'inherit' });
+    } catch {
+      console.warn(`Warning: failed to install skill '${raw}'. Skipping.`);
+    }
+  }
 }
 
 async function fetchAgents(url: string): Promise<AgentCard[]> {
@@ -164,6 +237,7 @@ export function registerAgentCommand(program: Command): void {
     .option('--role <role>', 'Agent role')
     .option('--persona <persona>', 'Persona description')
     .option('--workdir <path>', 'Custom working directory for the agent (default: ~/.skynet/<ws>/<id>/work)')
+    .option('--skills <spec...>', 'Install skills (repeatable, format: source[:skill-name])')
     .action(async (opts) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
@@ -172,6 +246,7 @@ export function registerAgentCommand(program: Command): void {
       let type: string;
       let role: string | undefined;
       let persona: string | undefined;
+      let skills: string[] = opts.skills ?? [];
 
       if (opts.name && opts.type) {
         name = opts.name;
@@ -203,6 +278,9 @@ export function registerAgentCommand(program: Command): void {
         }
         questions.push({ type: 'input' as const, name: 'role', message: 'Role (optional):' });
         questions.push({ type: 'input' as const, name: 'persona', message: 'Persona description (optional):' });
+        if (skills.length === 0) {
+          questions.push({ type: 'input' as const, name: 'skills', message: 'Skills to install (comma-separated source[:name], or leave empty):' });
+        }
 
         const answers = await inquirer.prompt(questions);
 
@@ -210,6 +288,9 @@ export function registerAgentCommand(program: Command): void {
         type = opts.type ?? answers.type;
         role = opts.role ?? answers.role;
         persona = opts.persona ?? answers.persona;
+        if (skills.length === 0 && answers.skills) {
+          skills = (answers.skills as string).split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
       }
 
       try {
@@ -249,6 +330,9 @@ export function registerAgentCommand(program: Command): void {
             body.persona ? `- Persona: ${body.persona}` : null,
           ].filter(Boolean).join('\n') + '\n';
           writeFileSync(join(agentDir, 'profile.md'), profile, 'utf-8');
+
+          // Install skills into the agent's working directory
+          await installSkills(skills, type, effectiveWorkDir);
         } else {
           const body = await res.json() as { error?: string };
           console.error(`Failed to create agent: ${body.error ?? res.statusText}`);
