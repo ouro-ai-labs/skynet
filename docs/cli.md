@@ -140,8 +140,11 @@ skynet agent new --workspace <name-or-id> --name coder --type claude-code --role
 | `--role <role>` | Agent role description (optional) |
 | `--persona <persona>` | Persona description (optional) |
 | `--workdir <path>` | Custom working directory (default: `~/.skynet/<ws>/<id>/work`) |
+| `--skills <spec...>` | Install skills via `npx skills add` (repeatable, format: `source[:skill-name]`) |
 
 The command auto-detects which agent CLIs are available on your system and presents them as choices in interactive mode.
+
+Skills are installed into the agent's working directory after creation. The skill source can be a GitHub repo, local path, or any source supported by `npx skills add`. Append `:skill-name` to select a specific skill from a multi-skill source. In interactive mode, you can enter comma-separated skill specs when prompted.
 
 ### `skynet agent start <name-or-id>`
 

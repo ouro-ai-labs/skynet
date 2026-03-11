@@ -70,7 +70,7 @@ All agent commands require a running workspace. Use `--workspace <name-or-id>` i
 ### Create an agent
 
 ```bash
-npx @skynet-ai/cli@latest agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workdir <path>] [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workdir <path>] [--skills <spec...>] [--workspace <name-or-id>]
 ```
 
 - `--name` (required): Agent display name
@@ -78,6 +78,15 @@ npx @skynet-ai/cli@latest agent new --name <agent-name> --type <agent-type> [--r
 - `--role` (optional): Agent's role description (e.g., "backend engineer")
 - `--persona` (optional): Persona description for the agent's behavior
 - `--workdir` (optional): Custom working directory (default: `~/.skynet/<ws>/<id>/work`)
+- `--skills` (optional, repeatable): Install skills into the agent's working directory via `npx skills add`. Format: `source[:skill-name]`. Can be specified multiple times (e.g., `--skills github.com/org/repo --skills ./local-skill:my-skill`)
+
+**Finding skills**: If the user wants to create an agent with a particular skill but does not provide a specific skill source/path, search for it first:
+
+```bash
+npx skills find <query>
+```
+
+Review the search results with the user and confirm which skill to use before passing it to `--skills`.
 
 ### Start an agent (daemon)
 
