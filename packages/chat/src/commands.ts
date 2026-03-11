@@ -42,19 +42,18 @@ async function handleAgentCommand(serverUrl: string, sub: string | undefined, ar
   }
 
   if (sub === 'interrupt' || sub === 'forget') {
-    if (!arg) {
-      return { lines: [`Usage: /agent ${sub} <name>`], error: true };
+    if (!arg || !arg.startsWith('@')) {
+      return { lines: [`Usage: /agent ${sub} @<name>`], error: true };
     }
     return sendAgentControl(serverUrl, sub, arg);
   }
 
-  return { lines: ['Usage: /agent list | /agent interrupt <name> | /agent forget <name>'], error: true };
+  return { lines: ['Usage: /agent list | /agent interrupt @<name> | /agent forget @<name>'], error: true };
 }
 
 async function sendAgentControl(serverUrl: string, action: 'interrupt' | 'forget', nameOrId: string): Promise<CommandResult> {
   try {
-    // Strip leading '@' so both "name" and "@name" work
-    const resolved = nameOrId.startsWith('@') ? nameOrId.slice(1) : nameOrId;
+    const resolved = nameOrId.slice(1); // strip leading '@'
 
     const listRes = await fetch(`${serverUrl}/api/agents`);
     const agents = await listRes.json() as Array<{ id: string; name: string }>;
