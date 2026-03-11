@@ -145,6 +145,11 @@ class FakeAdapter extends AgentAdapter {
 
 // ── Helper to access internal client ──
 
+interface MemberInfo {
+  name: string;
+  type: AgentType;
+}
+
 interface MockClient {
   agent: AgentCard;
   emit(event: string, ...args: unknown[]): boolean;
@@ -1343,5 +1348,65 @@ describe('AgentRunner agent-join race condition', () => {
     expect(client.chatCalls.length).toBeGreaterThan(0);
     const lastCall = client.chatCalls[client.chatCalls.length - 1];
     expect(lastCall.mentions).toContain('late-agent-id');
+  });
+});
+
+describe('AgentRunner prompt logging', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `skynet-test-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(testDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('logs prompt text to prompt.log when statePath is set', async () => {
+    const statePath = join(testDir, 'state.json');
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      statePath,
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    // Verify the onPrompt callback was wired up
+    expect(adapter.onPrompt).toBeDefined();
+
+    // Simulate the adapter calling onPrompt (as real adapters do)
+    adapter.onPrompt!('hello world', { type: 'message' });
+    await new Promise(r => setTimeout(r, 100));
+
+    await runner.stop();
+
+    const promptLogPath = join(testDir, 'prompt.log');
+    expect(existsSync(promptLogPath)).toBe(true);
+    const content = readFileSync(promptLogPath, 'utf-8');
+    expect(content).toContain('type=message');
+    expect(content).toContain('hello world');
+  });
+
+  it('does not create prompt.log when statePath is not set', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    const msg = makeChatMsg({ from: 'user-a', text: 'test', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 50));
+
+    await runner.stop();
+
+    const promptLogPath = join(testDir, 'prompt.log');
+    expect(existsSync(promptLogPath)).toBe(false);
   });
 });

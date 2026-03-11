@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
+import { dirname, join } from 'node:path';
+import type { WriteStream } from 'node:fs';
 import { Logger } from '@skynet-ai/logger';
 import {
   type AgentCard,
@@ -64,6 +65,7 @@ export class AgentRunner {
   private client: SkynetClient;
   private adapter: AgentAdapter;
   private logger: Logger;
+  private promptLogStream: WriteStream | null = null;
   private processing = false;
   private forkInProgress = false;
   private messageQueue: QueuedMessage[] = [];
@@ -116,6 +118,25 @@ export class AgentRunner {
     if (options.persona) parts.push(options.persona);
     parts.push(buildSkynetIntro(agentCard.name));
     this.adapter.persona = parts.join('\n\n');
+
+    // Set up prompt logging to ~/.skynet/<workspace-id>/<agent-id>/prompt.log
+    if (options.statePath) {
+      const promptLogPath = join(dirname(options.statePath), 'prompt.log');
+      const logDir = dirname(promptLogPath);
+      if (!existsSync(logDir)) {
+        mkdirSync(logDir, { recursive: true });
+      }
+      this.promptLogStream = createWriteStream(promptLogPath, { flags: 'a' });
+      // Prevent uncaught exceptions from stream errors (e.g. directory removed)
+      this.promptLogStream.on('error', () => {});
+      this.adapter.onPrompt = (prompt, context) => {
+        const timestamp = new Date().toISOString();
+        const separator = '─'.repeat(60);
+        this.promptLogStream?.write(
+          `${separator}\n[${timestamp}] type=${context.type}\n${separator}\n${prompt}\n\n`,
+        );
+      };
+    }
   }
 
   async start(): Promise<WorkspaceState> {
@@ -178,6 +199,10 @@ export class AgentRunner {
     await this.adapter.dispose();
     await this.client.close();
     this.logger.close();
+    if (this.promptLogStream) {
+      this.promptLogStream.end();
+      this.promptLogStream = null;
+    }
   }
 
   get agentId(): string {

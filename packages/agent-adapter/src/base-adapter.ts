@@ -18,6 +18,9 @@ export abstract class AgentAdapter {
   abstract readonly name: string;
   persona?: string;
 
+  /** Optional callback invoked with the exact prompt text before sending to the CLI. */
+  onPrompt?: (prompt: string, context: { type: 'message' | 'task' | 'quick-reply' }) => void;
+
   /** Check if the underlying CLI tool is installed and available */
   abstract isAvailable(): Promise<boolean>;
 
