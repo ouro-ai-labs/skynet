@@ -62,7 +62,6 @@ export const SLASH_COMMANDS: CommandDef[] = [
   { name: '/help', description: 'Toggle help' },
   { name: '/members', description: 'Show members' },
   { name: '/quit', description: 'Leave and exit' },
-  { name: '/clear', description: 'Clear screen' },
   { name: '/agent list', description: 'List agents' },
   { name: '/agent interrupt', description: 'Interrupt agent' },
   { name: '/agent forget', description: 'Reset agent session' },

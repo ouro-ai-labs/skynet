@@ -77,10 +77,6 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    if (cmd === '/clear' || cmd === '/c') {
-      return;
-    }
-
     // Management commands: /agent, /human
     if (cmd.startsWith('/agent') || cmd.startsWith('/human')) {
       executeCommand(options.serverUrl, text.trim()).then((result) => {

@@ -49,15 +49,16 @@ describe('executeCommand', () => {
     expect(result?.lines[1]).toContain('charlie');
   });
 
-  it('/agent interrupt accepts bare name', async () => {
-    globalThis.fetch = mockFetch([
-      { ok: true, body: mockAgents },
-      { ok: true, body: {} },
-    ]) as unknown as typeof fetch;
+  it('/agent interrupt rejects bare name without @', async () => {
     const result = await executeCommand('http://localhost', '/agent interrupt alice');
-    expect(result?.error).toBeUndefined();
-    expect(result?.lines[0]).toContain('Interrupted');
-    expect(result?.lines[0]).toContain('alice');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('Usage');
+  });
+
+  it('/agent forget rejects bare name without @', async () => {
+    const result = await executeCommand('http://localhost', '/agent forget bob');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('Usage');
   });
 
   it('/agent interrupt accepts @name', async () => {
@@ -95,5 +96,43 @@ describe('executeCommand', () => {
     const result = await executeCommand('http://localhost', '/agent interrupt');
     expect(result?.error).toBe(true);
     expect(result?.lines[0]).toContain('Usage');
+  });
+
+  it('/agent interrupt @all interrupts all agents', async () => {
+    globalThis.fetch = mockFetch([
+      { ok: true, body: mockAgents },
+      { ok: true, body: {} },
+      { ok: true, body: {} },
+    ]) as unknown as typeof fetch;
+    const result = await executeCommand('http://localhost', '/agent interrupt @all');
+    expect(result?.error).toBeUndefined();
+    expect(result?.lines).toHaveLength(2);
+    expect(result?.lines[0]).toContain('Interrupted');
+    expect(result?.lines[0]).toContain('alice');
+    expect(result?.lines[1]).toContain('Interrupted');
+    expect(result?.lines[1]).toContain('bob');
+  });
+
+  it('/agent forget @all clears all agents', async () => {
+    globalThis.fetch = mockFetch([
+      { ok: true, body: mockAgents },
+      { ok: true, body: {} },
+      { ok: true, body: {} },
+    ]) as unknown as typeof fetch;
+    const result = await executeCommand('http://localhost', '/agent forget @all');
+    expect(result?.error).toBeUndefined();
+    expect(result?.lines).toHaveLength(2);
+    expect(result?.lines[0]).toContain('Session cleared');
+    expect(result?.lines[0]).toContain('alice');
+    expect(result?.lines[1]).toContain('Session cleared');
+    expect(result?.lines[1]).toContain('bob');
+  });
+
+  it('/agent interrupt @all with no agents returns message', async () => {
+    globalThis.fetch = mockFetch([
+      { ok: true, body: [] },
+    ]) as unknown as typeof fetch;
+    const result = await executeCommand('http://localhost', '/agent interrupt @all');
+    expect(result?.lines[0]).toBe('No agents.');
   });
 });

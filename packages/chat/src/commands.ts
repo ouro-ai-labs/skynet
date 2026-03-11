@@ -42,22 +42,44 @@ async function handleAgentCommand(serverUrl: string, sub: string | undefined, ar
   }
 
   if (sub === 'interrupt' || sub === 'forget') {
-    if (!arg) {
-      return { lines: [`Usage: /agent ${sub} <name>`], error: true };
+    if (!arg || !arg.startsWith('@')) {
+      return { lines: [`Usage: /agent ${sub} @<name>`], error: true };
     }
     return sendAgentControl(serverUrl, sub, arg);
   }
 
-  return { lines: ['Usage: /agent list | /agent interrupt <name> | /agent forget <name>'], error: true };
+  return { lines: ['Usage: /agent list | /agent interrupt @<name> | /agent forget @<name>'], error: true };
 }
 
 async function sendAgentControl(serverUrl: string, action: 'interrupt' | 'forget', nameOrId: string): Promise<CommandResult> {
   try {
-    // Strip leading '@' so both "name" and "@name" work
-    const resolved = nameOrId.startsWith('@') ? nameOrId.slice(1) : nameOrId;
-    // Resolve agent name to ID
+    const resolved = nameOrId.slice(1); // strip leading '@'
+
     const listRes = await fetch(`${serverUrl}/api/agents`);
     const agents = await listRes.json() as Array<{ id: string; name: string }>;
+
+    // Handle @all: apply action to every agent
+    if (resolved === 'all') {
+      if (agents.length === 0) return { lines: ['No agents.'] };
+      const results: string[] = [];
+      const label = action === 'interrupt' ? 'Interrupted' : 'Session cleared for';
+      for (const agent of agents) {
+        const res = await fetch(`${serverUrl}/api/agents/${agent.id}/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (res.ok) {
+          results.push(`${label} agent '${agent.name}'.`);
+        } else {
+          const body = await res.json() as { error?: string };
+          results.push(body.error ?? `Failed to ${action} agent '${agent.name}'.`);
+        }
+      }
+      return { lines: results };
+    }
+
+    // Resolve agent name to ID
     const agent = agents.find((a) => a.name === resolved || a.id === resolved || a.id.startsWith(resolved));
     if (!agent) {
       return { lines: [`Agent '${nameOrId}' not found.`], error: true };
