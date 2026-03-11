@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Client SDK for connecting to Skynet multi-agent collaboration network",
   "type": "module",
   "main": "dist/index.js",
