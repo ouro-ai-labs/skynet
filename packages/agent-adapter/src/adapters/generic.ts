@@ -49,11 +49,13 @@ export class GenericAdapter extends AgentAdapter {
 
   async handleMessage(msg: SkynetMessage, _senderName?: string): Promise<string> {
     const prompt = this.messageToPrompt(msg);
+    this.onPrompt?.(prompt, { type: 'message' });
     return this.run(prompt);
   }
 
   async executeTask(task: TaskPayload): Promise<TaskResult> {
     const prompt = `Task: ${task.title}\n\nDescription: ${task.description}`;
+    this.onPrompt?.(prompt, { type: 'task' });
     try {
       const output = await this.run(prompt);
       return { success: true, summary: output };

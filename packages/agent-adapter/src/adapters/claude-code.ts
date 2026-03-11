@@ -64,6 +64,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
   async handleMessage(msg: SkynetMessage, senderName?: string): Promise<string> {
     const prompt = this.messageToPrompt(msg, senderName);
+    this.onPrompt?.(prompt, { type: 'message' });
     const images = await this.extractImagePaths(msg);
     try {
       return await this.runClaude(prompt, images);
@@ -79,6 +80,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     const prompt = `Task: ${task.title}\n\nDescription: ${task.description}${
       task.files?.length ? `\n\nRelevant files: ${task.files.join(', ')}` : ''
     }`;
+    this.onPrompt?.(prompt, { type: 'task' });
 
     try {
       const output = await this.runClaude(prompt);
@@ -100,6 +102,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
   }
 
   override async quickReply(prompt: string): Promise<string> {
+    this.onPrompt?.(prompt, { type: 'quick-reply' });
     const args = [
       '-p', prompt,
       '--output-format', 'text',
