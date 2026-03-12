@@ -52,8 +52,16 @@ export interface AgentRunnerOptions {
 /** Max number of message IDs to track for deduplication. */
 const DEDUP_MAX_SIZE = 500;
 
-/** Sentinel value returned by agents when they choose not to reply. */
-export const NO_REPLY = 'NO_REPLY';
+/** Pattern matching the `<no-reply />` XML tag. */
+const NO_REPLY_PATTERN = /<no-reply\s*\/>/;
+
+/**
+ * Check whether the agent's response signals "no reply".
+ * If the `<no-reply />` tag appears anywhere in the response, the entire message is suppressed.
+ */
+export function isNoReply(response: string): boolean {
+  return NO_REPLY_PATTERN.test(response);
+}
 
 /** A message in the queue with its arrival timestamp. */
 interface QueuedMessage {
@@ -347,7 +355,7 @@ export class AgentRunner {
         ? `${notices}\n\nMessage from ${senderName}: ${text}`
         : `Message from ${senderName}: ${text}`;
       const response = await this.adapter.quickReply(prompt);
-      if (response && response.trim() !== NO_REPLY) {
+      if (response && !isNoReply(response)) {
         const mentions = this.resolveMentions(response);
         // Always include the original sender in mentions
         if (!mentions.includes(msg.from)) mentions.push(msg.from);
@@ -444,7 +452,7 @@ export class AgentRunner {
             ? { ...msg, payload: { ...(msg.payload as ChatPayload), text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } }
             : msg;
           const response = await this.adapter.handleMessage(msgToSend, senderName);
-          if (response && response.trim() !== NO_REPLY) {
+          if (response && !isNoReply(response)) {
             const mentions = this.resolveMentions(response);
             if (!mentions.includes(msg.from)) mentions.push(msg.from);
             this.client.chat(response, mentions);
@@ -505,7 +513,7 @@ export class AgentRunner {
     const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;
     const response = await this.adapter.handleMessage(batchMsg, senderName);
 
-    if (response && response.trim() !== NO_REPLY) {
+    if (response && !isNoReply(response)) {
       const mentions = this.resolveMentions(response);
       // Include all senders in mentions
       for (const m of messages) {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { MessageType, MENTION_ALL } from '@skynet-ai/protocol';
 import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet-ai/protocol';
-import { AgentRunner } from '../agent-runner.js';
+import { AgentRunner, isNoReply } from '../agent-runner.js';
 import { AgentAdapter, type TaskResult, type SessionState } from '../base-adapter.js';
 import { AgentType } from '@skynet-ai/protocol';
 import { buildSkynetIntro } from '../skynet-intro.js';
@@ -187,7 +187,7 @@ describe('buildSkynetIntro', () => {
   it('includes messaging rules', () => {
     const intro = buildSkynetIntro('alice');
     expect(intro).toContain('Messaging Rules');
-    expect(intro).toContain('NO_REPLY');
+    expect(intro).toContain('<no-reply />');
   });
 });
 
@@ -1408,5 +1408,35 @@ describe('AgentRunner prompt logging', () => {
 
     const promptLogPath = join(testDir, 'prompt.log');
     expect(existsSync(promptLogPath)).toBe(false);
+  });
+});
+
+describe('isNoReply', () => {
+  // XML tag: <no-reply />
+  it('detects exact <no-reply /> tag', () => {
+    expect(isNoReply('<no-reply />')).toBe(true);
+  });
+
+  it('detects <no-reply /> with surrounding whitespace', () => {
+    expect(isNoReply('  <no-reply />  ')).toBe(true);
+    expect(isNoReply('\n<no-reply />\n')).toBe(true);
+  });
+
+  it('detects <no-reply /> embedded in other text (suppresses entire message)', () => {
+    expect(isNoReply('I have nothing to add.\n\n<no-reply />')).toBe(true);
+  });
+
+  it('detects <no-reply/> without space before slash', () => {
+    expect(isNoReply('<no-reply/>')).toBe(true);
+  });
+
+  // Negative cases
+  it('does not match plain text NO_REPLY', () => {
+    expect(isNoReply('NO_REPLY')).toBe(false);
+  });
+
+  it('does not match normal messages', () => {
+    expect(isNoReply('Hello world')).toBe(false);
+    expect(isNoReply('@pm Here is my update.')).toBe(false);
   });
 });
