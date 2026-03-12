@@ -330,8 +330,18 @@ export class AgentRunner {
   private async handleForkedReply(msg: SkynetMessage): Promise<void> {
     this.forkInProgress = true;
     const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
-    const text = (msg.payload as ChatPayload).text;
+    const payload = msg.payload as ChatPayload;
+    const text = payload.text;
     const notices = this.flushNotices();
+
+    // Quick reply is text-only; if the message has image attachments,
+    // fall back to the normal queue so handleMessage can pass them to the CLI.
+    if (payload.attachments?.some((a) => a.type === 'image')) {
+      this.forkInProgress = false;
+      this.messageQueue.push({ msg, arrivedAt: Date.now() });
+      return;
+    }
+
     try {
       const prompt = notices
         ? `${notices}\n\nMessage from ${senderName}: ${text}`
@@ -431,7 +441,7 @@ export class AgentRunner {
           const msg = chatBatch[0];
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
           const msgToSend = notices
-            ? { ...msg, payload: { text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } as ChatPayload }
+            ? { ...msg, payload: { ...(msg.payload as ChatPayload), text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } }
             : msg;
           const response = await this.adapter.handleMessage(msgToSend, senderName);
           if (response && response.trim() !== NO_REPLY) {
@@ -477,14 +487,19 @@ export class AgentRunner {
       return `[${senderName}]: ${text}`;
     });
 
+    // Collect all attachments from the batch
+    const allAttachments = messages.flatMap((msg) => (msg.payload as ChatPayload).attachments ?? []);
+
     const prefix = notices ? `${notices}\n\n` : '';
 
     // Create a synthetic message for the adapter
+    const batchPayload: ChatPayload = {
+      text: `${prefix}You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
+      ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
+    };
     const batchMsg: SkynetMessage = {
       ...messages[0],
-      payload: {
-        text: `${prefix}You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
-      },
+      payload: batchPayload,
     };
 
     const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;

@@ -7,6 +7,9 @@ import {
   getMentionContext,
   getCommandContext,
   SLASH_COMMANDS,
+  processPaste,
+  composePasteMessage,
+  type PastedBlock,
 } from '../inputState.js';
 import { readClipboardImage, formatSize } from '../clipboard.js';
 import { useBracketedPaste } from '../hooks/useBracketedPaste.js';
@@ -20,18 +23,24 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
   const [state, dispatch] = useReducer(inputReducer, initialInputState);
   const historyRef = useRef<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pastedBlocks, setPastedBlocks] = useState<PastedBlock[]>([]);
   const [pasteStatus, setPasteStatus] = useState<string | null>(null);
   const pastingRef = useRef(false);
 
-  const { pastedText, clearPaste } = useBracketedPaste();
+  const { pastedText, clearPaste, pasteActiveRef } = useBracketedPaste();
   const { value, cursorPos, mentionFilter, mentionStart, mentionSelectedIndex, commandFilter, commandSelectedIndex } = state;
 
-  // Handle bracketed paste: insert pasted text at cursor position
+  // Handle bracketed paste: collapse multi-line pastes, inline short ones
   useEffect(() => {
     if (!pastedText) return;
-    const newValue = value.slice(0, cursorPos) + pastedText + value.slice(cursorPos);
-    const newCursor = cursorPos + pastedText.length;
-    dispatch({ type: 'SET_VALUE', value: newValue, cursorPos: newCursor });
+    const result = processPaste(pastedText);
+    if (result.type === 'collapse') {
+      setPastedBlocks((prev) => [...prev, result.block]);
+    } else {
+      const newValue = value.slice(0, cursorPos) + result.text + value.slice(cursorPos);
+      const newCursor = cursorPos + result.text.length;
+      dispatch({ type: 'SET_VALUE', value: newValue, cursorPos: newCursor });
+    }
     clearPaste();
   }, [pastedText]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -121,6 +130,11 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
   }, []);
 
   useInput((input, key) => {
+    // Suppress all input while a bracketed paste is being processed.
+    // Without this, Ink's useInput would also handle the pasted characters
+    // (inserting them into value and treating newlines as Enter/submit).
+    if (pasteActiveRef.current) return;
+
     // Ctrl+V: paste image from clipboard
     if (key.ctrl && input === 'v') {
       handlePaste();
@@ -128,9 +142,13 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     }
 
     if (key.escape) {
-      // Remove last attachment if any, otherwise dismiss autocomplete
+      // Remove last attachment/pasted block if any, otherwise dismiss autocomplete
       if (attachments.length > 0) {
         setAttachments((prev) => prev.slice(0, -1));
+        return;
+      }
+      if (pastedBlocks.length > 0) {
+        setPastedBlocks((prev) => prev.slice(0, -1));
         return;
       }
       if (mentionFilter !== null) {
@@ -161,12 +179,15 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
         acceptCommand();
         return;
       }
-      if (value.trim() || attachments.length > 0) {
+      const hasContent = value.trim() || pastedBlocks.length > 0 || attachments.length > 0;
+      if (hasContent) {
+        const fullText = composePasteMessage(pastedBlocks, value);
         historyRef.current.push(value);
-        onSubmit(value, attachments);
+        onSubmit(fullText, attachments);
       }
       dispatch({ type: 'RESET' });
       setAttachments([]);
+      setPastedBlocks([]);
       return;
     }
 
@@ -229,6 +250,9 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
       } else if (value.length === 0 && attachments.length > 0) {
         // Backspace on empty input removes last attachment
         setAttachments((prev) => prev.slice(0, -1));
+      } else if (value.length === 0 && pastedBlocks.length > 0) {
+        // Backspace on empty input removes last pasted block
+        setPastedBlocks((prev) => prev.slice(0, -1));
       }
       return;
     }
@@ -256,6 +280,7 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     if (key.ctrl && input === 'u') {
       dispatch({ type: 'RESET' });
       setAttachments([]);
+      setPastedBlocks([]);
       return;
     }
 
@@ -319,6 +344,17 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
             </Text>
           ))}
           <Text dimColor>Tab/Enter to select, Esc to dismiss</Text>
+        </Box>
+      )}
+      {/* Pasted text indicators */}
+      {pastedBlocks.length > 0 && (
+        <Box paddingX={1} gap={1}>
+          {pastedBlocks.map((block, i) => (
+            <Text key={i} color="green">
+              [Pasted text: {block.lineCount} lines]
+            </Text>
+          ))}
+          <Text dimColor>Esc to remove</Text>
         </Box>
       )}
       {/* Attachment indicators */}

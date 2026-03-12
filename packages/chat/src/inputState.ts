@@ -90,6 +90,40 @@ export function getCommandContext(value: string, cursorPos: number): { filter: s
   return { filter };
 }
 
+/** Minimum number of lines in a paste to collapse it into a summary indicator. */
+export const PASTE_COLLAPSE_LINE_THRESHOLD = 3;
+
+export interface PastedBlock {
+  text: string;
+  lineCount: number;
+}
+
+/**
+ * Decide how to handle pasted text: collapse multi-line pastes into a block,
+ * or flatten short pastes for inline insertion.
+ */
+export function processPaste(raw: string): { type: 'collapse'; block: PastedBlock } | { type: 'inline'; text: string } {
+  const lines = raw.split(/\r\n|\r|\n/);
+  if (lines.length >= PASTE_COLLAPSE_LINE_THRESHOLD) {
+    return { type: 'collapse', block: { text: raw, lineCount: lines.length } };
+  }
+  return { type: 'inline', text: raw.replace(/[\r\n]+/g, ' ') };
+}
+
+/**
+ * Compose the final message text from pasted blocks and typed input.
+ */
+export function composePasteMessage(pastedBlocks: PastedBlock[], typedValue: string): string {
+  const parts: string[] = [];
+  for (const block of pastedBlocks) {
+    parts.push(block.text);
+  }
+  if (typedValue.trim()) {
+    parts.push(typedValue);
+  }
+  return parts.join('\n\n');
+}
+
 export function getMentionContext(value: string, cursorPos: number): { filter: string; start: number } | null {
   const before = value.slice(0, cursorPos);
   const match = before.match(/@(\S*)$/);
