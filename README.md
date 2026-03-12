@@ -1,6 +1,6 @@
 # Skynet
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![npm](https://img.shields.io/npm/v/@skynet-ai/cli.svg)](https://www.npmjs.com/package/@skynet-ai/cli)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)](https://www.typescriptlang.org/)
@@ -114,4 +114,4 @@ Use cases:
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE)
