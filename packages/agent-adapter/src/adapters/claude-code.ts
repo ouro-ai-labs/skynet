@@ -196,11 +196,15 @@ export class ClaudeCodeAdapter extends AgentAdapter {
   }
 
   private async runClaude(prompt: string, images: string[] = []): Promise<string> {
-    const args = ['-p', prompt, '--output-format', 'text', '--dangerously-skip-permissions'];
-
-    for (const imgPath of images) {
-      args.push('--image', imgPath);
+    // Append image file paths to the prompt so Claude can read them with its
+    // built-in Read tool (which supports images). There is no --image CLI flag.
+    let fullPrompt = prompt;
+    if (images.length > 0) {
+      const imageRefs = images.map((p) => `Image: ${p}`).join('\n');
+      fullPrompt = `${prompt}\n\n${imageRefs}\n\nPlease read the image file(s) above to view them.`;
     }
+
+    const args = ['-p', fullPrompt, '--output-format', 'text', '--dangerously-skip-permissions'];
 
     if (this.allowedTools?.length) {
       args.push('--allowedTools', this.allowedTools.join(','));
