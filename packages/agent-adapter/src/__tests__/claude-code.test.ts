@@ -152,7 +152,7 @@ describe('ClaudeCodeAdapter handleMessage', () => {
     expect(execa).toHaveBeenCalledWith(
       'claude',
       expect.arrayContaining(['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'text']),
-      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 1_200_000 }),
+      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 0 }),
     );
     expect(result).toBe('mock response');
   });

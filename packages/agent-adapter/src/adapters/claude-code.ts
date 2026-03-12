@@ -231,7 +231,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       cwd: this.projectRoot,
       stdin: 'ignore',
       env: spawnEnv(),
-      timeout: 1_200_000, // 20 min timeout
+      timeout: 0, // no timeout — let the agent run until done
     });
     this.runningProcess = proc;
     try {
