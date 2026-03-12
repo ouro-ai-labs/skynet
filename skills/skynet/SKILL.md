@@ -80,6 +80,14 @@ npx @skynet-ai/cli@latest agent new --name <agent-name> --type <agent-type> [--r
 - `--workdir` (optional): Custom working directory (default: `~/.skynet/<ws>/<id>/work`)
 - `--skills` (optional, repeatable): Install skills into the agent's working directory via `npx skills add`. Format: `source[:skill-name]`. Can be specified multiple times (e.g., `--skills github.com/org/repo --skills ./local-skill:my-skill`)
 
+**Working directory prompt**: If the user does not explicitly specify `--workdir`, you **must** ask the user before running the command:
+
+> The agent's working directory determines where it reads/writes files. Would you like to:
+> 1. Specify a custom working directory (e.g., a project repo path)
+> 2. Use the default (`~/.skynet/<ws>/<id>/work`)
+
+If the user chooses a custom path, pass it via `--workdir <path>`. If they choose the default, omit `--workdir`.
+
 **Finding skills**: If the user wants to create an agent with a particular skill but does not provide a specific skill source/path, search for it first:
 
 ```bash
