@@ -431,6 +431,79 @@ describe('ClaudeCodeAdapter session state persistence', () => {
   });
 });
 
+describe('ClaudeCodeAdapter image attachments', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function makeMsgWithImage(text = 'check this image') {
+    return {
+      id: 'msg-img-1',
+      type: MessageType.CHAT as const,
+      from: 'human-123',
+      timestamp: Date.now(),
+      payload: {
+        text,
+        attachments: [{
+          type: 'image' as const,
+          mimeType: 'image/png',
+          name: 'screenshot.png',
+          data: 'iVBORw0KGgo=', // minimal base64
+          size: 10,
+        }],
+      },
+    };
+  }
+
+  it('embeds image file paths in prompt instead of using --image flag', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsgWithImage());
+
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    // Must NOT use the non-existent --image flag
+    expect(args).not.toContain('--image');
+    // The prompt should contain image file path reference
+    const promptIdx = args.indexOf('-p');
+    const prompt = args[promptIdx + 1];
+    expect(prompt).toContain('Image: ');
+    expect(prompt).toContain('skynet-img-');
+    expect(prompt).toContain('Please read the image file');
+  });
+
+  it('includes original message text along with image reference', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsgWithImage('describe this'));
+
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    const prompt = args[args.indexOf('-p') + 1];
+    expect(prompt).toContain('Message from human-123: describe this');
+    expect(prompt).toContain('Image: ');
+  });
+
+  it('does not modify prompt when message has no attachments', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsg({ text: 'no images here' }));
+
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    const prompt = args[args.indexOf('-p') + 1];
+    expect(prompt).toBe('Message from human-123: no images here');
+    expect(prompt).not.toContain('Image: ');
+  });
+});
+
 describe('ClaudeCodeAdapter resetSession', () => {
   let tempDir: string;
 
