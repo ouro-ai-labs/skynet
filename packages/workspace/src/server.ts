@@ -17,6 +17,7 @@ import {
   MessageType,
   ClientAction,
   MENTION_ALL,
+  WS_CLOSE_REPLACED,
   createMessage,
   deserialize,
   serialize,
@@ -344,7 +345,7 @@ export class SkynetWorkspace {
       // Remove old socket from map so its close handler finds no agentId and exits early
       this.socketAgentMap.delete(existingMember.socket);
       if (existingMember.socket.readyState === existingMember.socket.OPEN) {
-        existingMember.socket.close();
+        existingMember.socket.close(WS_CLOSE_REPLACED, 'replaced');
       }
     }
     this.logger.info(`Agent joined: ${req.agent.name} (${agentId})${isReconnect ? ' [reconnect]' : ''}`);

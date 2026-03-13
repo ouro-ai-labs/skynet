@@ -151,6 +151,11 @@ export interface FileChangePayload {
 /** Special mention ID that targets all workspace members. */
 export const MENTION_ALL = '__all__';
 
+// ── WebSocket Close Codes ──
+
+/** Close code sent when a connection is replaced by another with the same agent ID. */
+export const WS_CLOSE_REPLACED = 4001;
+
 // ── Client-Server Wire Protocol ──
 
 export enum ClientAction {

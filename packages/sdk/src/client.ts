@@ -7,6 +7,7 @@ import {
   type JoinRequest,
   type ServerEvent,
   ClientAction,
+  WS_CLOSE_REPLACED,
   deserialize,
   MessageType,
   createMessage,
@@ -167,7 +168,7 @@ export class SkynetClient extends EventEmitter {
         }
       });
 
-      this.ws.on('close', () => {
+      this.ws.on('close', (code: number) => {
         this._connected = false;
         this.stopHeartbeat();
 
@@ -175,6 +176,13 @@ export class SkynetClient extends EventEmitter {
         if (!resolved) {
           resolved = true;
           reject(new Error('Connection closed before workspace state was received'));
+        }
+
+        // Connection was replaced by another client with the same agent ID — do not reconnect.
+        if (code === WS_CLOSE_REPLACED) {
+          this._closed = true;
+          this.emit('replaced');
+          return;
         }
 
         if (this._reconnecting) {

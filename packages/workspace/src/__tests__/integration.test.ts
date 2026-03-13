@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet-ai/sdk';
-import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet-ai/protocol';
+import { AgentType, MENTION_ALL, WS_CLOSE_REPLACED, type SkynetMessage } from '@skynet-ai/protocol';
 import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);
@@ -386,6 +386,44 @@ describe('Server integration', () => {
 
     await alice.close();
     if (lastBob) await lastBob.close();
+  });
+
+  it('sends WS_CLOSE_REPLACED (4001) when a duplicate connection replaces an existing one', async () => {
+    // Register bob via HTTP API
+    const bobRes = await fetch(`http://localhost:${PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'bob-replaced' }),
+    });
+    const bobEntity = await bobRes.json() as { id: string };
+
+    // First connection
+    const bob1 = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: { id: bobEntity.id, name: 'bob-replaced', type: AgentType.HUMAN, status: 'idle' },
+      reconnect: false,
+    });
+    await bob1.connect();
+
+    // Capture close code on the first connection's underlying WebSocket
+    const closeCode = new Promise<number>((resolve) => {
+      const ws = (bob1 as unknown as { ws: { on: (event: string, cb: (code: number) => void) => void } }).ws;
+      ws.on('close', (code: number) => resolve(code));
+    });
+
+    // Second connection with the same agent ID — should replace the first
+    const bob2 = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: { id: bobEntity.id, name: 'bob-replaced', type: AgentType.HUMAN, status: 'idle' },
+      reconnect: false,
+    });
+    await bob2.connect();
+
+    // First connection should have received close code 4001
+    const code = await closeCode;
+    expect(code).toBe(WS_CLOSE_REPLACED);
+
+    await bob2.close();
   });
 
   it('workspace.state respects lastSeenTimestamp from client', async () => {
