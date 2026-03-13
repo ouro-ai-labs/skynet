@@ -110,6 +110,9 @@ export function getNextAvailablePort(startPort: number): number {
   let port = startPort;
   while (usedPorts.has(port)) {
     port++;
+    if (port > 65535) {
+      throw new Error(`No available port found (all ports from ${startPort} to 65535 are in use)`);
+    }
   }
   return port;
 }

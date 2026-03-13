@@ -17,21 +17,21 @@ import {
 } from '../config.js';
 import { spawnDaemon, getPidFilePath, getRunningPid, stopProcess } from '../daemon.js';
 
-async function startServer(workspace: WorkspaceEntry): Promise<void> {
-  // Check if another workspace is already running on this port
-  const conflicting = listWorkspaces().find(
-    (w) => w.id !== workspace.id && w.port === workspace.port,
-  );
-  if (conflicting) {
+function assertPortNotInUse(workspace: WorkspaceEntry): void {
+  const conflicting = findWorkspaceByPort(workspace.port);
+  if (conflicting && conflicting.id !== workspace.id) {
     const pidFile = getPidFilePath(conflicting.id, 'server');
-    const pid = getRunningPid(pidFile);
-    if (pid) {
+    if (getRunningPid(pidFile)) {
       console.error(
         `Port ${workspace.port} is in use by workspace '${conflicting.name}'. Stop it first or change this workspace's port.`,
       );
       process.exit(1);
     }
   }
+}
+
+async function startServer(workspace: WorkspaceEntry): Promise<void> {
+  assertPortNotInUse(workspace);
 
   const wsDir = getWorkspaceDir(workspace.id);
   const dbPath = join(wsDir, 'data.db');
@@ -53,20 +53,7 @@ async function startServer(workspace: WorkspaceEntry): Promise<void> {
 }
 
 function startDaemon(workspace: WorkspaceEntry): void {
-  // Check if another workspace is already running on this port
-  const conflicting = listWorkspaces().find(
-    (w) => w.id !== workspace.id && w.port === workspace.port,
-  );
-  if (conflicting) {
-    const conflictPidFile = getPidFilePath(conflicting.id, 'server');
-    const conflictPid = getRunningPid(conflictPidFile);
-    if (conflictPid) {
-      console.error(
-        `Port ${workspace.port} is in use by workspace '${conflicting.name}'. Stop it first or change this workspace's port.`,
-      );
-      process.exit(1);
-    }
-  }
+  assertPortNotInUse(workspace);
 
   const pidFile = getPidFilePath(workspace.id, 'server');
   const existingPid = getRunningPid(pidFile);
