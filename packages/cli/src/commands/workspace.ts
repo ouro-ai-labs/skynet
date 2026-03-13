@@ -11,11 +11,28 @@ import {
   getWorkspace,
   getWorkspaceByIdOrName,
   getWorkspaceDir,
+  findWorkspaceByPort,
+  getNextAvailablePort,
   type WorkspaceEntry,
 } from '../config.js';
 import { spawnDaemon, getPidFilePath, getRunningPid, stopProcess } from '../daemon.js';
 
 async function startServer(workspace: WorkspaceEntry): Promise<void> {
+  // Check if another workspace is already running on this port
+  const conflicting = listWorkspaces().find(
+    (w) => w.id !== workspace.id && w.port === workspace.port,
+  );
+  if (conflicting) {
+    const pidFile = getPidFilePath(conflicting.id, 'server');
+    const pid = getRunningPid(pidFile);
+    if (pid) {
+      console.error(
+        `Port ${workspace.port} is in use by workspace '${conflicting.name}'. Stop it first or change this workspace's port.`,
+      );
+      process.exit(1);
+    }
+  }
+
   const wsDir = getWorkspaceDir(workspace.id);
   const dbPath = join(wsDir, 'data.db');
   const logFile = join(wsDir, 'logs', 'server.log');
@@ -36,6 +53,21 @@ async function startServer(workspace: WorkspaceEntry): Promise<void> {
 }
 
 function startDaemon(workspace: WorkspaceEntry): void {
+  // Check if another workspace is already running on this port
+  const conflicting = listWorkspaces().find(
+    (w) => w.id !== workspace.id && w.port === workspace.port,
+  );
+  if (conflicting) {
+    const conflictPidFile = getPidFilePath(conflicting.id, 'server');
+    const conflictPid = getRunningPid(conflictPidFile);
+    if (conflictPid) {
+      console.error(
+        `Port ${workspace.port} is in use by workspace '${conflicting.name}'. Stop it first or change this workspace's port.`,
+      );
+      process.exit(1);
+    }
+  }
+
   const pidFile = getPidFilePath(workspace.id, 'server');
   const existingPid = getRunningPid(pidFile);
   if (existingPid) {
@@ -83,9 +115,11 @@ export function registerWorkspaceCommand(program: Command): void {
     .description('Create a new workspace')
     .option('--name <name>', 'Workspace name (skip interactive prompt)')
     .option('--host <host>', 'Host (default: 0.0.0.0)')
-    .option('--port <port>', 'Port (default: 4117)')
+    .option('--port <port>', 'Port (default: auto-assigned starting from 4117)')
     .action(async (opts) => {
       ensureSkynetDir();
+
+      const defaultPort = String(getNextAvailablePort(4117));
 
       let name: string;
       let host: string;
@@ -94,7 +128,7 @@ export function registerWorkspaceCommand(program: Command): void {
       if (opts.name) {
         name = opts.name;
         host = opts.host ?? '0.0.0.0';
-        port = opts.port ?? '4117';
+        port = opts.port ?? defaultPort;
       } else {
         const { default: inquirer } = await import('inquirer');
         const { name: inputName } = await inquirer.prompt([
@@ -111,7 +145,7 @@ export function registerWorkspaceCommand(program: Command): void {
         }
         if (!opts.port) {
           const { port: inputPort } = await inquirer.prompt([
-            { type: 'input', name: 'port', message: 'Port:', default: '4117', validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
+            { type: 'input', name: 'port', message: 'Port:', default: defaultPort, validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
           ]);
           port = inputPort;
         } else {
@@ -125,11 +159,20 @@ export function registerWorkspaceCommand(program: Command): void {
         process.exit(1);
       }
 
+      const parsedPort = parseInt(port, 10);
+      const portConflict = findWorkspaceByPort(parsedPort);
+      if (portConflict) {
+        console.error(
+          `Port ${parsedPort} is already used by workspace '${portConflict.name}'. Use --port to specify a different port.`,
+        );
+        process.exit(1);
+      }
+
       const entry: WorkspaceEntry = {
         id: randomUUID(),
         name: name.trim(),
         host,
-        port: parseInt(port, 10),
+        port: parsedPort,
       };
 
       addWorkspace(entry);
