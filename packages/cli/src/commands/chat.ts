@@ -19,6 +19,7 @@ export function registerChatCommand(program: Command): void {
         humans = await res.json() as HumanProfile[];
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
+        console.error('Is the workspace running? Start it with: skynet workspace start <name>');
         process.exit(1);
       }
 

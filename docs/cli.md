@@ -329,6 +329,44 @@ When multiple humans are registered and `--name` is not provided, an interactive
 
 ---
 
+## `skynet doctor` — Check System Prerequisites
+
+Run diagnostic checks to verify that your environment is correctly set up for Skynet.
+
+```bash
+skynet doctor
+```
+
+Checks performed:
+- **Node.js** version (>=20 required)
+- **pnpm** availability
+- **git** version and worktree support
+- **Agent CLIs** — reports which of `claude`, `gemini`, `codex` are installed
+- **Workspace status** — lists configured workspaces and whether they are running
+- **Port availability** — checks whether the default workspace port (4117) is free
+
+Example output:
+
+```
+Skynet Doctor
+
+✓ Node.js v20.11.0 (>=20 required)
+✓ pnpm 9.1.0
+✓ git 2.43.0 (worktree support: yes)
+
+✓ claude (Claude Code CLI)
+✗ gemini (not found — install: npm i -g @google/gemini-cli)
+✗ codex (not found — install: npm i -g @openai/codex)
+
+✓ No workspace running on port 4117
+
+All checks passed.
+```
+
+Exits with code 1 if any critical check fails (Node.js version, pnpm, git). Missing agent CLIs are reported but do not cause a non-zero exit.
+
+---
+
 ## `skynet status` — Show Workspace Status
 
 Display connected members, registered agents, and registered humans for a workspace.

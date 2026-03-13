@@ -23,8 +23,9 @@ function assertPortNotInUse(workspace: WorkspaceEntry): void {
     const pidFile = getPidFilePath(conflicting.id, 'server');
     if (getRunningPid(pidFile)) {
       console.error(
-        `Port ${workspace.port} is in use by workspace '${conflicting.name}'. Stop it first or change this workspace's port.`,
+        `Port ${workspace.port} is in use by workspace '${conflicting.name}'.`,
       );
+      console.error('Another workspace may be running. Try `skynet workspace list` or use --port to pick a different port.');
       process.exit(1);
     }
   }

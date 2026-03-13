@@ -193,6 +193,18 @@ pnpm skynet chat [--name <human-name>] --workspace <name-or-id>
 
 ---
 
+## Doctor
+
+### Check system prerequisites
+
+```bash
+pnpm skynet doctor
+```
+
+Runs diagnostic checks for Node.js version, pnpm, git, agent CLIs (claude, gemini, codex), workspace status, and port availability. Use this to troubleshoot environment issues.
+
+---
+
 ## Status
 
 ### Check workspace status
