@@ -22,7 +22,7 @@ export class GeminiCliAdapter extends AgentAdapter {
     return false;
   }
 
-  async handleMessage(_msg: SkynetMessage, _senderName?: string): Promise<string> {
+  async handleMessage(_msg: SkynetMessage, _senderName?: string, _notices?: string): Promise<string> {
     throw new Error('GeminiCliAdapter is not yet implemented');
   }
 

@@ -62,8 +62,9 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
   }
 
-  async handleMessage(msg: SkynetMessage, senderName?: string): Promise<string> {
-    const prompt = this.messageToPrompt(msg, senderName);
+  async handleMessage(msg: SkynetMessage, senderName?: string, notices?: string): Promise<string> {
+    const body = this.messageToPrompt(msg, senderName);
+    const prompt = notices ? `${notices}\n\n${body}` : body;
     this.onPrompt?.(prompt, { type: 'message' });
     const images = await this.extractImagePaths(msg);
     try {
