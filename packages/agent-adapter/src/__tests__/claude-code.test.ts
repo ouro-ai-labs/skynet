@@ -305,7 +305,7 @@ describe('ClaudeCodeAdapter quickReply (session fork)', () => {
         '--resume', sessionId,
         '--fork-session',
       ]),
-      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 60_000 }),
+      expect.objectContaining({ cwd: tempDir, stdin: 'ignore' }),
     );
   });
 

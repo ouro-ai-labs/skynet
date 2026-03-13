@@ -120,7 +120,6 @@ export class ClaudeCodeAdapter extends AgentAdapter {
         cwd: this.projectRoot,
         stdin: 'ignore',
         env: spawnEnv(),
-        timeout: 60_000, // 1 min timeout for quick replies
       });
 
       return result.stdout;
