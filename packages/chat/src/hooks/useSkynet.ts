@@ -82,7 +82,7 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
       setError(err instanceof Error ? err.message : String(err));
     });
 
-    client.on('message', (msg: SkynetMessage) => {
+    function onMessage(msg: SkynetMessage): void {
       if (msg.type === MessageType.AGENT_JOIN) {
         const p = msg.payload as AgentJoinPayload;
         setMembers((prev) => {
@@ -107,9 +107,9 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
         });
       }
       setMessages((prev) => [...prev, msg]);
-    });
+    }
 
-    client.on('status-change', (data: { agentId: string; status: string }) => {
+    function onStatusChange(data: { agentId: string; status: string }): void {
       if (data.status === 'busy') {
         setBusyAgents((prev) => {
           const next = new Map(prev);
@@ -136,9 +136,9 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
         }
         return prev;
       });
-    });
+    }
 
-    client.on('workspace-state', (ws: WorkspaceState) => {
+    function onWorkspaceState(ws: WorkspaceState): void {
       const memberMap = new Map<string, AgentCard>();
       const busy = new Map<string, number>();
       for (const m of ws.members) {
@@ -150,27 +150,40 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
       setMembers(memberMap);
       setBusyAgents(busy);
       setConnected(true);
-    });
+    }
 
-    client.on('disconnected', () => {
+    function onDisconnected(): void {
       setConnected(false);
       setBusyAgents(new Map());
       addSystemMessage('Disconnected from workspace. Will attempt to reconnect...');
-    });
+    }
 
-    client.on('reconnecting', (info: { attempt: number; delay: number }) => {
+    function onReconnecting(info: { attempt: number; delay: number }): void {
       const delaySec = Math.round(info.delay / 1000);
       addSystemMessage(`Reconnecting (attempt ${info.attempt}, next retry in ${delaySec}s)...`);
-    });
+    }
 
-    client.on('error', (err: unknown) => {
+    function onError(err: unknown): void {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg) {
         addSystemMessage(`Error: ${msg}`);
       }
-    });
+    }
+
+    client.on('message', onMessage);
+    client.on('status-change', onStatusChange);
+    client.on('workspace-state', onWorkspaceState);
+    client.on('disconnected', onDisconnected);
+    client.on('reconnecting', onReconnecting);
+    client.on('error', onError);
 
     return () => {
+      client.off('message', onMessage);
+      client.off('status-change', onStatusChange);
+      client.off('workspace-state', onWorkspaceState);
+      client.off('disconnected', onDisconnected);
+      client.off('reconnecting', onReconnecting);
+      client.off('error', onError);
       client.close().catch(() => {});
     };
   }, [opts.serverUrl, opts.name, addSystemMessage]);

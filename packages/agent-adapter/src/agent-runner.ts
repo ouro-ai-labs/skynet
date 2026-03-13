@@ -136,7 +136,9 @@ export class AgentRunner {
       }
       this.promptLogStream = createWriteStream(promptLogPath, { flags: 'a' });
       // Prevent uncaught exceptions from stream errors (e.g. directory removed)
-      this.promptLogStream.on('error', () => {});
+      this.promptLogStream.on('error', (err: Error) => {
+        this.logger.warn('Prompt log stream error:', err);
+      });
       this.adapter.onPrompt = (prompt, context) => {
         const timestamp = new Date().toISOString();
         const separator = '─'.repeat(60);
@@ -204,6 +206,7 @@ export class AgentRunner {
   async stop(): Promise<void> {
     this.clearSchedule();
     this.logger.info('Stopping agent');
+    this.client.removeAllListeners();
     await this.adapter.dispose();
     await this.client.close();
     this.logger.close();

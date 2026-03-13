@@ -1443,3 +1443,46 @@ describe('isNoReply', () => {
     expect(isNoReply('@pm Here is my update.')).toBe(false);
   });
 });
+
+describe('AgentRunner stop() listener cleanup', () => {
+  it('removes all client listeners on stop()', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    // Client should have listeners registered by start()
+    const listenerCountBefore = (client as unknown as { listenerCount(e: string): number }).listenerCount('chat');
+    expect(listenerCountBefore).toBeGreaterThan(0);
+
+    await runner.stop();
+
+    // After stop(), all listeners should be removed
+    const listenerCountAfter = (client as unknown as { listenerCount(e: string): number }).listenerCount('chat');
+    expect(listenerCountAfter).toBe(0);
+  });
+
+  it('does not process messages after stop()', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    await runner.stop();
+
+    // Emit a message after stop — should not be processed since listeners are removed
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 50));
+    expect(adapter.handleMessageCalls).toHaveLength(0);
+  });
+});

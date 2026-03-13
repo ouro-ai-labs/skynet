@@ -289,8 +289,11 @@ export class SkynetClient extends EventEmitter {
     );
     this.emit('reconnecting', { attempt: this._reconnectAttempt, delay });
     this.reconnectTimer = setTimeout(() => {
-      this.connect().catch(() => {
-        // Error is handled by the 'close' event which will schedule another attempt
+      this.connect().catch((err: unknown) => {
+        // Error is handled by the 'close' event which will schedule another attempt.
+        // Log for debugging so reconnection failures are not completely silent.
+        const msg = err instanceof Error ? err.message : String(err);
+        this.emit('debug', `Reconnect attempt ${this._reconnectAttempt} failed: ${msg}`);
       });
     }, delay);
   }
