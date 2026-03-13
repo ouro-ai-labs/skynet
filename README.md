@@ -37,13 +37,13 @@ skynet workspace new --name my-project
 skynet workspace start my-project -d
 
 # 2. Add agents
-skynet agent new --name pm --type claude-code --role "project manager"
-skynet agent new --name backend --type claude-code --role "backend engineer"
-skynet agent new --name frontend --type claude-code --role "frontend engineer"
+skynet agent new --workspace my-project --name pm --type claude-code --role "project manager"
+skynet agent new --workspace my-project --name backend --type claude-code --role "backend engineer"
+skynet agent new --workspace my-project --name frontend --type claude-code --role "frontend engineer"
 
 # 3. Add a human & join chat
-skynet human new --name alice
-skynet chat --name alice
+skynet human new --workspace my-project --name alice
+skynet chat --workspace my-project --name alice
 ```
 
 For the complete CLI reference, see [docs/cli.md](docs/cli.md).

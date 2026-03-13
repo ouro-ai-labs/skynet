@@ -119,32 +119,31 @@ All endpoints are served by the workspace's server instance.
 ```bash
 skynet workspace new          # Create workspace (interactive or --name/--host/--port)
 skynet workspace list         # List all workspaces
-skynet workspace              # Start the only workspace (errors if multiple exist)
-skynet workspace start [id]   # Start a specific workspace by name or UUID
+skynet workspace start <name-or-id>   # Start a specific workspace by name or UUID
 ```
 
 ### Agent Management
 ```bash
-skynet agent new        [--workspace <id>]  # Create agent (interactive)
-skynet agent list       [--workspace <id>]  # List agents
-skynet agent            [--workspace <id>]  # Select agent and start it
+skynet agent new        --workspace <id>  # Create agent (interactive)
+skynet agent list       --workspace <id>  # List agents
+skynet agent            --workspace <id>  # Select agent and start it
 skynet agent interrupt  <name-or-id>        # Interrupt agent's current task
 skynet agent forget     <name-or-id>        # Reset agent's conversation session
 ```
 
 ### Human Management
 ```bash
-skynet human new   [--workspace <id>]  # Create human (interactive)
-skynet human list  [--workspace <id>]  # List humans
-skynet human       [--workspace <id>]  # Select human, start chat TUI
+skynet human new   --workspace <id>  # Create human (interactive)
+skynet human list  --workspace <id>  # List humans
+skynet human       --workspace <id>  # Select human, start chat TUI
 ```
 
 ### Status
 ```bash
-skynet status [--workspace <id>]  # Show workspace status
+skynet status --workspace <id>  # Show workspace status
 ```
 
-All commands that need a workspace context use `--workspace <uuid|name>`. If omitted and only one workspace exists, it is auto-selected. If multiple workspaces exist and `--workspace` is not specified, the command errors out.
+All commands that need a workspace context require `--workspace <uuid|name>`. There is no auto-selection; the command errors out if `--workspace` is omitted.
 
 ## Chat TUI Slash Commands
 

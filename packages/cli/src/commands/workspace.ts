@@ -11,11 +11,28 @@ import {
   getWorkspace,
   getWorkspaceByIdOrName,
   getWorkspaceDir,
+  findWorkspaceByPort,
+  getNextAvailablePort,
   type WorkspaceEntry,
 } from '../config.js';
 import { spawnDaemon, getPidFilePath, getRunningPid, stopProcess } from '../daemon.js';
 
+function assertPortNotInUse(workspace: WorkspaceEntry): void {
+  const conflicting = findWorkspaceByPort(workspace.port);
+  if (conflicting && conflicting.id !== workspace.id) {
+    const pidFile = getPidFilePath(conflicting.id, 'server');
+    if (getRunningPid(pidFile)) {
+      console.error(
+        `Port ${workspace.port} is in use by workspace '${conflicting.name}'. Stop it first or change this workspace's port.`,
+      );
+      process.exit(1);
+    }
+  }
+}
+
 async function startServer(workspace: WorkspaceEntry): Promise<void> {
+  assertPortNotInUse(workspace);
+
   const wsDir = getWorkspaceDir(workspace.id);
   const dbPath = join(wsDir, 'data.db');
   const logFile = join(wsDir, 'logs', 'server.log');
@@ -36,6 +53,8 @@ async function startServer(workspace: WorkspaceEntry): Promise<void> {
 }
 
 function startDaemon(workspace: WorkspaceEntry): void {
+  assertPortNotInUse(workspace);
+
   const pidFile = getPidFilePath(workspace.id, 'server');
   const existingPid = getRunningPid(pidFile);
   if (existingPid) {
@@ -55,26 +74,17 @@ function startDaemon(workspace: WorkspaceEntry): void {
 }
 
 function resolveWorkspaceArg(identifier?: string): WorkspaceEntry {
-  if (identifier) {
-    const entry = getWorkspaceByIdOrName(identifier);
-    if (!entry) {
-      console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
-      process.exit(1);
-    }
-    return entry!;
+  if (!identifier) {
+    console.error('Missing required argument: workspace name or UUID. Run \'skynet workspace list\' to see available workspaces.');
+    process.exit(1);
   }
 
-  const workspaces = listWorkspaces();
-  if (workspaces.length === 0) {
-    console.error('No workspaces configured. Run \'skynet workspace new\' to create one.');
+  const entry = getWorkspaceByIdOrName(identifier);
+  if (!entry) {
+    console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
     process.exit(1);
   }
-  if (workspaces.length > 1) {
-    console.error('Multiple workspaces found. Please specify which one.');
-    console.error('Run \'skynet workspace list\' to see available workspaces.');
-    process.exit(1);
-  }
-  return workspaces[0];
+  return entry!;
 }
 
 export function registerWorkspaceCommand(program: Command): void {
@@ -82,9 +92,9 @@ export function registerWorkspaceCommand(program: Command): void {
     .command('workspace')
     .description('Manage Skynet workspaces')
     .action(async () => {
-      // Bare `skynet workspace`: start the only workspace, or error if multiple
-      const entry = resolveWorkspaceArg();
-      await startServer(entry);
+      console.error('Missing required argument: workspace name or UUID. Run \'skynet workspace list\' to see available workspaces.');
+      console.error('Usage: skynet workspace start <name-or-id>');
+      process.exit(1);
     });
 
   workspace
@@ -92,9 +102,11 @@ export function registerWorkspaceCommand(program: Command): void {
     .description('Create a new workspace')
     .option('--name <name>', 'Workspace name (skip interactive prompt)')
     .option('--host <host>', 'Host (default: 0.0.0.0)')
-    .option('--port <port>', 'Port (default: 4117)')
+    .option('--port <port>', 'Port (default: auto-assigned starting from 4117)')
     .action(async (opts) => {
       ensureSkynetDir();
+
+      const defaultPort = String(getNextAvailablePort(4117));
 
       let name: string;
       let host: string;
@@ -103,7 +115,7 @@ export function registerWorkspaceCommand(program: Command): void {
       if (opts.name) {
         name = opts.name;
         host = opts.host ?? '0.0.0.0';
-        port = opts.port ?? '4117';
+        port = opts.port ?? defaultPort;
       } else {
         const { default: inquirer } = await import('inquirer');
         const { name: inputName } = await inquirer.prompt([
@@ -120,7 +132,7 @@ export function registerWorkspaceCommand(program: Command): void {
         }
         if (!opts.port) {
           const { port: inputPort } = await inquirer.prompt([
-            { type: 'input', name: 'port', message: 'Port:', default: '4117', validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
+            { type: 'input', name: 'port', message: 'Port:', default: defaultPort, validate: (v: string) => /^\d+$/.test(v) ? true : 'Must be a number' },
           ]);
           port = inputPort;
         } else {
@@ -134,11 +146,20 @@ export function registerWorkspaceCommand(program: Command): void {
         process.exit(1);
       }
 
+      const parsedPort = parseInt(port, 10);
+      const portConflict = findWorkspaceByPort(parsedPort);
+      if (portConflict) {
+        console.error(
+          `Port ${parsedPort} is already used by workspace '${portConflict.name}'. Use --port to specify a different port.`,
+        );
+        process.exit(1);
+      }
+
       const entry: WorkspaceEntry = {
         id: randomUUID(),
         name: name.trim(),
         host,
-        port: parseInt(port, 10),
+        port: parsedPort,
       };
 
       addWorkspace(entry);
@@ -146,7 +167,7 @@ export function registerWorkspaceCommand(program: Command): void {
       console.log(`  ID:   ${entry.id}`);
       console.log(`  Host: ${entry.host}:${entry.port}`);
       console.log(`  Dir:  ${getWorkspaceDir(entry.id)}`);
-      console.log('\nStart it with: skynet workspace start');
+      console.log(`\nStart it with: skynet workspace start ${entry.name}`);
     });
 
   workspace

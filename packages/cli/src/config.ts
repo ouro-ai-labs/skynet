@@ -99,6 +99,24 @@ export function getServerUrl(workspace: WorkspaceEntry): string {
   return `http://${workspace.host === '0.0.0.0' ? 'localhost' : workspace.host}:${workspace.port}`;
 }
 
+export function findWorkspaceByPort(port: number): WorkspaceEntry | undefined {
+  const workspaces = listWorkspaces();
+  return workspaces.find((w) => w.port === port);
+}
+
+export function getNextAvailablePort(startPort: number): number {
+  const workspaces = listWorkspaces();
+  const usedPorts = new Set(workspaces.map((w) => w.port));
+  let port = startPort;
+  while (usedPorts.has(port)) {
+    port++;
+    if (port > 65535) {
+      throw new Error(`No available port found (all ports from ${startPort} to 65535 are in use)`);
+    }
+  }
+  return port;
+}
+
 export function loadWorkspaceConfig(workspaceId: string): WorkspaceConfig | undefined {
   const configPath = join(getSkynetDir(), workspaceId, 'config.json');
   if (!existsSync(configPath)) {

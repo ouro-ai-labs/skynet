@@ -46,13 +46,19 @@ describe('selectWorkspace', () => {
     expect(result.name).toBe('my-project');
   });
 
-  it('returns the only workspace when no --workspace is given', () => {
+  it('exits when --workspace is not provided even with a single workspace', () => {
     ensureSkynetDir();
-    const id = randomUUID();
-    addWorkspace({ id, name: 'solo', host: 'localhost', port: 4117 });
+    addWorkspace({ id: randomUUID(), name: 'solo', host: 'localhost', port: 4117 });
 
-    const result = selectWorkspace({});
-    expect(result.id).toBe(id);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => selectWorkspace({})).toThrow('exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--workspace'));
+
+    exitSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('exits when --workspace ID is not found', () => {
@@ -69,7 +75,7 @@ describe('selectWorkspace', () => {
     errorSpy.mockRestore();
   });
 
-  it('exits when multiple workspaces exist and no --workspace is given', () => {
+  it('exits when --workspace is not provided with multiple workspaces', () => {
     ensureSkynetDir();
     addWorkspace({ id: randomUUID(), name: 'ws-1', host: 'localhost', port: 4117 });
     addWorkspace({ id: randomUUID(), name: 'ws-2', host: 'localhost', port: 4118 });
@@ -79,6 +85,7 @@ describe('selectWorkspace', () => {
 
     expect(() => selectWorkspace({})).toThrow('exit');
     expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--workspace'));
 
     exitSpy.mockRestore();
     errorSpy.mockRestore();

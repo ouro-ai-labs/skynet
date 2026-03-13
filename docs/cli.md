@@ -4,7 +4,7 @@ Complete reference for the `skynet` command-line interface.
 
 ## Global Behavior
 
-- **Workspace auto-selection**: when only one workspace exists, it is automatically selected. When multiple workspaces exist, you must pass `--workspace <name-or-id>`.
+- **Workspace selection**: `--workspace <name-or-id>` is required for all commands that operate on a workspace. There is no auto-selection.
 - **Interactive prompts**: most commands support both interactive mode (prompts for missing info) and non-interactive mode (pass all values as flags).
 - **Configuration**: workspace data is stored in `~/.skynet/` (override with `SKYNET_HOME` env var).
 
@@ -40,9 +40,9 @@ List all configured workspaces with name, host:port, and UUID.
 skynet workspace list
 ```
 
-### `skynet workspace start [name-or-id]`
+### `skynet workspace start <name-or-id>`
 
-Start a workspace server. Accepts a workspace name or UUID as a positional argument, or via `--workspace <name-or-id>`. By default runs in the foreground; use `-d` to run as a background daemon.
+Start a workspace server. Requires a workspace name or UUID. By default runs in the foreground; use `-d` to run as a background daemon.
 
 ```bash
 # Start in foreground (default)
@@ -50,18 +50,13 @@ skynet workspace start my-project
 
 # Start as a background daemon
 skynet workspace start my-project -d
-
-# Auto-select (only works when a single workspace exists)
-skynet workspace start
-skynet workspace start -d
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--workspace <name-or-id>` | Workspace name or UUID (alternative to positional arg) |
 | `-d, --daemon` | Run in background as a daemon process |
 
-### `skynet workspace stop [name-or-id]`
+### `skynet workspace stop <name-or-id>`
 
 Stop a workspace daemon process.
 
@@ -69,7 +64,7 @@ Stop a workspace daemon process.
 skynet workspace stop my-project
 ```
 
-### `skynet workspace status [name-or-id]`
+### `skynet workspace status <name-or-id>`
 
 Show whether the workspace daemon is running and its PID.
 
@@ -77,7 +72,7 @@ Show whether the workspace daemon is running and its PID.
 skynet workspace status my-project
 ```
 
-### `skynet workspace logs [name-or-id]`
+### `skynet workspace logs <name-or-id>`
 
 Tail the workspace server log file.
 
@@ -107,14 +102,6 @@ skynet workspace delete e68fa4c2-37d6-40e0-b62b-1c572a5e4489 --force
 | Flag | Description |
 |------|-------------|
 | `--force` | Skip confirmation prompt |
-
-### `skynet workspace` (bare)
-
-Shortcut: starts the workspace if only one exists. Errors if zero or multiple workspaces are configured.
-
-```bash
-skynet workspace
-```
 
 ---
 
@@ -327,14 +314,10 @@ skynet human delete a1b2c3d4-... --force
 Launch the chat terminal UI to participate in the workspace as a human.
 
 ```bash
-# Auto-select human (when only one is registered)
 skynet chat --workspace <name-or-id>
 
 # Specify human by name
 skynet chat --workspace <name-or-id> --name alice
-
-# Auto-select workspace (when only one exists)
-skynet chat
 ```
 
 | Flag | Description |
@@ -375,17 +358,17 @@ skynet workspace new --name my-project --port 4117
 skynet workspace start my-project
 
 # 3. Register participants (in another terminal)
-skynet agent new --name coder --type claude-code --role "full-stack developer"
-skynet human new --name alice
+skynet agent new --workspace my-project --name coder --type claude-code --role "full-stack developer"
+skynet human new --workspace my-project --name alice
 
 # 4. Start the agent (non-interactive)
-skynet agent start coder
+skynet agent start coder --workspace my-project
 
 # 5. Join the chat as a human (in another terminal)
-skynet chat
+skynet chat --workspace my-project
 
 # 6. Check workspace status
-skynet status
+skynet status --workspace my-project
 ```
 
 ### Daemon Workflow
@@ -398,15 +381,15 @@ skynet workspace new --name my-project --port 4117
 skynet workspace start my-project -d
 
 # 2. Register and start agents (daemon by default)
-skynet agent new --name coder --type claude-code --role "full-stack developer"
-skynet agent start coder
+skynet agent new --workspace my-project --name coder --type claude-code --role "full-stack developer"
+skynet agent start coder --workspace my-project
 
 # 3. Check status / view logs
 skynet workspace status my-project
-skynet agent logs coder
+skynet agent logs coder --workspace my-project
 
 # 4. Stop everything when done
-skynet agent stop coder
+skynet agent stop coder --workspace my-project
 skynet workspace stop my-project
 ```
 
