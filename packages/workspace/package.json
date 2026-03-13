@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/workspace",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "WebSocket server, member management, and message routing for Skynet",
   "type": "module",
   "main": "dist/index.js",
