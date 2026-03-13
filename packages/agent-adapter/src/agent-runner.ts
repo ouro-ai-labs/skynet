@@ -448,10 +448,7 @@ export class AgentRunner {
         if (chatBatch.length === 1) {
           const msg = chatBatch[0];
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
-          const msgToSend = notices
-            ? { ...msg, payload: { ...(msg.payload as ChatPayload), text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } }
-            : msg;
-          const response = await this.adapter.handleMessage(msgToSend, senderName);
+          const response = await this.adapter.handleMessage(msg, senderName, notices || undefined);
           if (response && !isNoReply(response)) {
             const mentions = this.resolveMentions(response);
             if (!mentions.includes(msg.from)) mentions.push(msg.from);
@@ -498,11 +495,9 @@ export class AgentRunner {
     // Collect all attachments from the batch
     const allAttachments = messages.flatMap((msg) => (msg.payload as ChatPayload).attachments ?? []);
 
-    const prefix = notices ? `${notices}\n\n` : '';
-
     // Create a synthetic message for the adapter
     const batchPayload: ChatPayload = {
-      text: `${prefix}You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
+      text: `You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
       ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
     };
     const batchMsg: SkynetMessage = {
@@ -511,7 +506,7 @@ export class AgentRunner {
     };
 
     const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;
-    const response = await this.adapter.handleMessage(batchMsg, senderName);
+    const response = await this.adapter.handleMessage(batchMsg, senderName, notices || undefined);
 
     if (response && !isNoReply(response)) {
       const mentions = this.resolveMentions(response);

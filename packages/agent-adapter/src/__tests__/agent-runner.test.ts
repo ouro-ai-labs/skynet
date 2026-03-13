@@ -95,6 +95,7 @@ class FakeAdapter extends AgentAdapter {
 
   quickReplyCalls: string[] = [];
   handleMessageCalls: SkynetMessage[] = [];
+  handleMessageNotices: (string | undefined)[] = [];
   restoredSessionState: SessionState | undefined;
 
   setSupportsQuickReply(v: boolean) {
@@ -125,8 +126,9 @@ class FakeAdapter extends AgentAdapter {
 
   async isAvailable() { return true; }
 
-  async handleMessage(msg: SkynetMessage): Promise<string> {
+  async handleMessage(msg: SkynetMessage, _senderName?: string, notices?: string): Promise<string> {
     this.handleMessageCalls.push(msg);
+    this.handleMessageNotices.push(notices);
     if (this.handleDelay > 0) {
       await new Promise(r => setTimeout(r, this.handleDelay));
     }
@@ -247,15 +249,15 @@ describe('AgentRunner pending notices', () => {
       payload: { agent: { id: 'new-1', name: 'newcomer', type: 'claude-code' } },
     });
 
-    // Send a chat message — should include the join notice
+    // Send a chat message — notice should be passed separately, not in payload text
     const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
     client.emit('chat', msg);
     await new Promise(r => setTimeout(r, 50));
 
     expect(adapter.handleMessageCalls).toHaveLength(1);
     const receivedText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
-    expect(receivedText).toContain('[System] newcomer has joined the workspace.');
-    expect(receivedText).toContain('hello');
+    expect(receivedText).toBe('hello');
+    expect(adapter.handleMessageNotices[0]).toContain('[System] newcomer has joined the workspace.');
   });
 
   it('piggybacks leave notice onto next message', async () => {
@@ -284,15 +286,15 @@ describe('AgentRunner pending notices', () => {
       payload: { agentId: 'leaving-1' },
     });
 
-    // Send another message — should include the leave notice
+    // Send another message — notice should be passed separately, not in payload text
     const msg2 = makeChatMsg({ from: 'user-a', text: 'second', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 50));
 
     expect(adapter.handleMessageCalls).toHaveLength(2);
     const receivedText = (adapter.handleMessageCalls[1].payload as { text: string }).text;
-    expect(receivedText).toContain('[System] leaver has left the workspace.');
-    expect(receivedText).toContain('second');
+    expect(receivedText).toBe('second');
+    expect(adapter.handleMessageNotices[1]).toContain('[System] leaver has left the workspace.');
   });
 
   it('no notices means original message text is unchanged', async () => {
@@ -304,6 +306,7 @@ describe('AgentRunner pending notices', () => {
 
     const receivedText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
     expect(receivedText).toBe('clean message');
+    expect(adapter.handleMessageNotices[0]).toBeUndefined();
   });
 
   it('clears notices generated during start()', async () => {
