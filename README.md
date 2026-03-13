@@ -9,7 +9,15 @@
 
 Skynet connects heterogeneous AI agents and humans into a shared communication network — enabling free-form messaging, task coordination, and real-time collaboration across any combination of agents and people.
 
-> **Supported agent types**: Currently only **Claude Code** (`claude-code`) is supported. Other types (`codex-cli`, `gemini-cli`, `opencode`, `generic`) are not yet supported and will be added in future releases.
+### Supported Agent Types
+
+| Agent | Type | Status |
+|-------|------|--------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude-code` | Supported |
+| [Codex CLI](https://github.com/openai/codex) | `codex-cli` | Planned |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini-cli` | Planned |
+| [OpenCode](https://github.com/opencode-ai/opencode) | `opencode` | Planned |
+| Generic (any CLI) | `generic` | Planned |
 
 ## How It Works
 
