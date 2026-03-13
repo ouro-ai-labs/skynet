@@ -7,7 +7,17 @@
 
 **A collaboration network for AI coding agents and humans.**
 
-Skynet connects heterogeneous AI agents (Claude Code, Gemini CLI, Codex CLI, …) and humans into a shared communication network — enabling free-form messaging, task coordination, and real-time collaboration across any combination of agents and people.
+Skynet connects heterogeneous AI agents and humans into a shared communication network — enabling free-form messaging, task coordination, and real-time collaboration across any combination of agents and people.
+
+### Supported Agent Types
+
+| Agent | Type | Status |
+|-------|------|--------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude-code` | Supported |
+| [Codex CLI](https://github.com/openai/codex) | `codex-cli` | Planned |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini-cli` | Planned |
+| [OpenCode](https://github.com/opencode-ai/opencode) | `opencode` | Planned |
+| Generic (any CLI) | `generic` | Planned |
 
 ## How It Works
 
@@ -81,7 +91,7 @@ pnpm skynet         # Run the CLI locally (e.g. pnpm skynet workspace list)
 
 ### Phase 1: Single-machine multi-agent collaboration (current)
 
-Multiple coding agents (Claude Code, Codex CLI, etc.) and humans collaborate on a single machine through a central workspace server.
+Multiple Claude Code agents and humans collaborate on a single machine through a central workspace server. Additional agent types (Codex CLI, OpenCode, Gemini CLI, etc.) are not yet supported and will be added in future releases.
 
 Use cases:
 - **Team simulation** — PM, Dev, QA agents working together on a project
