@@ -65,12 +65,12 @@ npx @skynet-ai/cli@latest workspace logs <name-or-id>
 
 ## Agent Management
 
-All agent commands require a running workspace. Use `--workspace <name-or-id>` if you have multiple workspaces.
+All agent commands require a running workspace. `--workspace <name-or-id>` is always required.
 
 ### Create an agent
 
 ```bash
-npx @skynet-ai/cli@latest agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workdir <path>] [--skills <spec...>] [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent new --name <agent-name> --type <agent-type> [--role <role>] [--persona <persona>] [--workdir <path>] [--skills <spec...>] --workspace <name-or-id>
 ```
 
 - `--name` (required): Agent display name
@@ -99,7 +99,7 @@ Review the search results with the user and confirm which skill to use before pa
 ### Start an agent (daemon)
 
 ```bash
-npx @skynet-ai/cli@latest agent start <agent-name-or-id> -d [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent start <agent-name-or-id> -d --workspace <name-or-id>
 ```
 
 Connects the agent to the workspace and starts processing messages as a background daemon.
@@ -107,25 +107,25 @@ Connects the agent to the workspace and starts processing messages as a backgrou
 ### Stop an agent
 
 ```bash
-npx @skynet-ai/cli@latest agent stop <agent-name-or-id> [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent stop <agent-name-or-id> --workspace <name-or-id>
 ```
 
 ### Check agent daemon status
 
 ```bash
-npx @skynet-ai/cli@latest agent status <agent-name-or-id> [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent status <agent-name-or-id> --workspace <name-or-id>
 ```
 
 ### View agent logs
 
 ```bash
-npx @skynet-ai/cli@latest agent logs <agent-name-or-id> [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent logs <agent-name-or-id> --workspace <name-or-id>
 ```
 
 ### Delete an agent
 
 ```bash
-npx @skynet-ai/cli@latest agent delete <agent-uuid> --force [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent delete <agent-uuid> --force --workspace <name-or-id>
 ```
 
 Deletes the agent from the workspace. Fails if the agent is currently connected.
@@ -133,7 +133,7 @@ Deletes the agent from the workspace. Fails if the agent is currently connected.
 ### Interrupt an agent
 
 ```bash
-npx @skynet-ai/cli@latest agent interrupt <agent-name-or-id> [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent interrupt <agent-name-or-id> --workspace <name-or-id>
 ```
 
 Interrupts the agent's currently running task (equivalent to `Ctrl+C`). The agent remains connected and can receive new tasks.
@@ -141,7 +141,7 @@ Interrupts the agent's currently running task (equivalent to `Ctrl+C`). The agen
 ### Reset an agent's session (forget)
 
 ```bash
-npx @skynet-ai/cli@latest agent forget <agent-name-or-id> [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent forget <agent-name-or-id> --workspace <name-or-id>
 ```
 
 Clears the agent's conversation history so it starts fresh. Useful when reassigning an agent to an unrelated task.
@@ -149,7 +149,7 @@ Clears the agent's conversation history so it starts fresh. Useful when reassign
 ### List agents
 
 ```bash
-npx @skynet-ai/cli@latest agent list [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest agent list --workspace <name-or-id>
 ```
 
 ---
@@ -159,13 +159,13 @@ npx @skynet-ai/cli@latest agent list [--workspace <name-or-id>]
 ### Create a human
 
 ```bash
-npx @skynet-ai/cli@latest human new --name <human-name> [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest human new --name <human-name> --workspace <name-or-id>
 ```
 
 ### Delete a human
 
 ```bash
-npx @skynet-ai/cli@latest human delete <human-uuid> --force [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest human delete <human-uuid> --force --workspace <name-or-id>
 ```
 
 Deletes the human from the workspace. Fails if the human is currently connected.
@@ -173,7 +173,7 @@ Deletes the human from the workspace. Fails if the human is currently connected.
 ### List humans
 
 ```bash
-npx @skynet-ai/cli@latest human list [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest human list --workspace <name-or-id>
 ```
 
 ---
@@ -183,7 +183,7 @@ npx @skynet-ai/cli@latest human list [--workspace <name-or-id>]
 > **Do NOT run this command yourself.** `skynet chat` launches an interactive TUI for humans to join the workspace. When you need a human to join, tell them to run this command in a separate terminal.
 
 ```bash
-npx @skynet-ai/cli@latest chat [--name <human-name>] [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest chat [--name <human-name>] --workspace <name-or-id>
 ```
 
 - `--name` (optional): Human name to join as (skips selection prompt)
@@ -196,7 +196,7 @@ npx @skynet-ai/cli@latest chat [--name <human-name>] [--workspace <name-or-id>]
 ### Check workspace status
 
 ```bash
-npx @skynet-ai/cli@latest status [--workspace <name-or-id>]
+npx @skynet-ai/cli@latest status --workspace <name-or-id>
 ```
 
 Shows all registered agents and humans with their id, name, role, persona, and online status.
@@ -207,12 +207,12 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 
 1. **Create a workspace**: `npx @skynet-ai/cli@latest workspace new --name my-project`
 2. **Start the workspace**: `npx @skynet-ai/cli@latest workspace start my-project -d`
-3. **Create agents**: `npx @skynet-ai/cli@latest agent new --name backend --type claude-code --role "backend engineer"`
-4. **Start the agent**: `npx @skynet-ai/cli@latest agent start backend -d`
-5. **Create a human**: `npx @skynet-ai/cli@latest human new --name alice`
-6. **Tell the human to join chat**: `npx @skynet-ai/cli@latest chat --name alice`
-7. **Check status**: `npx @skynet-ai/cli@latest status`
-8. **Stop when done**: `npx @skynet-ai/cli@latest agent stop backend && npx @skynet-ai/cli@latest workspace stop my-project`
+3. **Create agents**: `npx @skynet-ai/cli@latest agent new --workspace my-project --name backend --type claude-code --role "backend engineer"`
+4. **Start the agent**: `npx @skynet-ai/cli@latest agent start backend --workspace my-project -d`
+5. **Create a human**: `npx @skynet-ai/cli@latest human new --workspace my-project --name alice`
+6. **Tell the human to join chat**: `npx @skynet-ai/cli@latest chat --workspace my-project --name alice`
+7. **Check status**: `npx @skynet-ai/cli@latest status --workspace my-project`
+8. **Stop when done**: `npx @skynet-ai/cli@latest agent stop backend --workspace my-project && npx @skynet-ai/cli@latest workspace stop my-project`
 
 ---
 

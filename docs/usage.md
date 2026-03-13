@@ -24,8 +24,8 @@ Skynet uses a **workspace-based model**. You first create a workspace, then crea
 # Create a workspace (interactive: name, host, port)
 skynet workspace new
 
-# Start it (auto-selects if only one workspace exists)
-skynet workspace
+# Start it
+skynet workspace start my-project
 ```
 
 ### 2. Create Entities
@@ -34,14 +34,14 @@ In a new terminal (workspace server must be running):
 
 ```bash
 # Create an agent
-skynet agent new
+skynet agent new --workspace my-project
 # > Agent name: backend-dev
 # > Agent type: claude-code
 # > Role: backend engineer
 # Agent 'backend-dev' created.
 
 # Create a human profile
-skynet human new
+skynet human new --workspace my-project
 # > Human name: alice
 # Human 'alice' created.
 ```
@@ -49,13 +49,13 @@ skynet human new
 ### 3. Start an Agent
 
 ```bash
-skynet agent   # Select agent from list, connects to workspace automatically
+skynet agent --workspace my-project   # Select agent from list, connects to workspace
 ```
 
 ### 4. Chat as a Human
 
 ```bash
-skynet human   # Select human from list, opens chat TUI
+skynet human --workspace my-project   # Select human from list, opens chat TUI
 ```
 
 ---
@@ -67,10 +67,9 @@ skynet human   # Select human from list, opens chat TUI
 Manage workspaces.
 
 ```bash
-skynet workspace new          # Create a new workspace (interactive or --name/--host/--port)
-skynet workspace list         # List all workspaces
-skynet workspace              # Start the only workspace (errors if multiple exist)
-skynet workspace start [id]   # Start a specific workspace by name or UUID
+skynet workspace new                  # Create a new workspace (interactive or --name/--host/--port)
+skynet workspace list                 # List all workspaces
+skynet workspace start <name-or-id>   # Start a specific workspace by name or UUID
 ```
 
 **`skynet workspace new`** prompts for:
@@ -107,9 +106,9 @@ Once running, the server exposes:
 Create, list, and start agents.
 
 ```bash
-skynet agent new        [--workspace <id>]  # Create agent (interactive)
-skynet agent list       [--workspace <id>]  # List all agents
-skynet agent            [--workspace <id>]  # Select and start agent
+skynet agent new        --workspace <id>  # Create agent (interactive)
+skynet agent list       --workspace <id>  # List all agents
+skynet agent            --workspace <id>  # Select and start agent
 skynet agent interrupt  <name-or-id>        # Interrupt agent's current task
 skynet agent forget     <name-or-id>        # Reset agent's conversation session
 ```
@@ -132,9 +131,9 @@ Non-interactive mode: `skynet agent new --name my-agent --type claude-code --rol
 Create, list, and start human chat sessions.
 
 ```bash
-skynet human new   [--workspace <id>]  # Create human (interactive)
-skynet human list  [--workspace <id>]  # List all humans
-skynet human       [--workspace <id>]  # Select human, start chat TUI
+skynet human new   --workspace <id>  # Create human (interactive)
+skynet human list  --workspace <id>  # List all humans
+skynet human       --workspace <id>  # Select human, start chat TUI
 ```
 
 **`skynet human`** (bare command) selects a registered human and opens the chat TUI.
@@ -144,14 +143,12 @@ skynet human       [--workspace <id>]  # Select human, start chat TUI
 Show the status of the workspace.
 
 ```bash
-skynet status [--workspace <id>]
+skynet status --workspace <id>
 ```
 
 ### Workspace Selection
 
-All commands that need a workspace context use `--workspace <uuid|name>`. If omitted:
-- **One workspace exists**: auto-selected
-- **Multiple workspaces exist**: command errors out with a message to specify `--workspace`
+All commands that need a workspace context require `--workspace <uuid|name>`. There is no auto-selection; the command errors out if `--workspace` is omitted.
 
 ---
 
@@ -184,21 +181,21 @@ A typical workflow with two agents collaborating on a project:
 
 ```bash
 # Terminal 1: Start workspace
-skynet workspace
+skynet workspace start my-project
 
 # Terminal 2: Set up the workspace
-skynet agent new                         # Create "backend-dev" (claude-code)
-skynet agent new                         # Create "frontend-dev" (gemini-cli)
-skynet human new                         # Create "lead"
+skynet agent new --workspace my-project                         # Create "backend-dev" (claude-code)
+skynet agent new --workspace my-project                         # Create "frontend-dev" (gemini-cli)
+skynet human new --workspace my-project                         # Create "lead"
 
 # Terminal 3: Start backend agent
-skynet agent   # Select backend-dev — auto-joins workspace
+skynet agent --workspace my-project   # Select backend-dev, connects to workspace
 
 # Terminal 4: Start frontend agent
-skynet agent   # Select frontend-dev — auto-joins workspace
+skynet agent --workspace my-project   # Select frontend-dev, connects to workspace
 
 # Terminal 5: Chat as human lead
-skynet human   # Select lead, opens chat TUI — auto-joins workspace
+skynet human --workspace my-project   # Select lead, opens chat TUI
 
 # In the chat:
 # lead> @backend-dev Please implement the /api/users REST endpoint
