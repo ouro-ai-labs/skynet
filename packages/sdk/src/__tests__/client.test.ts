@@ -227,4 +227,28 @@ describe('SkynetClient reconnection', () => {
     expect(replacedCount).toBe(1);
     expect(client.connected).toBe(false);
   }, 10000);
+
+  it('emits debug event on reconnection failure', async () => {
+    const p = nextPort();
+    const wss = new WebSocketServer({ port: p });
+    createJoinHandler(wss);
+
+    const client = createTestClient(p);
+    cleanups.push(() => client.close());
+    await client.connect();
+
+    const debugMessages: string[] = [];
+    client.on('debug', (msg: string) => {
+      debugMessages.push(msg);
+    });
+
+    await closeServer(wss);
+
+    // Wait for reconnect attempt to fail
+    await new Promise((r) => setTimeout(r, 500));
+
+    expect(debugMessages.length).toBeGreaterThanOrEqual(1);
+    expect(debugMessages[0]).toContain('Reconnect attempt');
+    expect(debugMessages[0]).toContain('failed');
+  }, 10000);
 });
