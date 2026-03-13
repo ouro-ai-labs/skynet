@@ -106,6 +106,7 @@ async function fetchAgents(url: string): Promise<AgentCard[]> {
     return await res.json() as AgentCard[];
   } catch {
     console.error(`Failed to connect to workspace at ${url}`);
+    console.error('Is the workspace running? Start it with: skynet workspace start <name>');
     process.exit(1);
   }
 }
@@ -341,6 +342,7 @@ export function registerAgentCommand(program: Command): void {
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
+        console.error('Is the workspace running? Start it with: skynet workspace start <name>');
         process.exit(1);
       }
     });
@@ -401,6 +403,7 @@ export function registerAgentCommand(program: Command): void {
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
+        console.error('Is the workspace running? Start it with: skynet workspace start <name>');
         process.exit(1);
       }
     });
@@ -430,6 +433,7 @@ export function registerAgentCommand(program: Command): void {
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
+        console.error('Is the workspace running? Start it with: skynet workspace start <name>');
         process.exit(1);
       }
     });
@@ -459,6 +463,7 @@ export function registerAgentCommand(program: Command): void {
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
+        console.error('Is the workspace running? Start it with: skynet workspace start <name>');
         process.exit(1);
       }
     });
@@ -490,6 +495,7 @@ export function registerAgentCommand(program: Command): void {
         }
       } catch {
         console.error(`Failed to connect to workspace at ${url}`);
+        console.error('Is the workspace running? Start it with: skynet workspace start <name>');
         process.exit(1);
       }
     });
