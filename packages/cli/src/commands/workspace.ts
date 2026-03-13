@@ -55,26 +55,17 @@ function startDaemon(workspace: WorkspaceEntry): void {
 }
 
 function resolveWorkspaceArg(identifier?: string): WorkspaceEntry {
-  if (identifier) {
-    const entry = getWorkspaceByIdOrName(identifier);
-    if (!entry) {
-      console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
-      process.exit(1);
-    }
-    return entry!;
+  if (!identifier) {
+    console.error('Missing required argument: workspace name or UUID. Run \'skynet workspace list\' to see available workspaces.');
+    process.exit(1);
   }
 
-  const workspaces = listWorkspaces();
-  if (workspaces.length === 0) {
-    console.error('No workspaces configured. Run \'skynet workspace new\' to create one.');
+  const entry = getWorkspaceByIdOrName(identifier);
+  if (!entry) {
+    console.error(`Workspace '${identifier}' not found. Run 'skynet workspace list' to see available workspaces.`);
     process.exit(1);
   }
-  if (workspaces.length > 1) {
-    console.error('Multiple workspaces found. Please specify which one.');
-    console.error('Run \'skynet workspace list\' to see available workspaces.');
-    process.exit(1);
-  }
-  return workspaces[0];
+  return entry!;
 }
 
 export function registerWorkspaceCommand(program: Command): void {
@@ -82,9 +73,9 @@ export function registerWorkspaceCommand(program: Command): void {
     .command('workspace')
     .description('Manage Skynet workspaces')
     .action(async () => {
-      // Bare `skynet workspace`: start the only workspace, or error if multiple
-      const entry = resolveWorkspaceArg();
-      await startServer(entry);
+      console.error('Missing required argument: workspace name or UUID. Run \'skynet workspace list\' to see available workspaces.');
+      console.error('Usage: skynet workspace start <name-or-id>');
+      process.exit(1);
     });
 
   workspace
@@ -146,7 +137,7 @@ export function registerWorkspaceCommand(program: Command): void {
       console.log(`  ID:   ${entry.id}`);
       console.log(`  Host: ${entry.host}:${entry.port}`);
       console.log(`  Dir:  ${getWorkspaceDir(entry.id)}`);
-      console.log('\nStart it with: skynet workspace start');
+      console.log(`\nStart it with: skynet workspace start ${entry.name}`);
     });
 
   workspace
