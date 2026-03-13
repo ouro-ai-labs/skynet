@@ -135,20 +135,21 @@ Skills are installed into the agent's working directory after creation. The skil
 
 ### `skynet agent start <name-or-id>`
 
-Start an agent by name or UUID. Connects to the workspace via WebSocket and begins processing messages. By default runs in the foreground; use `-d` to run as a background daemon. Press `Ctrl+C` to disconnect in foreground mode.
+Start an agent by name or UUID. Connects to the workspace via WebSocket and begins processing messages. Runs as a background daemon by default; use `-f` to run in the foreground. Press `Ctrl+C` to disconnect in foreground mode.
 
 ```bash
-# Start in foreground (default)
+# Start as a background daemon (default)
 skynet agent start coder
 
-# Start as a background daemon
-skynet agent start coder -d
+# Start in foreground
+skynet agent start coder -f
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID |
-| `-d, --daemon` | Run in background as a daemon process |
+| `-d, --daemon` | Run as daemon (default, kept for backward compatibility) |
+| `-f, --foreground` | Run in foreground instead of daemon mode |
 
 ### `skynet agent stop <name-or-id>`
 
@@ -372,16 +373,16 @@ skynet status --workspace my-project
 
 ### Daemon Workflow
 
-Use `-d` to run workspace and agents in the background without occupying terminals:
+Agents now default to daemon mode. Use `-d` for workspace to run in the background:
 
 ```bash
 # 1. Create and start workspace in background
 skynet workspace new --name my-project --port 4117
 skynet workspace start my-project -d
 
-# 2. Register and start agents in background
+# 2. Register and start agents (daemon by default)
 skynet agent new --workspace my-project --name coder --type claude-code --role "full-stack developer"
-skynet agent start coder --workspace my-project -d
+skynet agent start coder --workspace my-project
 
 # 3. Check status / view logs
 skynet workspace status my-project

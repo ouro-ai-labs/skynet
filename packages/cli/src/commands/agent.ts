@@ -214,17 +214,18 @@ export function registerAgentCommand(program: Command): void {
     .command('start <name-or-id>')
     .description('Start an agent by name or UUID')
     .option('--workspace <name-or-id>', 'Workspace name or UUID')
-    .option('-d, --daemon', 'Run in background as a daemon process')
-    .action(async (nameOrId: string, opts: { workspace?: string; daemon?: boolean }) => {
+    .option('-d, --daemon', 'Run as daemon (default, kept for backward compatibility)')
+    .option('-f, --foreground', 'Run in foreground instead of daemon mode')
+    .action(async (nameOrId: string, opts: { workspace?: string; daemon?: boolean; foreground?: boolean }) => {
       const workspace = selectWorkspace(opts);
       const url = getServerUrl(workspace);
       const agents = await fetchAgents(url);
       const agentProfile = resolveAgent(agents, nameOrId);
 
-      if (opts.daemon) {
-        startAgentDaemon(agentProfile, workspace.id, url);
-      } else {
+      if (opts.foreground) {
         await runAgent(agentProfile, workspace.id, url);
+      } else {
+        startAgentDaemon(agentProfile, workspace.id, url);
       }
     });
 

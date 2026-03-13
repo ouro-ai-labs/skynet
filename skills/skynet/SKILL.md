@@ -96,13 +96,13 @@ npx skills find <query>
 
 Review the search results with the user and confirm which skill to use before passing it to `--skills`.
 
-### Start an agent (daemon)
+### Start an agent
 
 ```bash
-npx @skynet-ai/cli@latest agent start <agent-name-or-id> -d --workspace <name-or-id>
+npx @skynet-ai/cli@latest agent start <agent-name-or-id> --workspace <name-or-id>
 ```
 
-Connects the agent to the workspace and starts processing messages as a background daemon.
+Connects the agent to the workspace and starts processing messages as a background daemon (default). Use `-f` to run in foreground instead.
 
 ### Stop an agent
 
@@ -208,7 +208,7 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 1. **Create a workspace**: `npx @skynet-ai/cli@latest workspace new --name my-project`
 2. **Start the workspace**: `npx @skynet-ai/cli@latest workspace start my-project -d`
 3. **Create agents**: `npx @skynet-ai/cli@latest agent new --workspace my-project --name backend --type claude-code --role "backend engineer"`
-4. **Start the agent**: `npx @skynet-ai/cli@latest agent start backend --workspace my-project -d`
+4. **Start the agent**: `npx @skynet-ai/cli@latest agent start backend --workspace my-project`
 5. **Create a human**: `npx @skynet-ai/cli@latest human new --workspace my-project --name alice`
 6. **Tell the human to join chat**: `npx @skynet-ai/cli@latest chat --workspace my-project --name alice`
 7. **Check status**: `npx @skynet-ai/cli@latest status --workspace my-project`

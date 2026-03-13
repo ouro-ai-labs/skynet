@@ -98,13 +98,13 @@ npx skills find <query>
 
 Review the search results with the user and confirm which skill to use before passing it to `--skills`.
 
-### Start an agent (daemon)
+### Start an agent
 
 ```bash
-pnpm skynet agent start <agent-name-or-id> -d --workspace <name-or-id>
+pnpm skynet agent start <agent-name-or-id> --workspace <name-or-id>
 ```
 
-Connects the agent to the workspace and starts processing messages as a background daemon.
+Connects the agent to the workspace and starts processing messages as a background daemon (default). Use `-f` to run in foreground instead.
 
 ### Stop an agent
 
@@ -211,7 +211,7 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 2. **Create a workspace**: `pnpm skynet workspace new --name my-project`
 3. **Start the workspace**: `pnpm skynet workspace start my-project -d`
 4. **Create agents**: `pnpm skynet agent new --workspace my-project --name backend --type claude-code --role "backend engineer"`
-5. **Start the agent**: `pnpm skynet agent start backend --workspace my-project -d`
+5. **Start the agent**: `pnpm skynet agent start backend --workspace my-project`
 6. **Create a human**: `pnpm skynet human new --workspace my-project --name alice`
 7. **Human joins chat** (tell them to run): `pnpm skynet chat --workspace my-project --name alice`
 8. **Check status**: `pnpm skynet status --workspace my-project`
