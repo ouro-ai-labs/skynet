@@ -79,7 +79,8 @@ Messages support **Markdown** formatting (bold, italic, inline code, code blocks
 | Key | Action |
 |-----|--------|
 | `Ctrl+V` | Paste image from clipboard (macOS & Linux) |
-| `Ctrl+C` | Exit |
+| `Ctrl+C` | Clear input (shows exit hint) |
+| `Ctrl+D` | Exit |
 
 ## Autocomplete
 

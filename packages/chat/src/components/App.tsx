@@ -108,12 +108,19 @@ export function App({ options }: AppProps): React.ReactElement {
     sendChat(text, mentions, atts);
   }, [state.members, sendChat, close, exit]);
 
-  // Ctrl+C to exit
+  // Ctrl+D to exit
   useInput((_input, key) => {
-    if (key.ctrl && _input === 'c') {
+    if (key.ctrl && _input === 'd') {
       close().then(() => exit()).catch(() => exit());
     }
   });
+
+  const handleExitHint = useCallback(() => {
+    setCommandOutputs((prev) => [
+      ...prev,
+      { lines: ['Use Ctrl+D or /quit to exit.'] },
+    ]);
+  }, []);
 
   // Build static items as an append-only list.
   // Ink's <Static> tracks rendered items by index, so the array must only grow —
@@ -190,7 +197,7 @@ export function App({ options }: AppProps): React.ReactElement {
     return (
       <Box flexDirection="column" paddingX={1} paddingY={1}>
         <Text color="red">Failed to connect: {state.error}</Text>
-        <Text dimColor>Press Ctrl+C to exit</Text>
+        <Text dimColor>Press Ctrl+D to exit</Text>
       </Box>
     );
   }
@@ -254,6 +261,7 @@ export function App({ options }: AppProps): React.ReactElement {
         {/* Input */}
         <InputBar
           onSubmit={handleSubmit}
+          onExitHint={handleExitHint}
           members={state.members}
         />
 
@@ -284,7 +292,8 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text>  Up/Down         Input history</Text>
             <Text>  @name           Autocomplete member</Text>
             <Text>  Ctrl+V          Paste image from clipboard</Text>
-            <Text>  Ctrl+C          Exit</Text>
+            <Text>  Ctrl+C          Clear input</Text>
+            <Text>  Ctrl+D          Exit</Text>
             <Text />
             <Text dimColor>Press /help again to close</Text>
           </Box>
