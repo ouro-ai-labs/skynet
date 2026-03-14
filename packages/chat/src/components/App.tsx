@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import { type SkynetMessage, type Attachment, extractMentionNames, MENTION_ALL } from '@skynet-ai/protocol';
+import { type SkynetMessage, type Attachment } from '@skynet-ai/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -87,26 +87,10 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Resolve @name tokens to agent IDs
-    const mentionedNames = extractMentionNames(text);
-    const resolvedIds: string[] = [];
-    for (const name of mentionedNames) {
-      if (name === 'all') {
-        resolvedIds.push(MENTION_ALL);
-        continue;
-      }
-      for (const [id, card] of state.members) {
-        if (card.name.toLowerCase() === name) {
-          resolvedIds.push(id);
-          break;
-        }
-      }
-    }
-
-    const mentions = resolvedIds.length > 0 ? resolvedIds : undefined;
+    // Server enriches @name mentions from text; no client-side resolution needed
     const atts = attachments.length > 0 ? attachments : undefined;
-    sendChat(text, mentions, atts);
-  }, [state.members, sendChat, close, exit]);
+    sendChat(text, undefined, atts);
+  }, [sendChat, close, exit, options.serverUrl, agentId]);
 
   // Ctrl+D to exit
   useInput((_input, key) => {

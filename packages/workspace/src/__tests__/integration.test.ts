@@ -538,6 +538,72 @@ describe('Server integration', () => {
     await alice.close();
   });
 
+  it('server enriches mentions from markdown-wrapped @names in message text', async () => {
+    const sender = await makeClient(PORT, 'enrich-sender');
+    const target = await makeClient(PORT, 'enrich-target', AgentType.CLAUDE_CODE);
+    await sender.connect();
+    await target.connect();
+    await sleep(50);
+
+    const received: SkynetMessage[] = [];
+    target.on('chat', (msg: SkynetMessage) => received.push(msg));
+
+    // Send message with markdown-wrapped mention — client passes empty mentions
+    sender.chat('**@enrich-target** please do this', []);
+    await sleep(200);
+
+    // The server should have enriched mentions so target receives the message
+    expect(received).toHaveLength(1);
+    expect(received[0].mentions).toContain(target.agent.id);
+
+    await sender.close();
+    await target.close();
+  });
+
+  it('server enriches mentions for offline agents visible on reconnect', async () => {
+    const sender = await makeClient(PORT, 'offline-sender');
+    // Register offline-agent but don't connect it yet
+    const offlineAgent = await makeClient(PORT, 'offline-agent', AgentType.CLAUDE_CODE);
+    await sender.connect();
+    await sleep(50);
+
+    // Send message mentioning the offline agent (client can't resolve, sends empty mentions)
+    sender.chat('Hey **@offline-agent** check this', []);
+    await sleep(200);
+
+    // Now the offline agent connects — should see the message in history
+    const state = await offlineAgent.connect();
+    const chatMessages = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMessages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toContain('Hey **@offline-agent** check this');
+
+    await sender.close();
+    await offlineAgent.close();
+  });
+
+  it('server does not duplicate already-resolved mentions', async () => {
+    const sender = await makeClient(PORT, 'nodup-sender');
+    const target = await makeClient(PORT, 'nodup-target', AgentType.CLAUDE_CODE);
+    await sender.connect();
+    await target.connect();
+    await sleep(50);
+
+    const received: SkynetMessage[] = [];
+    target.on('chat', (msg: SkynetMessage) => received.push(msg));
+
+    // Client already resolved the mention correctly
+    sender.chat('@nodup-target please review', [target.agent.id]);
+    await sleep(200);
+
+    expect(received).toHaveLength(1);
+    // Should have exactly one occurrence of target ID, not duplicated
+    const targetMentions = received[0].mentions!.filter(id => id === target.agent.id);
+    expect(targetMentions).toHaveLength(1);
+
+    await sender.close();
+    await target.close();
+  });
+
   it('workspace.state for non-human agents only includes messages mentioning them', async () => {
     const alice = await makeClient(PORT, 'alice-state');
     // bob is a non-human agent — should only see mentioned messages

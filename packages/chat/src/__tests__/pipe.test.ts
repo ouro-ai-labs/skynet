@@ -74,7 +74,7 @@ function withFakeStdin<T>(lines: string[], fn: () => Promise<T>): Promise<T> {
 }
 
 describe('runChatPipe', () => {
-  it('sends stdin lines as chat messages and resolves @mentions', async () => {
+  it('sends stdin lines as chat messages (server resolves mentions)', async () => {
     await withFakeStdin(['hello world', '@alice do something'], async () => {
       const { runChatPipe } = await import('../pipe.js');
       await runChatPipe({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
@@ -85,7 +85,8 @@ describe('runChatPipe', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0].text).toBe('hello world');
     expect(calls[1].text).toBe('@alice do something');
-    expect(calls[1].mentions).toContain('agent-1');
+    // Mentions are resolved server-side, not by the client
+    expect(calls[1].mentions).toBeUndefined();
   });
 
   it('closes client on stdin EOF', async () => {
@@ -144,13 +145,14 @@ describe('runChatPipe', () => {
     expect(calls[0].text).toBe('actual message');
   });
 
-  it('resolves @all mention', async () => {
+  it('sends @all without client-side resolution (server handles it)', async () => {
     await withFakeStdin(['@all attention please'], async () => {
       const { runChatPipe } = await import('../pipe.js');
       await runChatPipe({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
     });
 
     const calls = lastClient().chatCalls as Array<{ text: string; mentions?: string[] }>;
-    expect(calls[0].mentions).toContain('__all__');
+    // @all is resolved server-side, not by the client
+    expect(calls[0].mentions).toBeUndefined();
   });
 });

@@ -15,7 +15,6 @@ import {
   AgentType,
   MessageType,
   MENTION_ALL,
-  extractMentionNames,
 } from '@skynet-ai/protocol';
 
 interface MemberInfo {
@@ -393,10 +392,8 @@ export class AgentRunner {
         : `Message from ${senderName}: ${text}`;
       const response = await this.adapter.quickReply(prompt);
       if (response && !isNoReply(response)) {
-        const mentions = this.resolveMentions(response);
-        // Always include the original sender in mentions
-        if (!mentions.includes(msg.from)) mentions.push(msg.from);
-        this.client.chat(response, mentions);
+        // Include original sender; server enriches @name mentions from text
+        this.client.chat(response, [msg.from]);
       }
     } catch (err) {
       // Fork failed — fall back to normal queue so the message is not lost
@@ -493,9 +490,8 @@ export class AgentRunner {
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
           const response = await this.adapter.handleMessage(msg, senderName, notices || undefined);
           if (response && !isNoReply(response)) {
-            const mentions = this.resolveMentions(response);
-            if (!mentions.includes(msg.from)) mentions.push(msg.from);
-            this.client.chat(response, mentions);
+            // Include original sender; server enriches @name mentions from text
+            this.client.chat(response, [msg.from]);
           }
         } else {
           await this.handleBatchMessages(chatBatch, notices);
@@ -557,34 +553,10 @@ export class AgentRunner {
     const response = await this.adapter.handleMessage(batchMsg, senderName, notices || undefined);
 
     if (response && !isNoReply(response)) {
-      const mentions = this.resolveMentions(response);
-      // Include all senders in mentions
-      for (const m of messages) {
-        if (!mentions.includes(m.from)) mentions.push(m.from);
-      }
-      this.client.chat(response, mentions);
+      // Include all senders; server enriches @name mentions from text
+      const senderIds = [...new Set(messages.map(m => m.from))];
+      this.client.chat(response, senderIds);
     }
-  }
-
-  /** Resolve @name mentions in text to agent IDs (excluding self). @all maps to MENTION_ALL. */
-  private resolveMentions(text: string): string[] {
-    const names = extractMentionNames(text);
-    if (names.length === 0) return [];
-    const selfId = this.client.agent.id;
-    const ids: string[] = [];
-    for (const name of names) {
-      if (name === 'all') {
-        ids.push(MENTION_ALL);
-        continue;
-      }
-      for (const [agentId, info] of this.memberInfo) {
-        if (info.name.toLowerCase() === name && agentId !== selfId) {
-          ids.push(agentId);
-          break;
-        }
-      }
-    }
-    return ids;
   }
 
   /** Handle an interrupt control message — kill running process and clear queue. */

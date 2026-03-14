@@ -1347,15 +1347,15 @@ describe('AgentRunner agent-join race condition', () => {
     expect(memberInfo.has('late-agent-id')).toBe(true);
     expect(memberInfo.get('late-agent-id')!.name).toBe('late-joiner');
 
-    // Verify @mention resolution works for the late joiner
+    // Verify agent can respond to messages (mention resolution is server-side)
     const msg = makeChatMsg({ from: 'human-1', mentions: [runner.agentId] });
     client.emit('chat', msg);
     await new Promise(r => setTimeout(r, 50));
 
-    // The response contains @late-joiner, which should resolve to 'late-agent-id'
     expect(client.chatCalls.length).toBeGreaterThan(0);
     const lastCall = client.chatCalls[client.chatCalls.length - 1];
-    expect(lastCall.mentions).toContain('late-agent-id');
+    // Client includes original sender; server enriches @name mentions
+    expect(lastCall.mentions).toContain('human-1');
   });
 });
 

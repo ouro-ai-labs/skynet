@@ -7,8 +7,6 @@ import {
   type SkynetMessage,
   AgentType,
   MessageType,
-  extractMentionNames,
-  MENTION_ALL,
 } from '@skynet-ai/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 import { formatMessage, createAgentResolver } from './format.js';
@@ -114,24 +112,8 @@ export async function runChatPipe(opts: ChatPipeOptions): Promise<void> {
       // Unknown command — fall through and send as chat
     }
 
-    // Resolve @mentions
-    const mentionedNames = extractMentionNames(text);
-    const resolvedIds: string[] = [];
-    for (const name of mentionedNames) {
-      if (name === 'all') {
-        resolvedIds.push(MENTION_ALL);
-        continue;
-      }
-      for (const [id, card] of members) {
-        if (card.name.toLowerCase() === name) {
-          resolvedIds.push(id);
-          break;
-        }
-      }
-    }
-
-    const mentions = resolvedIds.length > 0 ? resolvedIds : undefined;
-    client.chat(text, mentions);
+    // Server enriches @name mentions from text; no client-side resolution needed
+    client.chat(text);
   }
 
   // stdin EOF — clean up
