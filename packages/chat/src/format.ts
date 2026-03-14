@@ -69,21 +69,14 @@ export function createAgentResolver(members: Map<string, AgentCard>): AgentResol
   };
 }
 
-// ── Marker emojis by agent type ──
+// ── Claude Code style markers ──
 
-export const AGENT_MARKERS: Record<string, string> = {
-  [AgentType.HUMAN]: '👤',
-  [AgentType.CLAUDE_CODE]: '🤖',
-  [AgentType.GEMINI_CLI]: '🤖',
-  [AgentType.CODEX_CLI]: '🤖',
-  [AgentType.MONITOR]: '📡',
-  [AgentType.GENERIC]: '🤖',
-};
-
+const MARKER = '\u23FA'; // ⏺
 const CONT = '\u23BF';   // ⎿
 
 function markerColored(type: AgentType): string {
-  return AGENT_MARKERS[type] ?? '🤖';
+  const color = AGENT_COLORS[type] ?? '#888888';
+  return chalk.hex(color)(MARKER);
 }
 
 function contColored(type: AgentType): string {
