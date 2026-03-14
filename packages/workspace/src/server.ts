@@ -7,6 +7,7 @@ import {
   type SkynetMessage,
   type AgentCard,
   type AgentStatus,
+  type ChatPayload,
   type HumanProfile,
   type JoinRequest,
   type AgentJoinPayload,
@@ -436,6 +437,50 @@ export class SkynetWorkspace {
     }
   }
 
+  /**
+   * Enrich the mentions array by scanning message text against all registered
+   * agents and humans. This ensures mentions are resolved even when the client
+   * fails to parse them (e.g. markdown-wrapped `**@backend**`) or when the
+   * mentioned member was offline and absent from the client's member list.
+   */
+  private enrichMentions(msg: SkynetMessage): string[] {
+    const existing = msg.mentions ? [...msg.mentions] : [];
+
+    // Only enrich chat messages that have text
+    if (msg.type !== MessageType.CHAT) return existing;
+    const text = (msg.payload as ChatPayload)?.text;
+    if (!text || !text.includes('@')) return existing;
+
+    const lower = text.toLowerCase();
+    const senderId = msg.from;
+    const ids = new Set(existing);
+
+    // Scan against all registered agents
+    for (const agent of this.store.listAgents()) {
+      if (agent.id === senderId) continue;
+      if (ids.has(agent.id)) continue;
+      if (lower.includes(`@${agent.name.toLowerCase()}`)) {
+        ids.add(agent.id);
+      }
+    }
+
+    // Scan against all registered humans
+    for (const human of this.store.listHumans()) {
+      if (human.id === senderId) continue;
+      if (ids.has(human.id)) continue;
+      if (lower.includes(`@${human.name.toLowerCase()}`)) {
+        ids.add(human.id);
+      }
+    }
+
+    // Check for @all
+    if (!ids.has(MENTION_ALL) && lower.includes('@all')) {
+      ids.add(MENTION_ALL);
+    }
+
+    return Array.from(ids);
+  }
+
   private handleSend(socket: WebSocket, msg: SkynetMessage): void {
     const agentId = this.socketAgentMap.get(socket);
     if (!agentId) {
@@ -448,6 +493,13 @@ export class SkynetWorkspace {
       ...msg,
       from: agentId,
     });
+
+    // Server-side mention enrichment: resolve @name patterns from text against
+    // the full registry (agents + humans), merging with client-provided mentions.
+    const enriched = this.enrichMentions(fullMsg);
+    if (enriched.length > 0) {
+      fullMsg.mentions = enriched;
+    }
 
     this.store.save(fullMsg);
     this.logger.debug(`Message from=${agentId} type=${fullMsg.type}`);

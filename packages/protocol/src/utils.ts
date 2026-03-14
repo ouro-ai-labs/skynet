@@ -27,13 +27,17 @@ export function createChatMessage(
 /**
  * Extract @name tokens from message text.
  * Returns the list of unique lowercased names found after '@'.
+ * Strips surrounding markdown formatting (e.g. **@name**, _@name_, `@name`).
  */
 export function extractMentionNames(text: string): string[] {
   const matches = text.match(/@(\S+)/g);
   if (!matches) return [];
   const names = new Set<string>();
   for (const m of matches) {
-    names.add(m.slice(1).toLowerCase());
+    // Strip the leading '@', then remove surrounding markdown chars (* _ ` ~)
+    const raw = m.slice(1).toLowerCase();
+    const cleaned = raw.replace(/^[*_`~]+|[*_`~.,;:!?)]+$/g, '');
+    if (cleaned) names.add(cleaned);
   }
   return Array.from(names);
 }
