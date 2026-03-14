@@ -3,7 +3,7 @@ export interface CommandResult {
   error?: boolean;
 }
 
-export async function executeCommand(serverUrl: string, input: string): Promise<CommandResult | null> {
+export async function executeCommand(serverUrl: string, input: string, humanId?: string): Promise<CommandResult | null> {
   const parts = input.trim().split(/\s+/);
   if (parts.length === 0) return null;
 
@@ -16,6 +16,10 @@ export async function executeCommand(serverUrl: string, input: string): Promise<
       return handleAgentCommand(serverUrl, subcommand, arg);
     case '/human':
       return handleHumanCommand(serverUrl, subcommand);
+    case '/watch':
+      return handleWatchCommand(serverUrl, subcommand, humanId);
+    case '/unwatch':
+      return handleUnwatchCommand(serverUrl, subcommand, humanId);
     default:
       return null;
   }
@@ -120,4 +124,56 @@ async function handleHumanCommand(serverUrl: string, sub: string | undefined): P
   }
 
   return { lines: ['Usage: /human list'], error: true };
+}
+
+async function handleWatchCommand(serverUrl: string, nameArg: string | undefined, humanId?: string): Promise<CommandResult> {
+  if (!nameArg || !nameArg.startsWith('@')) {
+    return { lines: ['Usage: /watch @<agent-name>'], error: true };
+  }
+  if (!humanId) {
+    return { lines: ['Cannot determine your identity.'], error: true };
+  }
+  return sendWatchControl(serverUrl, 'watch', nameArg, humanId);
+}
+
+async function handleUnwatchCommand(serverUrl: string, nameArg: string | undefined, humanId?: string): Promise<CommandResult> {
+  if (!nameArg || !nameArg.startsWith('@')) {
+    return { lines: ['Usage: /unwatch @<agent-name>'], error: true };
+  }
+  if (!humanId) {
+    return { lines: ['Cannot determine your identity.'], error: true };
+  }
+  return sendWatchControl(serverUrl, 'unwatch', nameArg, humanId);
+}
+
+async function sendWatchControl(serverUrl: string, action: 'watch' | 'unwatch', nameOrId: string, humanId: string): Promise<CommandResult> {
+  try {
+    const resolved = nameOrId.slice(1); // strip leading '@'
+
+    const listRes = await fetch(`${serverUrl}/api/agents`);
+    const agents = await listRes.json() as Array<{ id: string; name: string }>;
+
+    // Resolve agent name to ID
+    const agent = agents.find((a) => a.name === resolved || a.id === resolved || a.id.startsWith(resolved));
+    if (!agent) {
+      return { lines: [`Agent '${nameOrId}' not found.`], error: true };
+    }
+
+    const res = await fetch(`${serverUrl}/api/agents/${agent.id}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ humanId }),
+    });
+
+    if (res.ok) {
+      const label = action === 'watch'
+        ? `Watching agent '${agent.name}'. Execution logs will appear inline.`
+        : `Stopped watching agent '${agent.name}'.`;
+      return { lines: [label] };
+    }
+    const body = await res.json() as { error?: string };
+    return { lines: [body.error ?? `Failed to ${action} agent.`], error: true };
+  } catch {
+    return { lines: ['Failed to connect to workspace.'], error: true };
+  }
 }

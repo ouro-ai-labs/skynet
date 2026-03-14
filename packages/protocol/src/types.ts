@@ -51,10 +51,15 @@ export enum MessageType {
   // Agent control
   AGENT_INTERRUPT = 'agent.interrupt',
   AGENT_FORGET = 'agent.forget',
+  AGENT_WATCH = 'agent.watch',
+  AGENT_UNWATCH = 'agent.unwatch',
 
   // Context sharing
   CONTEXT_SHARE = 'context.share',
   FILE_CHANGE = 'file.change',
+
+  // Execution logs
+  EXECUTION_LOG = 'execution.log',
 }
 
 export interface SkynetMessage {
@@ -140,10 +145,42 @@ export interface AgentForgetPayload {
   agentId: string;
 }
 
+export interface AgentWatchPayload {
+  agentId: string;
+  humanId: string;
+}
+
+export interface AgentUnwatchPayload {
+  agentId: string;
+  humanId: string;
+}
+
 export interface FileChangePayload {
   path: string;
   changeType: 'created' | 'modified' | 'deleted';
   agentId: string;
+}
+
+// ── Execution Log Types ──
+
+export type ExecutionLogLevel = 'info' | 'warn' | 'error' | 'debug';
+
+export type ExecutionLogEvent =
+  | 'processing.start'
+  | 'processing.end'
+  | 'processing.error'
+  | 'tool.call'
+  | 'tool.result'
+  | 'thinking'
+  | 'custom';
+
+export interface ExecutionLogPayload {
+  event: ExecutionLogEvent;
+  summary: string;
+  level: ExecutionLogLevel;
+  durationMs?: number;
+  sourceMessageId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // ── Special Mention Constants ──

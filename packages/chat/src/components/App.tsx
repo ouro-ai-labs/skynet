@@ -77,9 +77,9 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Management commands: /agent, /human
-    if (cmd.startsWith('/agent') || cmd.startsWith('/human')) {
-      executeCommand(options.serverUrl, text.trim()).then((result) => {
+    // Management commands: /agent, /human, /watch, /unwatch
+    if (cmd.startsWith('/agent') || cmd.startsWith('/human') || cmd.startsWith('/watch') || cmd.startsWith('/unwatch')) {
+      executeCommand(options.serverUrl, text.trim(), agentId).then((result) => {
         if (result) {
           setCommandOutputs((prev) => [...prev, { lines: result.lines, error: result.error }]);
         }
@@ -277,6 +277,8 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text>  /agent interrupt     Interrupt agent</Text>
             <Text>  /agent forget        Reset agent session</Text>
             <Text>  /human list          List humans</Text>
+            <Text>  /watch @agent        Watch agent execution</Text>
+            <Text>  /unwatch @agent      Stop watching agent</Text>
             <Text />
             <Text bold> Input</Text>
             <Text>  Up/Down         Input history</Text>

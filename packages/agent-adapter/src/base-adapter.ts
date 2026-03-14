@@ -1,4 +1,4 @@
-import type { AgentType, SkynetMessage, TaskPayload, TaskResultPayload } from '@skynet-ai/protocol';
+import type { AgentType, ExecutionLogEvent, SkynetMessage, TaskPayload, TaskResultPayload } from '@skynet-ai/protocol';
 
 export interface TaskResult {
   success: boolean;
@@ -20,6 +20,9 @@ export abstract class AgentAdapter {
 
   /** Optional callback invoked with the exact prompt text before sending to the CLI. */
   onPrompt?: (prompt: string, context: { type: 'message' | 'task' | 'quick-reply' }) => void;
+
+  /** Optional callback invoked when the adapter produces execution log events (tool calls, thinking, etc.). */
+  onExecutionLog?: (event: ExecutionLogEvent, summary: string, metadata?: Record<string, unknown>) => void;
 
   /** Check if the underlying CLI tool is installed and available */
   abstract isAvailable(): Promise<boolean>;

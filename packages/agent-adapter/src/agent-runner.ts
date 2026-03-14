@@ -7,6 +7,8 @@ import {
   type AgentCard,
   type AgentJoinPayload,
   type AgentLeavePayload,
+  type AgentWatchPayload,
+  type AgentUnwatchPayload,
   type ChatPayload,
   type SkynetMessage,
   type TaskPayload,
@@ -69,6 +71,27 @@ interface QueuedMessage {
   arrivedAt: number;
 }
 
+/**
+ * Extract a safe error message from an error, avoiding command-line leaks.
+ * Execa errors include the full command in `.message` but provide a shorter
+ * `.shortMessage` that omits the command output.  We prefer that, then strip
+ * any `Command failed…: <binary> <args>` prefix so adapter internals (flags,
+ * system prompts) are never exposed in execution logs.
+ */
+function sanitizeErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  // Prefer execa's shortMessage (no stdout/stderr dump)
+  const raw: string = (err as unknown as Record<string, unknown>).shortMessage as string ?? err.message;
+  // Strip "Command failed with exit code N: <command...>" prefix
+  const cmdPrefix = /^Command failed.*?:\s*.+/;
+  if (cmdPrefix.test(raw)) {
+    const exitCodeMatch = raw.match(/exit code (\d+)/);
+    const code = exitCodeMatch ? exitCodeMatch[1] : 'unknown';
+    return `Command failed with exit code ${code}`;
+  }
+  return raw;
+}
+
 export class AgentRunner {
   private client: SkynetClient;
   private adapter: AgentAdapter;
@@ -85,6 +108,8 @@ export class AgentRunner {
   /** Timer for the next processQueue check. */
   private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly debounceMs: number;
+  /** Human IDs subscribed to verbose execution logs via /watch. */
+  private verboseSubscribers = new Set<string>();
 
   constructor(private options: AgentRunnerOptions) {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
@@ -147,6 +172,13 @@ export class AgentRunner {
         );
       };
     }
+
+    // Wire execution log callback — only send when humans are watching via /watch
+    this.adapter.onExecutionLog = (event, summary, metadata) => {
+      if (this.verboseSubscribers.size === 0) return;
+      const mentions = [...this.verboseSubscribers];
+      this.client.sendExecutionLog(event, summary, { metadata, mentions });
+    };
   }
 
   async start(): Promise<WorkspaceState> {
@@ -185,6 +217,8 @@ export class AgentRunner {
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('agent-interrupt', () => this.handleInterrupt());
     this.client.on('agent-forget', () => this.handleForget());
+    this.client.on('agent-watch', (msg: SkynetMessage) => this.handleWatch(msg));
+    this.client.on('agent-unwatch', (msg: SkynetMessage) => this.handleUnwatch(msg));
 
     const state = await this.client.connect();
     this.logger.info(`Connected, ${state.members.length} members online`);
@@ -425,6 +459,10 @@ export class AgentRunner {
     this.processing = true;
     this.setStatus('busy');
 
+    const startTime = Date.now();
+    this.emitWatchLog('processing.start', 'Started processing queue');
+    let hadError = false;
+
     // Process leading tasks
     while (this.messageQueue.length > 0 && this.messageQueue[0].msg.type === MessageType.TASK_ASSIGN) {
       const { msg } = this.messageQueue.shift()!;
@@ -432,7 +470,9 @@ export class AgentRunner {
         await this.handleTask(msg);
       } catch (err) {
         this.logger.error(`Error processing task from ${msg.from}:`, err);
+        this.emitWatchLog('processing.error', `Task processing failed: ${sanitizeErrorMessage(err)}`, { level: 'error' });
         this.setStatus('error');
+        hadError = true;
       }
     }
 
@@ -462,10 +502,15 @@ export class AgentRunner {
         }
       } catch (err) {
         this.logger.error('Error processing messages:', err);
+        this.emitWatchLog('processing.error', `Message processing failed: ${sanitizeErrorMessage(err)}`, { level: 'error' });
         this.setStatus('error');
+        hadError = true;
       }
     }
 
+    if (!hadError) {
+      this.emitWatchLog('processing.end', 'Finished processing queue', { durationMs: Date.now() - startTime });
+    }
     this.setStatus('idle');
     this.processing = false;
     this.persistState();
@@ -570,6 +615,41 @@ export class AgentRunner {
     this.processing = false;
     this.forkInProgress = false;
     this.setStatus('idle');
+  }
+
+  /** Handle a watch control message — add human to verbose subscribers. */
+  private handleWatch(msg: SkynetMessage): void {
+    const payload = msg.payload as AgentWatchPayload;
+    this.verboseSubscribers.add(payload.humanId);
+    this.logger.info(`Watch enabled by human: ${payload.humanId}`);
+  }
+
+  /** Handle an unwatch control message — remove human from verbose subscribers. */
+  private handleUnwatch(msg: SkynetMessage): void {
+    const payload = msg.payload as AgentUnwatchPayload;
+    this.verboseSubscribers.delete(payload.humanId);
+    this.logger.info(`Watch disabled by human: ${payload.humanId}`);
+  }
+
+  /**
+   * Emit an execution log to all current watch subscribers.
+   * Checks verboseSubscribers live (not snapshotted) so that /watch
+   * enabled mid-execution takes effect immediately.
+   */
+  private emitWatchLog(event: string, summary: string, options?: Record<string, unknown>): void {
+    if (this.verboseSubscribers.size === 0) return;
+    const mentions = [...this.verboseSubscribers];
+    const { level, durationMs, ...rest } = options ?? {};
+    this.client.sendExecutionLog(
+      event as import('@skynet-ai/protocol').ExecutionLogEvent,
+      summary,
+      {
+        ...(level ? { level: level as import('@skynet-ai/protocol').ExecutionLogLevel } : {}),
+        ...(durationMs !== undefined ? { durationMs: durationMs as number } : {}),
+        ...rest,
+        mentions,
+      },
+    );
   }
 
   private persistState(): void {
