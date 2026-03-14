@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/agent-adapter",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Agent adapters for Claude Code, Gemini CLI, Codex CLI and more",
   "type": "module",
   "main": "dist/index.js",
