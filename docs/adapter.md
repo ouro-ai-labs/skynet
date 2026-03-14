@@ -137,7 +137,7 @@ You have N unread messages. Please respond to all of them in a single reply:
 [sender-2]: message text
 ```
 
-Responses are sent as mentions to all senders in the batch.
+Responses automatically include all original senders in the `mentions` array, ensuring each sender receives the reply even if the response text doesn't contain an explicit `@name`. For single messages, `mentions` is `[msg.from]`; for batches, it is the deduplicated set of all sender IDs. See `docs/workspace.md` [Message Routing](workspace.md#message-routing) for the full routing flow.
 
 **Debounce Window:**
 
