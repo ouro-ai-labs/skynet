@@ -240,6 +240,53 @@ All runtime logs are written to `~/.skynet/<workspace-uuid>/logs/`:
 
 ---
 
+## E2E Testing
+
+### Run the skill-marketplace E2E test
+
+```bash
+pnpm e2e:skill-marketplace [options]
+```
+
+Runs a full end-to-end test of the Skynet workflow using the skill-marketplace scenario. This test:
+
+1. Creates a workspace with PM, backend, and frontend agents (all `claude-code`) and a human
+2. Starts all agents as daemons
+3. Uses **pipe mode** to simulate the human sending the initial project brief to PM
+4. Monitors agent collaboration and tracks progress through 5 phases
+5. Verifies agents produce deliverables in the working directory
+6. Cleans up all resources
+
+**Options**:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--timeout <seconds>` | `1800` (30 min) | Overall timeout |
+| `--workdir <path>` | `/tmp/skynet-e2e-marketplace` | Agent working directory |
+| `--workspace <name>` | `e2e-skill-marketplace` | Workspace name |
+| `--skip-setup` | `false` | Reuse existing workspace (skip creation) |
+| `--skip-cleanup` | `false` | Keep workspace running after test |
+
+**Examples**:
+
+```bash
+# Run full test with defaults
+pnpm e2e:skill-marketplace
+
+# Run with custom timeout and workdir
+pnpm e2e:skill-marketplace --timeout 3600 --workdir /tmp/my-test
+
+# Resume a test (skip setup, reuse existing workspace)
+pnpm e2e:skill-marketplace --skip-setup --workspace e2e-skill-marketplace
+
+# Keep workspace running after test for manual inspection
+pnpm e2e:skill-marketplace --skip-cleanup
+```
+
+> **Note**: This test uses real `claude-code` agents and incurs API costs. Ensure your environment has the necessary API keys configured.
+
+---
+
 ## Tips
 
 - **CRITICAL**: When deleting workspaces, agents, or humans, you **MUST** always pass `--force`. Without `--force`, the command enters an interactive confirmation prompt that will hang and block the agent indefinitely.

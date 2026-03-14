@@ -8,7 +8,8 @@
     "lint": "turbo lint",
     "clean": "turbo clean",
     "dev": "turbo dev",
-    "skynet": "node packages/cli/dist/index.js"
+    "skynet": "node packages/cli/dist/index.js",
+    "e2e:skill-marketplace": "tsx scripts/e2e-skill-marketplace.ts"
   },
   "devDependencies": {
     "tsx": "^4.21.0",
