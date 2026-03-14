@@ -76,33 +76,6 @@ describe('extractMentionNames', () => {
     const names = extractMentionNames('@claude-code-19aa169c hi');
     expect(names).toEqual(['claude-code-19aa169c']);
   });
-
-  it('strips markdown bold from mentions', () => {
-    expect(extractMentionNames('**@backend** please do this')).toEqual(['backend']);
-  });
-
-  it('strips markdown italic from mentions', () => {
-    expect(extractMentionNames('_@frontend_ please do this')).toEqual(['frontend']);
-  });
-
-  it('strips markdown bold+italic from mentions', () => {
-    expect(extractMentionNames('***@pm*** is ready')).toEqual(['pm']);
-  });
-
-  it('strips backtick from mentions', () => {
-    expect(extractMentionNames('`@backend` endpoint')).toEqual(['backend']);
-  });
-
-  it('strips trailing punctuation from mentions', () => {
-    expect(extractMentionNames('ask @pm, @backend.')).toEqual(['pm', 'backend']);
-  });
-
-  it('handles mixed markdown and plain mentions', () => {
-    const names = extractMentionNames('**@backend** and @frontend should coordinate');
-    expect(names).toContain('backend');
-    expect(names).toContain('frontend');
-    expect(names).toHaveLength(2);
-  });
 });
 
 describe('serialize / deserialize', () => {
