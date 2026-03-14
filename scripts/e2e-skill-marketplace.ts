@@ -33,10 +33,12 @@ import { fileURLToPath } from 'node:url';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
+const RUN_ID = randomUUID().slice(0, 8);
+
 const DEFAULTS = {
-  workspace: 'e2e-skill-marketplace',
+  workspace: `e2e-marketplace-${RUN_ID}`,
   human: 'tester',
-  workdir: `/tmp/skynet-e2e-marketplace-${randomUUID().slice(0, 8)}`,
+  workdir: `/tmp/skynet-e2e-marketplace-${RUN_ID}`,
   timeoutS: 1800,
   brief: [
     '@pm We\'re building a skill marketplace website where users can browse,',
@@ -208,7 +210,7 @@ async function setup(cfg: Config): Promise<void> {
 
   // Wait for agents to come online
   log('setup', 'Waiting for agents to connect...');
-  await waitForAgentsOnline(cfg, 30_000);
+  await waitForAgentsOnline(cfg, 60_000);
   logOk('setup', 'All agents online');
 }
 
@@ -219,28 +221,36 @@ async function waitForAgentsOnline(cfg: Config, timeoutMs: number): Promise<void
   while (Date.now() < deadline) {
     try {
       const status = skynet(`status --workspace ${cfg.workspace}`, { silent: true });
+      // Status format: "  pm [idle]" / "  pm [busy]" / "  pm [offline]"
+      // An agent is "online" if its status is anything other than "offline"
       const online = new Set<string>();
       for (const name of expected) {
-        // Status output contains agent name and "online" on the same or nearby line
-        if (status.includes(name) && status.includes('online')) {
+        const pattern = new RegExp(`^\\s*${name}\\s+\\[(?!offline)\\w+\\]`, 'm');
+        if (pattern.test(status)) {
           online.add(name);
         }
       }
+      log('setup', `Agents online: ${online.size}/${expected.size} (${[...online].join(', ') || 'none'})`);
       if (online.size === expected.size) return;
     } catch {
       // Status command may fail while server is starting
     }
-    await sleep(2000);
+    await sleep(3000);
   }
 
   throw new Error(`Agents did not come online within ${timeoutMs / 1000}s`);
 }
 
+interface TaggedLine {
+  text: string;
+  fromSelf: boolean;
+}
+
 interface PipeSession {
   proc: ChildProcess;
-  messages: string[];
+  messages: TaggedLine[];
   send: (text: string) => void;
-  waitForMessage: (pattern: RegExp, timeoutMs?: number) => Promise<string>;
+  waitForAgentMessage: (pattern: RegExp, timeoutMs?: number, sinceIdx?: number) => Promise<string>;
   close: () => Promise<void>;
 }
 
@@ -262,20 +272,28 @@ function openPipe(cfg: Config): PipeSession {
     },
   );
 
-  const messages: string[] = [];
+  const messages: TaggedLine[] = [];
   let buffer = '';
+  // Track whether current message block is from self (human) or an agent
+  let currentBlockFromSelf = false;
+  const selfHeaderPattern = new RegExp(`👤\\s*${cfg.human}`);
 
   proc.stdout!.on('data', (chunk: Buffer) => {
     buffer += chunk.toString();
     const lines = buffer.split('\n');
     buffer = lines.pop()!; // Keep incomplete line in buffer
     for (const line of lines) {
-      if (line.trim()) {
-        messages.push(line);
-        // Print received messages in real-time
-        const ts = new Date().toISOString().slice(11, 19);
-        console.log(`${DIM}${ts}${RESET} ${DIM}[pipe]${RESET} ${line}`);
+      if (!line.trim()) continue;
+
+      // Detect message header lines to track sender
+      if (line.includes('👤') || line.includes('🤖') || line.includes('📡')) {
+        currentBlockFromSelf = selfHeaderPattern.test(line);
       }
+
+      messages.push({ text: line, fromSelf: currentBlockFromSelf });
+      // Print received messages in real-time
+      const ts = new Date().toISOString().slice(11, 19);
+      console.log(`${DIM}${ts}${RESET} ${DIM}[pipe]${RESET} ${line}`);
     }
   });
 
@@ -289,30 +307,23 @@ function openPipe(cfg: Config): PipeSession {
     proc.stdin!.write(text + '\n');
   };
 
-  const waitForMessage = (pattern: RegExp, timeoutMs = 120_000): Promise<string> => {
+  const waitForAgentMessage = (pattern: RegExp, timeoutMs = 120_000, sinceIdx?: number): Promise<string> => {
     return new Promise((resolve, reject) => {
-      // Check existing messages first
-      const existing = messages.find((m) => pattern.test(m));
-      if (existing) {
-        resolve(existing);
-        return;
-      }
-
-      const startIdx = messages.length;
+      const startIdx = sinceIdx ?? messages.length;
       const timer = setTimeout(() => {
         reject(
           new Error(
-            `Timed out waiting for message matching ${pattern} (${timeoutMs / 1000}s)`,
+            `Timed out waiting for agent message matching ${pattern} (${timeoutMs / 1000}s)`,
           ),
         );
       }, timeoutMs);
 
       const check = setInterval(() => {
         for (let i = startIdx; i < messages.length; i++) {
-          if (pattern.test(messages[i])) {
+          if (!messages[i].fromSelf && pattern.test(messages[i].text)) {
             clearTimeout(timer);
             clearInterval(check);
-            resolve(messages[i]);
+            resolve(messages[i].text);
             return;
           }
         }
@@ -331,7 +342,7 @@ function openPipe(cfg: Config): PipeSession {
     });
   };
 
-  return { proc, messages, send, waitForMessage, close };
+  return { proc, messages, send, waitForAgentMessage, close };
 }
 
 async function runTest(cfg: Config): Promise<TestResult> {
@@ -348,24 +359,25 @@ async function runTest(cfg: Config): Promise<TestResult> {
   // Wait a moment for pipe to connect
   await sleep(2000);
 
-  // Phase 1: Send initial brief to PM
+  // Phase 1: Send initial brief to PM and wait for PM to respond
   const phase1Start = Date.now();
   log('test', 'Phase 1: Sending initial brief to PM...');
+  let msgIdx = pipe.messages.length;
   pipe.send(cfg.brief);
 
   try {
-    // Wait for PM to respond (should mention @backend or @frontend)
-    await pipe.waitForMessage(/pm/i, 180_000);
-    logOk('test', 'Phase 1: PM received the message');
+    // Wait for PM to respond — match the PM's header line (🤖 pm ->)
+    await pipe.waitForAgentMessage(/🤖\s*pm\s*->/i, 180_000, msgIdx);
+    logOk('test', 'Phase 1: PM responded');
     result.phases.push({
-      name: 'PM receives brief',
+      name: 'PM responds to brief',
       success: true,
       durationMs: Date.now() - phase1Start,
     });
   } catch (err) {
     logErr('test', `Phase 1 failed: ${(err as Error).message}`);
     result.phases.push({
-      name: 'PM receives brief',
+      name: 'PM responds to brief',
       success: false,
       durationMs: Date.now() - phase1Start,
       error: (err as Error).message,
@@ -374,12 +386,12 @@ async function runTest(cfg: Config): Promise<TestResult> {
     return result;
   }
 
-  // Phase 2: Wait for PM to break down tasks and assign to agents
+  // Phase 2: Wait for PM to mention @backend or @frontend (task assignment)
   const phase2Start = Date.now();
   log('test', 'Phase 2: Waiting for PM to assign tasks to backend/frontend...');
   try {
-    // PM should mention backend or frontend in task assignments
-    await pipe.waitForMessage(/(backend|frontend)/i, 300_000);
+    // PM should mention @backend or @frontend in task assignments
+    await pipe.waitForAgentMessage(/@(backend|frontend)/i, 300_000, msgIdx);
     logOk('test', 'Phase 2: PM assigned tasks to team');
     result.phases.push({
       name: 'PM assigns tasks',
@@ -433,10 +445,11 @@ async function runTest(cfg: Config): Promise<TestResult> {
   // Phase 4: Send a follow-up status check
   const phase4Start = Date.now();
   log('test', 'Phase 4: Asking PM for status update...');
+  msgIdx = pipe.messages.length;
   pipe.send('@pm What\'s the current status? Any blockers?');
 
   try {
-    await pipe.waitForMessage(/pm/i, 180_000);
+    await pipe.waitForAgentMessage(/🤖\s*pm\s*->/i, 180_000, msgIdx);
     logOk('test', 'Phase 4: PM responded with status');
     result.phases.push({
       name: 'PM status update',
@@ -456,12 +469,13 @@ async function runTest(cfg: Config): Promise<TestResult> {
   // Phase 5: Request wrap-up
   const phase5Start = Date.now();
   log('test', 'Phase 5: Requesting wrap-up...');
+  msgIdx = pipe.messages.length;
   pipe.send(
     '@pm Let\'s wrap up. Make sure everything builds and runs, then give me a summary of what was delivered.',
   );
 
   try {
-    await pipe.waitForMessage(/(summary|delivered|complete|done)/i, 300_000);
+    await pipe.waitForAgentMessage(/🤖\s*pm\s*->/i, 300_000, msgIdx);
     logOk('test', 'Phase 5: PM delivered summary');
     result.phases.push({
       name: 'PM wrap-up summary',
@@ -519,11 +533,14 @@ async function cleanup(cfg: Config): Promise<void> {
 
   log('cleanup', 'Deleting workspace...');
   try {
-    // Get workspace ID for deletion
+    // workspace list format: "  - name (host:port) [status] [uuid]"
     const list = skynet('workspace list', { silent: true });
-    const match = list.match(new RegExp(`(\\S+)\\s+${cfg.workspace}`));
+    const match = list.match(new RegExp(`${cfg.workspace}[^\\[]*\\[[^\\]]*\\]\\s*\\[([^\\]]+)\\]`));
     if (match) {
       skynet(`workspace delete ${match[1]} --force`, { silent: true });
+      logOk('cleanup', 'Workspace deleted');
+    } else {
+      logWarn('cleanup', 'Workspace not found in list');
     }
   } catch {
     logWarn('cleanup', 'Could not delete workspace (may need manual cleanup)');
