@@ -40,13 +40,16 @@ List all configured workspaces with name, host:port, and UUID.
 skynet workspace list
 ```
 
-### `skynet workspace start <name-or-id>`
+### `skynet workspace start [name-or-id]`
 
-Start a workspace server. Requires a workspace name or UUID. By default runs in the foreground; use `-d` to run as a background daemon.
+Start a workspace server. Accepts a workspace name or UUID as a positional argument or via `--workspace`. By default runs in the foreground; use `-d` to run as a background daemon.
 
 ```bash
 # Start in foreground (default)
 skynet workspace start my-project
+
+# Equivalent using --workspace flag
+skynet workspace start --workspace my-project
 
 # Start as a background daemon
 skynet workspace start my-project -d
@@ -54,6 +57,7 @@ skynet workspace start my-project -d
 
 | Flag | Description |
 |------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID (alternative to positional argument) |
 | `-d, --daemon` | Run in background as a daemon process |
 
 ### `skynet workspace stop <name-or-id>`
@@ -85,7 +89,7 @@ skynet workspace logs my-project --no-follow  # Don't follow
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-n, --lines <count>` | Number of lines to show | `50` |
-| `-f, --follow` | Follow log output | `true` |
+| `-f, --follow` | Follow log output (use `--no-follow` to disable) | `true` |
 
 ### `skynet workspace delete <id>`
 
@@ -127,9 +131,25 @@ skynet agent new --workspace <name-or-id> --name coder --type claude-code --role
 | `--role <role>` | Agent role description (optional) |
 | `--persona <persona>` | Persona description (optional) |
 | `--workdir <path>` | Custom working directory (default: `~/.skynet/<ws>/<id>/work`) |
-| `--skills <spec...>` | Install skills via `npx skills add` (repeatable, format: `source[:skill-name]`) |
+| `--skills <spec...>` | Install skills (repeatable — pass multiple times or space-separated, format: `source[:skill-name]`) |
 
 The command auto-detects which agent CLIs are available on your system and presents them as choices in interactive mode.
+
+The `--skills` option accepts one or more skill specifiers. You can pass it multiple times or provide several space-separated values:
+
+```bash
+# Single skill
+skynet agent new --workspace my-project --name coder --type claude-code \
+  --skills github.com/org/repo
+
+# Multiple skills
+skynet agent new --workspace my-project --name coder --type claude-code \
+  --skills github.com/org/repo github.com/org/other-repo
+
+# Select a specific skill from a multi-skill source
+skynet agent new --workspace my-project --name coder --type claude-code \
+  --skills github.com/org/repo:my-skill
+```
 
 Skills are installed into the agent's working directory after creation. The skill source can be a GitHub repo, local path, or any source supported by `npx skills add`. Append `:skill-name` to select a specific skill from a multi-skill source. In interactive mode, you can enter comma-separated skill specs when prompted.
 
@@ -188,7 +208,7 @@ skynet agent logs coder -n 100    # Show last 100 lines
 |------|-------------|---------|
 | `--workspace <name-or-id>` | Workspace name or UUID | |
 | `-n, --lines <count>` | Number of lines to show | `50` |
-| `-f, --follow` | Follow log output | `true` |
+| `-f, --follow` | Follow log output (use `--no-follow` to disable) | `true` |
 
 ### `skynet agent list`
 
@@ -311,21 +331,25 @@ skynet human delete a1b2c3d4-... --force
 
 ## `skynet chat` — Start Chat TUI
 
-Launch the chat terminal UI to participate in the workspace as a human.
+Launch the chat terminal UI to participate in the workspace as a human. In pipe mode, the chat reads from stdin and writes to stdout, which is useful for scripting and integration with external tools.
 
 ```bash
 skynet chat --workspace <name-or-id>
 
 # Specify human by name
 skynet chat --workspace <name-or-id> --name alice
+
+# Non-interactive pipe mode (read from stdin, write to stdout)
+skynet chat --workspace <name-or-id> --pipe --name alice
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Human name (skip selection prompt) |
+| `--pipe` | Non-interactive pipe mode: read from stdin, write to stdout |
 
-When multiple humans are registered and `--name` is not provided, an interactive selection prompt is shown.
+When multiple humans are registered and `--name` is not provided, an interactive selection prompt is shown. In `--pipe` mode, `--name` is required when multiple humans exist (there is no interactive prompt to fall back on).
 
 ---
 
@@ -363,7 +387,7 @@ Skynet Doctor
 All checks passed.
 ```
 
-Exits with code 1 if any critical check fails (Node.js version, pnpm, git). Missing agent CLIs are reported but do not cause a non-zero exit.
+Exits with code 1 if any critical check fails (Node.js version, pnpm, git) or if the default port availability check fails. Missing agent CLIs are reported but do not cause a non-zero exit.
 
 ---
 
