@@ -313,7 +313,19 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       }
     }
 
-    // Wait for the process to finish to catch exit code errors
+    // Wait for the process to finish, but don't hang forever.
+    // Claude CLI may leave child processes running (e.g. dev servers started
+    // during a smoke test), which prevents the process from exiting even though
+    // the result has already been streamed.
+    // If the process already exited (common case), await resolves immediately
+    // with no timer overhead. Only start the kill timer when it's still running.
+    const EXIT_TIMEOUT_MS = 5000;
+    let killTimer: ReturnType<typeof setTimeout> | null = null;
+    if (proc.exitCode === null) {
+      killTimer = setTimeout(() => {
+        proc.kill('SIGTERM');
+      }, EXIT_TIMEOUT_MS);
+    }
     try {
       await proc;
     } catch (err) {
@@ -321,7 +333,11 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       if (stderrChunks.length > 0 && err instanceof Error) {
         (err as unknown as Record<string, unknown>).stderrOutput = stderrChunks.join('\n');
       }
+      // If the process was killed due to timeout, don't propagate — we already have the result
+      if (resultText) return resultText;
       throw err;
+    } finally {
+      if (killTimer) clearTimeout(killTimer);
     }
 
     return resultText;
