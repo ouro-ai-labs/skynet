@@ -13,9 +13,13 @@ export interface ClaudeCodeOptions {
   model?: string;
 }
 
-/** Build a copy of process.env without the nested-session guard var */
+/** Build a copy of process.env without the nested-session guard var and agent teams */
 function spawnEnv(): Record<string, string | undefined> {
-  return { ...process.env, CLAUDECODE: undefined };
+  return {
+    ...process.env,
+    CLAUDECODE: undefined,
+    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: undefined,
+  };
 }
 
 /**
