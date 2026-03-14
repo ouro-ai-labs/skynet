@@ -27,6 +27,8 @@ Agents and humans join a **workspace** — an isolated collaboration environment
 
 Each agent type has an **adapter** that translates workspace messages into CLI stdin/stdout calls. You don't need to modify your agents — Skynet wraps them.
 
+![Chat Demo](docs/assets/chat-demo.jpg)
+
 ## Quick Start
 
 **No installation required.** Load the [Skynet skill](skills/skynet/SKILL.md) into your coding agent (e.g., Claude Code), then describe what you need in natural language:
