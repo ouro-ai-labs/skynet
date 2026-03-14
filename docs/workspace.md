@@ -127,10 +127,7 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 
 - Server overwrites `from` via `createMessage()` to prevent spoofing
 - Persists the message
-- Routing is entirely **mention-driven**:
-  - `@all` in mentions → broadcast to all members (including sender)
-  - Specific mentions → deliver to mentioned members + echo to sender
-  - **Human observers**: humans always receive all messages, even when not @mentioned, so they can see the full conversation flow
+- Routing is entirely **mention-driven** (see [Message Routing](#message-routing) below for full details)
 
 ### HEARTBEAT
 
@@ -217,6 +214,100 @@ Client A                  Server                    Client B
    |                        |                          |
    |-- LEAVE -------------->|                          |
    |                        |-- AGENT_LEAVE broadcast ->|  (immediate)
+```
+
+## Message Routing
+
+All message delivery is driven by the `mentions` array on `SkynetMessage`. The system builds the final mentions list through two layers, then routes based on the result.
+
+### 1. Mention Resolution (Server-Side Enrichment)
+
+When a client sends a message, the server runs `enrichMentions()` before routing:
+
+1. Starts with the `mentions` array provided by the client (may be empty).
+2. Scans the message text for `@name` patterns, matching case-insensitively against all registered agents and humans.
+3. Checks for the `@all` keyword → adds `MENTION_ALL` (`__all__`).
+4. Merges all discovered IDs into a deduplicated set.
+
+This ensures mentions are resolved even when:
+- The client doesn't resolve them (e.g., the chat TUI sends `mentions: undefined` and relies entirely on server enrichment).
+- The mentioned member was offline and absent from the client's cached member list.
+- The `@name` is wrapped in markdown (e.g., `**@backend**`).
+
+### 2. Client-Side Mention Injection (Agent Reply)
+
+When an agent's `AgentRunner` sends a reply, it **automatically adds the original sender's ID** to the mentions array. This ensures the sender receives the reply even if the agent's response text doesn't contain an explicit `@name`:
+
+| Scenario | Mentions added |
+|----------|---------------|
+| Single message reply | `[msg.from]` |
+| Quick reply (fork) | `[msg.from]` |
+| Batch reply (multiple queued messages) | All unique sender IDs from the batch |
+
+The server then further enriches these with any additional `@name` patterns found in the response text.
+
+> **Note:** This conflates two semantics in the `mentions` field — explicit "@I'm talking to you" mentions and implicit "route this reply back to sender" mentions. Both appear identically in the `mentions` array and in the UI display (shown as `sender -> target1, target2`).
+
+### 3. Routing Rules
+
+After mention enrichment, the server routes the message:
+
+| Mentions | Delivery |
+|----------|----------|
+| Contains `MENTION_ALL` (`__all__`) | Broadcast to **all** connected members (including sender) |
+| Contains specific agent IDs | Deliver to each mentioned member + echo to sender |
+| Empty | Echo to sender only |
+
+**Special rules:**
+- **Humans always receive all messages** (via `sendToHumans()`), regardless of whether they are mentioned. This gives humans full visibility as observers.
+- **Exception — execution logs** (`MessageType.EXECUTION_LOG`): NOT delivered to humans via `sendToHumans()`. Humans only see execution logs for agents they are explicitly watching (via `/watch @agent`).
+
+### 4. Message History on Join
+
+When an agent connects (or reconnects), the server sends recent message history as part of the `workspace.state` response. The history scope differs by member type:
+
+| Member type | History |
+|-------------|---------|
+| Human | Last 100 messages (all types) |
+| Non-human agent | Only recent messages that mention this agent (or `@all`), limited to `recentMentionsLimit` (default 3) |
+
+This prevents agents from seeing conversations they were not part of, while giving humans the full picture.
+
+### 5. End-to-End Example
+
+```
+Human "pm" types:  @frontend please start your tasks
+                    ↓
+Chat TUI sends:     client.chat("@frontend please start your tasks")
+                    mentions: undefined (TUI doesn't resolve)
+                    ↓
+Server enrichMentions():
+                    scans text → finds "@frontend" → resolves to frontend's ID
+                    final mentions: [frontend-id]
+                    ↓
+Server routes:      → frontend (mentioned)
+                    → pm echo (sender)
+                    → all humans (observer rule)
+                    ↓
+Frontend's AgentRunner processes message, generates response
+                    ↓
+AgentRunner sends:  client.chat(response, [msg.from])
+                    mentions: [pm-id]  (auto-added original sender)
+                    ↓
+Server enrichMentions():
+                    merges client mentions + any @names in text
+                    ↓
+Server routes:      → pm (mentioned via auto-reply)
+                    → all humans (observer rule)
+```
+
+Display in chat TUI:
+```
+⏺ pm -> frontend (14:37)
+  ⎿  @frontend please start your tasks
+
+⏺ frontend -> pm (14:38)
+  ⎿  Got it, starting now.
 ```
 
 ## Design Decisions

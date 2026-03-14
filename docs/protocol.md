@@ -16,7 +16,7 @@ interface SkynetMessage {
 }
 ```
 
-The `mentions` field drives all message routing. Mentioned agents receive the message; agents without a mention do not.
+The `mentions` field drives all message routing. Mentioned agents receive the message; agents without a mention do not (humans are an exception — they receive all messages regardless). The final `mentions` array is built from both client-provided values and server-side text scanning. See `docs/workspace.md` [Message Routing](workspace.md#message-routing) for the full enrichment and routing rules.
 
 ## Message Types
 
