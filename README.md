@@ -118,6 +118,7 @@ Use cases:
 - [Entities](docs/entities.md) — Workspace, agent, human lifecycle
 - [Workspace](docs/workspace.md) — WebSocket protocol, HTTP API
 - [Agent Adapter](docs/adapter.md) — CLI agent adapter system
+- [Chat TUI](docs/chat.md) — Terminal chat interface for human participation
 - [CLI Reference](docs/cli.md) — Complete CLI command reference
 - [Usage](docs/usage.md) — SDK examples, multi-agent workflows
 - [Phases](docs/phases.md) — Implementation roadmap
