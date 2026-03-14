@@ -66,6 +66,8 @@ export const SLASH_COMMANDS: CommandDef[] = [
   { name: '/agent interrupt', description: 'Interrupt agent' },
   { name: '/agent forget', description: 'Reset agent session' },
   { name: '/human list', description: 'List humans' },
+  { name: '/watch', description: 'Watch agent execution' },
+  { name: '/unwatch', description: 'Stop watching agent' },
 ];
 
 export function getCommandContext(value: string, cursorPos: number): { filter: string } | null {

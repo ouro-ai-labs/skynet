@@ -4,6 +4,9 @@ import {
   type SkynetMessage,
   type AgentCard,
   type Attachment,
+  type ExecutionLogEvent,
+  type ExecutionLogLevel,
+  type ExecutionLogPayload,
   type JoinRequest,
   type ServerEvent,
   ClientAction,
@@ -165,6 +168,15 @@ export class SkynetClient extends EventEmitter {
           case MessageType.AGENT_FORGET:
             this.emit('agent-forget', msg);
             break;
+          case MessageType.AGENT_WATCH:
+            this.emit('agent-watch', msg);
+            break;
+          case MessageType.AGENT_UNWATCH:
+            this.emit('agent-unwatch', msg);
+            break;
+          case MessageType.EXECUTION_LOG:
+            this.emit('execution-log', msg);
+            break;
         }
       });
 
@@ -253,6 +265,32 @@ export class SkynetClient extends EventEmitter {
     this.sendMessage({
       type: MessageType.CONTEXT_SHARE,
       payload: { files, metadata },
+    });
+  }
+
+  sendExecutionLog(
+    event: ExecutionLogEvent,
+    summary: string,
+    options?: {
+      level?: ExecutionLogLevel;
+      durationMs?: number;
+      sourceMessageId?: string;
+      metadata?: Record<string, unknown>;
+      mentions?: string[];
+    },
+  ): void {
+    const payload: ExecutionLogPayload = {
+      event,
+      summary,
+      level: options?.level ?? 'info',
+      ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+      ...(options?.sourceMessageId ? { sourceMessageId: options.sourceMessageId } : {}),
+      ...(options?.metadata ? { metadata: options.metadata } : {}),
+    };
+    this.sendMessage({
+      type: MessageType.EXECUTION_LOG,
+      payload,
+      ...(options?.mentions && options.mentions.length > 0 ? { mentions: options.mentions } : {}),
     });
   }
 

@@ -13,6 +13,8 @@ import {
   type AgentLeavePayload,
   type AgentInterruptPayload,
   type AgentForgetPayload,
+  type AgentWatchPayload,
+  type AgentUnwatchPayload,
   AgentType,
   MessageType,
   ClientAction,
@@ -96,6 +98,7 @@ export class SkynetWorkspace {
     this.fastify.get('/api/members', async () => {
       return this.members.getMembers();
     });
+
   }
 
   private registerAgentRoutes(): void {
@@ -204,6 +207,62 @@ export class SkynetWorkspace {
         });
         this.members.sendTo(agent.id, msg);
         this.logger.info(`Forget sent to agent: ${agent.name} (${agent.id})`);
+        return { ok: true, agentId: agent.id };
+      },
+    );
+
+    // Watch agent — enable verbose execution log streaming to a human
+    this.fastify.post<{ Params: { id: string }; Body: { humanId: string } }>(
+      '/api/agents/:id/watch',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const member = this.members.getMember(agent.id);
+        if (!member) {
+          return reply.status(409).send({ error: 'Agent is not connected' });
+        }
+        const humanId = req.body?.humanId;
+        if (!humanId) {
+          return reply.status(400).send({ error: 'humanId is required' });
+        }
+        const msg = createMessage({
+          type: MessageType.AGENT_WATCH,
+          from: agent.id,
+          payload: { agentId: agent.id, humanId } satisfies AgentWatchPayload,
+          mentions: [agent.id],
+        });
+        this.members.sendTo(agent.id, msg);
+        this.logger.info(`Watch enabled: human=${humanId} → agent=${agent.name} (${agent.id})`);
+        return { ok: true, agentId: agent.id };
+      },
+    );
+
+    // Unwatch agent — disable verbose execution log streaming
+    this.fastify.post<{ Params: { id: string }; Body: { humanId: string } }>(
+      '/api/agents/:id/unwatch',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const member = this.members.getMember(agent.id);
+        if (!member) {
+          return reply.status(409).send({ error: 'Agent is not connected' });
+        }
+        const humanId = req.body?.humanId;
+        if (!humanId) {
+          return reply.status(400).send({ error: 'humanId is required' });
+        }
+        const msg = createMessage({
+          type: MessageType.AGENT_UNWATCH,
+          from: agent.id,
+          payload: { agentId: agent.id, humanId } satisfies AgentUnwatchPayload,
+          mentions: [agent.id],
+        });
+        this.members.sendTo(agent.id, msg);
+        this.logger.info(`Watch disabled: human=${humanId} → agent=${agent.name} (${agent.id})`);
         return { ok: true, agentId: agent.id };
       },
     );
@@ -415,7 +474,10 @@ export class SkynetWorkspace {
     }
 
     // Humans observe all messages — deliver to connected humans not already reached.
-    this.members.sendToHumans(fullMsg, delivered);
+    // Exception: execution logs are only delivered to explicitly mentioned (watching) humans.
+    if (fullMsg.type !== MessageType.EXECUTION_LOG) {
+      this.members.sendToHumans(fullMsg, delivered);
+    }
   }
 
   private handleHeartbeat(socket: WebSocket, data: { agentId: string; status: AgentStatus }): void {

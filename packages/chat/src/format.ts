@@ -3,6 +3,7 @@ import {
   AgentType,
   type AgentCard,
   type Attachment,
+  type ExecutionLogPayload,
   type SkynetMessage,
   type ChatPayload,
   type AgentJoinPayload,
@@ -111,6 +112,8 @@ export function formatMessage(msg: SkynetMessage, resolve: AgentResolver, width?
       return formatJoin(msg);
     case MessageType.AGENT_LEAVE:
       return formatLeave(msg, resolve);
+    case MessageType.EXECUTION_LOG:
+      return formatExecutionLogInline(msg, resolve);
     default:
       return [
         `${markerColored(AgentType.GENERIC)} ${dimText(`[${msg.type}]`)} ${formatTimestampDim(msg.timestamp)}`,
@@ -287,4 +290,41 @@ export function formatMemberList(members: Map<string, AgentCard>, selfId?: strin
 
   lines.push('');
   return lines;
+}
+
+function formatExecutionLogInline(msg: SkynetMessage, resolve: AgentResolver): string[] {
+  const s = resolve(msg.from);
+  const p = msg.payload as ExecutionLogPayload;
+
+  const levelColors: Record<string, (s: string) => string> = {
+    info: chalk.cyan,
+    warn: chalk.yellow,
+    error: chalk.red,
+    debug: chalk.gray,
+  };
+  const colorFn = levelColors[p.level] ?? chalk.white;
+  const duration = p.durationMs !== undefined ? dimText(` (${p.durationMs}ms)`) : '';
+
+  return [
+    `${dimText('\u2502')} ${agentNameColored(s.name, s.type)} ${colorFn(`[${p.event}]`)} ${dimText(p.summary)}${duration} ${formatTimestampDim(msg.timestamp)}`,
+  ];
+}
+
+export function formatExecutionLog(msg: SkynetMessage): string {
+  const p = msg.payload as ExecutionLogPayload;
+  const ts = formatTimestamp(msg.timestamp);
+
+  const levelColors: Record<string, (s: string) => string> = {
+    info: chalk.cyan,
+    warn: chalk.yellow,
+    error: chalk.red,
+    debug: chalk.gray,
+  };
+  const colorFn = levelColors[p.level] ?? chalk.white;
+
+  const eventTag = colorFn(`[${p.event}]`);
+  const from = dimText(msg.from.slice(0, 8));
+  const duration = p.durationMs !== undefined ? dimText(` (${p.durationMs}ms)`) : '';
+
+  return `  ${ts} ${from} ${eventTag} ${p.summary}${duration}`;
 }

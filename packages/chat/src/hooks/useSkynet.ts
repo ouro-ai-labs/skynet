@@ -75,7 +75,9 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
       }
       setMembers(memberMap);
       if (state.recentMessages.length > 0) {
-        setMessages(state.recentMessages);
+        // Filter out execution logs from history — they're only shown live while watching
+        const chatMsgs = state.recentMessages.filter((m) => m.type !== MessageType.EXECUTION_LOG);
+        setMessages(chatMsgs);
       }
     }).catch((err: unknown) => {
       setConnecting(false);
