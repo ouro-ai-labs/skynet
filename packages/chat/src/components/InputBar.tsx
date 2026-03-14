@@ -181,7 +181,11 @@ export function InputBar({ onSubmit, onExitHint, members }: InputBarProps): Reac
     }
 
     if (key.return) {
-      if (mentionFilter !== null && mentionCandidates.length > 0) {
+      // When the input is a slash command, skip mention autocomplete on Enter
+      // so that commands like `/agent forget @bob` submit immediately.
+      // Users can still use Tab to accept mention autocomplete.
+      const isSlashCommand = value.trimStart().startsWith('/');
+      if (mentionFilter !== null && mentionCandidates.length > 0 && !isSlashCommand) {
         acceptMention();
         return;
       }
