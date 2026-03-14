@@ -549,4 +549,48 @@ describe('ClaudeCodeAdapter resetSession', () => {
     await adapter.resetSession();
     expect(adapter.supportsQuickReply()).toBe(false);
   });
+
+  it('does not corrupt session state when resetSession races with first runClaude', async () => {
+    const { execa } = await import('execa');
+    const execaMock = execa as unknown as ReturnType<typeof vi.fn>;
+
+    // Make the first handleMessage hang until we resolve it, simulating a long-running process
+    let rejectFirst!: (err: Error) => void;
+    execaMock.mockImplementationOnce(() => {
+      const p = new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      });
+      // Simulate execa's ResultPromise shape (needs .kill)
+      (p as Record<string, unknown>).kill = vi.fn();
+      return p;
+    });
+
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Start processing (will hang on the first call)
+    const handlePromise = adapter.handleMessage(makeMsg());
+
+    // While first call is in-flight, reset the session (simulates forget)
+    await adapter.resetSession();
+
+    // Now reject the first call (simulates process being killed)
+    rejectFirst(new Error('Process was killed'));
+
+    // handleMessage should throw
+    await expect(handlePromise).rejects.toThrow();
+
+    // Key assertion: sessionStarted must remain false after the race,
+    // because resetSession set it to false and the catch block should
+    // NOT overwrite it for the new session.
+    expect(adapter.supportsQuickReply()).toBe(false);
+
+    // Restore normal mock for the next call
+    execaMock.mockResolvedValue({ stdout: 'mock response', stderr: '' });
+
+    // Next call should use --session-id (not --resume) with the new session ID
+    await adapter.handleMessage(makeMsg({ text: 'after reset' }));
+    const args = execaMock.mock.calls[1][1] as string[];
+    expect(args).toContain('--session-id');
+    expect(args).not.toContain('--resume');
+  });
 });

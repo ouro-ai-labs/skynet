@@ -227,6 +227,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     }
 
     const isFirstCall = !this.sessionStarted;
+    const sessionIdAtStart = this.sessionId;
     const proc = execa('claude', args, {
       cwd: this.projectRoot,
       stdin: 'ignore',
@@ -237,7 +238,12 @@ export class ClaudeCodeAdapter extends AgentAdapter {
     try {
       const result = await proc;
 
-      this.sessionStarted = true;
+      // Only update state if the session hasn't been reset while we were awaiting.
+      // A concurrent resetSession() changes sessionId; if that happened, our result
+      // belongs to the old session and must not touch the new session state.
+      if (this.sessionId === sessionIdAtStart) {
+        this.sessionStarted = true;
+      }
       this.runningProcess = null;
 
       return result.stdout;
@@ -246,7 +252,8 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       // If this was the first call (--session-id), the session was created on disk
       // even though it timed out. Mark it as started so subsequent calls use --resume
       // instead of --session-id, avoiding "Session ID already in use" errors.
-      if (isFirstCall) {
+      // Skip if the session was reset concurrently — the old session is irrelevant.
+      if (isFirstCall && this.sessionId === sessionIdAtStart) {
         this.sessionStarted = true;
       }
       throw sanitizeExecaError(err);

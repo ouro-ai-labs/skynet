@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { MessageType, MENTION_ALL } from '@skynet-ai/protocol';
 import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet-ai/protocol';
@@ -96,6 +96,7 @@ class FakeAdapter extends AgentAdapter {
   quickReplyCalls: string[] = [];
   handleMessageCalls: SkynetMessage[] = [];
   restoredSessionState: SessionState | undefined;
+  resetSessionCalls = 0;
 
   setSupportsQuickReply(v: boolean) {
     this._supportsQuickReply = v;
@@ -141,6 +142,11 @@ class FakeAdapter extends AgentAdapter {
   }
 
   async dispose() {}
+
+  override async resetSession(): Promise<void> {
+    this.resetSessionCalls++;
+    this._sessionState = undefined;
+  }
 }
 
 // ── Helper to access internal client ──
@@ -1303,6 +1309,95 @@ describe('AgentRunner forget', () => {
       m => (m.payload as { text: string }).text === 'after forget'
     );
     expect(hasAfterForget).toBe(true);
+  });
+
+  it('processQueue bails out and does not persistState after forget during processing', async () => {
+    // Use a slow adapter to simulate a long-running handleMessage
+    const adapter = new FakeAdapter();
+    adapter.handleDelay = 200;
+    const statePath = join(tmpdir(), `skynet-test-${Math.random().toString(36).slice(2)}`, 'state.json');
+    mkdirSync(dirname(statePath), { recursive: true });
+
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentName: 'test-agent',
+      debounceMs: 0,
+      statePath,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+
+    // Send a message that will take 200ms to process
+    const msg1 = makeChatMsg({ from: 'user-a', text: 'slow msg', mentions: [runner.agentId] });
+    client.emit('chat', msg1);
+
+    // Wait for processing to start but not finish
+    await new Promise(r => setTimeout(r, 50));
+    const processingBefore = (runner as unknown as { processing: boolean }).processing;
+    expect(processingBefore).toBe(true);
+
+    // Send forget while processing
+    client.emit('agent-forget', {
+      id: 'ctrl-forget-race',
+      type: 'agent.forget',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 20));
+
+    // After forget, processing should be false (handleForget resets it)
+    const processingAfterForget = (runner as unknown as { processing: boolean }).processing;
+    expect(processingAfterForget).toBe(false);
+
+    // resetSession should have been called
+    expect(adapter.resetSessionCalls).toBe(1);
+
+    // Wait for the slow handleMessage to finish
+    await new Promise(r => setTimeout(r, 250));
+
+    // Processing should still be false (processQueue should have bailed out)
+    const processingFinal = (runner as unknown as { processing: boolean }).processing;
+    expect(processingFinal).toBe(false);
+
+    // Clean up
+    rmSync(dirname(statePath), { recursive: true, force: true });
+  });
+
+  it('forget persists the reset state', async () => {
+    const adapter = new FakeAdapter();
+    adapter.setSessionState({ sessionId: 'old-session', sessionStarted: true });
+    const statePath = join(tmpdir(), `skynet-test-${Math.random().toString(36).slice(2)}`, 'state.json');
+    mkdirSync(dirname(statePath), { recursive: true });
+
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentName: 'test-agent',
+      debounceMs: 0,
+      statePath,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+
+    // Forget
+    client.emit('agent-forget', {
+      id: 'ctrl-persist',
+      type: 'agent.forget',
+      from: runner.agentId,
+      timestamp: Date.now(),
+      payload: { agentId: runner.agentId },
+    });
+    await new Promise(r => setTimeout(r, 50));
+
+    // State file should exist (handleForget now calls persistState)
+    expect(existsSync(statePath)).toBe(true);
+
+    // Clean up
+    rmSync(dirname(statePath), { recursive: true, force: true });
   });
 });
 

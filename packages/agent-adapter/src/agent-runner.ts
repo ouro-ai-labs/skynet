@@ -85,6 +85,12 @@ export class AgentRunner {
   /** Timer for the next processQueue check. */
   private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly debounceMs: number;
+  /**
+   * Monotonically increasing counter bumped on each forget/reset.
+   * processQueue captures the value at start and bails out if it changes,
+   * preventing stale post-reset side effects (persistState, reschedule).
+   */
+  private resetGeneration = 0;
 
   constructor(private options: AgentRunnerOptions) {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
@@ -422,6 +428,9 @@ export class AgentRunner {
     this.processing = true;
     this.setStatus('busy');
 
+    // Capture generation so we can detect if a reset (forget) happened mid-flight.
+    const gen = this.resetGeneration;
+
     // Process leading tasks
     while (this.messageQueue.length > 0 && this.messageQueue[0].msg.type === MessageType.TASK_ASSIGN) {
       const { msg } = this.messageQueue.shift()!;
@@ -431,6 +440,8 @@ export class AgentRunner {
         this.logger.error(`Error processing task from ${msg.from}:`, err);
         this.setStatus('error');
       }
+      // Bail out if a forget/reset happened during the await
+      if (this.resetGeneration !== gen) return;
     }
 
     // Drain chat messages up to the next task
@@ -465,6 +476,10 @@ export class AgentRunner {
         this.setStatus('error');
       }
     }
+
+    // If a forget/reset happened while we were processing, handleForget already
+    // cleaned up all state. Do NOT overwrite with stale status or persistState.
+    if (this.resetGeneration !== gen) return;
 
     this.setStatus('idle');
     this.processing = false;
@@ -563,7 +578,8 @@ export class AgentRunner {
   /** Handle a forget control message — reset session and clear all state. */
   private async handleForget(): Promise<void> {
     this.logger.info('Forget received — resetting session');
-    // Interrupt first if busy
+    // Bump generation so any in-flight processQueue bails out after its next await.
+    this.resetGeneration++;
     this.clearSchedule();
     this.messageQueue = [];
     this.pendingNotices = [];
@@ -572,6 +588,7 @@ export class AgentRunner {
     this.processing = false;
     this.forkInProgress = false;
     this.setStatus('idle');
+    this.persistState();
   }
 
   private persistState(): void {
