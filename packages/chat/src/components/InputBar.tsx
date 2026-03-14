@@ -16,10 +16,11 @@ import { useBracketedPaste } from '../hooks/useBracketedPaste.js';
 
 interface InputBarProps {
   onSubmit: (text: string, attachments: Attachment[]) => void;
+  onExitHint: () => void;
   members: Map<string, AgentCard>;
 }
 
-export function InputBar({ onSubmit, members }: InputBarProps): React.ReactElement {
+export function InputBar({ onSubmit, onExitHint, members }: InputBarProps): React.ReactElement {
   const [state, dispatch] = useReducer(inputReducer, initialInputState);
   const historyRef = useRef<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -138,6 +139,15 @@ export function InputBar({ onSubmit, members }: InputBarProps): React.ReactEleme
     // Ctrl+V: paste image from clipboard
     if (key.ctrl && input === 'v') {
       handlePaste();
+      return;
+    }
+
+    // Ctrl+C: clear input and show exit hint
+    if (key.ctrl && input === 'c') {
+      dispatch({ type: 'RESET' });
+      setAttachments([]);
+      setPastedBlocks([]);
+      onExitHint();
       return;
     }
 
