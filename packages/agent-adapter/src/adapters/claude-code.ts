@@ -154,7 +154,16 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
   override async interrupt(): Promise<boolean> {
     if (this.runningProcess) {
-      this.runningProcess.kill('SIGTERM');
+      // Kill the entire process group to clean up child processes (e.g. dev servers)
+      if (this.runningProcess.pid) {
+        try {
+          process.kill(-this.runningProcess.pid, 'SIGTERM');
+        } catch {
+          this.runningProcess.kill('SIGTERM');
+        }
+      } else {
+        this.runningProcess.kill('SIGTERM');
+      }
       this.runningProcess = null;
       return true;
     }
@@ -255,6 +264,7 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       stdin: 'ignore',
       env: spawnEnv(),
       timeout: 0, // no timeout — let the agent run until done
+      detached: true, // run in its own process group so we can kill the whole tree
     });
     this.runningProcess = proc;
     try {
@@ -313,14 +323,39 @@ export class ClaudeCodeAdapter extends AgentAdapter {
       }
     }
 
-    // Wait for the process to finish to catch exit code errors
+    // Wait for the process to finish, but don't hang forever.
+    // Claude CLI may leave child processes running (e.g. dev servers started
+    // during a smoke test), which prevents the process from exiting even though
+    // the result has already been streamed. Give it a grace period, then kill.
+    const EXIT_TIMEOUT_MS = 5000;
     try {
-      await proc;
+      await Promise.race([
+        proc,
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            // Kill the entire process group (negative PID) to ensure child
+            // processes like dev servers are also terminated.
+            if (proc.pid) {
+              try {
+                process.kill(-proc.pid, 'SIGTERM');
+              } catch {
+                // Process group may already be gone
+                proc.kill('SIGTERM');
+              }
+            } else {
+              proc.kill('SIGTERM');
+            }
+            resolve();
+          }, EXIT_TIMEOUT_MS);
+        }),
+      ]);
     } catch (err) {
       // Attach stderr to the error for diagnostics
       if (stderrChunks.length > 0 && err instanceof Error) {
         (err as unknown as Record<string, unknown>).stderrOutput = stderrChunks.join('\n');
       }
+      // If the process was killed due to timeout, don't propagate — we already have the result
+      if (resultText) return resultText;
       throw err;
     }
 
