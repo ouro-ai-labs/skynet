@@ -15,9 +15,10 @@ Multiple coding agents (Claude Code, Codex CLI, etc.) and humans collaborate on 
 
 #### Protocol & Core Infrastructure (done)
 
-1. **`packages/protocol`** — Message type definitions, entity types, serialization/deserialization
+1. **`packages/protocol`** — Message type definitions, entity types, serialization/deserialization, execution log system
 2. **`packages/workspace`** — WebSocket server, member management, entity management, message routing
 3. **`packages/sdk`** — Client SDK for agents to connect to the workspace
+4. **`packages/logger`** — Shared structured logging library used across all packages
 
 Key files:
 - `packages/protocol/src/types.ts` — All message and type definitions
@@ -44,6 +45,9 @@ Adapters:
 - **Codex CLI** — Uses `codex -q "prompt"` quiet mode with `--full-auto` support
 - **Generic** — Configurable adapter for any CLI agent
 
+Features:
+- Session state persistence via `getSessionState()` / `restoreSessionState()` for resuming agent context across restarts
+
 #### CLI & Chat TUI (done)
 
 Entity-based CLI with workspace/agent/human management:
@@ -56,6 +60,9 @@ skynet chat
 skynet status
 ```
 
+- **Daemon mode** — `skynet workspace start` runs the workspace server as a background daemon
+- **Pipe mode** — Non-interactive chat mode (`skynet chat --pipe`) for scripting and automation
+
 Chat TUI built with Ink (React for terminals):
 - @-mentions, slash commands
 - Markdown rendering for agent responses
@@ -64,14 +71,6 @@ Chat TUI built with Ink (React for terminals):
 
 - Task queue, file-level locking, git worktree management
 - Auto-merge back to main branch after task completion
-
-#### Monitor Dashboard (planned)
-
-Web dashboard showing real-time agent activity:
-1. **Network Topology** — Agent node graph showing type/status/current task
-2. **Message Stream** — Chat interface showing all agent conversations
-3. **Task Board** — Kanban view (To Do / In Progress / Done / Failed)
-4. **Agent Detail** — Task history and output per agent
 
 ### Validation
 
@@ -94,10 +93,15 @@ Agents distributed across machines within a local network connect to a shared wo
 
 ### Key Changes
 
-1. **Server deployment** — Deploy workspace server to a shared machine on the LAN
-2. **Authentication & authorization** — Workspace token mechanism; only token holders can join
-3. **Git sync** — Cross-machine code sync via git remote (GitHub/GitLab)
-4. **Agent discovery** — Agents on different machines auto-discover the workspace via mDNS or config
+1. **Monitor Dashboard** — Web dashboard (`packages/monitor`) showing real-time agent activity:
+   - **Network Topology** — Agent node graph showing type/status/current task
+   - **Message Stream** — Chat interface showing all agent conversations
+   - **Task Board** — Kanban view (To Do / In Progress / Done / Failed)
+   - **Agent Detail** — Task history and output per agent
+2. **Server deployment** — Deploy workspace server to a shared machine on the LAN
+3. **Authentication & authorization** — Workspace token mechanism; only token holders can join
+4. **Git sync** — Cross-machine code sync via git remote (GitHub/GitLab)
+5. **Agent discovery** — Agents on different machines auto-discover the workspace via mDNS or config
 
 ```bash
 # Machine A: start workspace server

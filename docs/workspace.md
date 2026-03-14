@@ -27,6 +27,8 @@ Main server entry point, built on Fastify + `@fastify/websocket`.
 | `host` | `0.0.0.0` | Listen address |
 | `store` | — | `SqliteStore` instance for persistence |
 | `disconnectGraceMs` | `300000` (5 min) | Grace period before broadcasting `AGENT_LEAVE` after socket close |
+| `recentMentionsLimit` | `3` | Max number of recent mentioned/DM messages for agents in `workspace.state`. Humans always receive up to 100 |
+| `logFile` | — | Log file path. When set, server logs are written to this file |
 
 **Internal State**:
 
@@ -70,6 +72,7 @@ CREATE TABLE messages (
 );
 CREATE INDEX idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX idx_messages_from ON messages("from");
+CREATE INDEX idx_messages_type ON messages(type);
 
 -- Agents
 CREATE TABLE agents (
@@ -92,13 +95,15 @@ CREATE TABLE humans (
 **Message Methods**:
 
 - `save(msg)` — INSERT OR REPLACE, idempotent writes
-- `getMessages(limit, before?)` — Paginated query, fetched DESC then reversed to chronological order
+- `getMessages(limit, before?, after?)` — Paginated query, fetched DESC then reversed to chronological order. Optional `after` timestamp filters messages newer than the given value
 - `getById(id)` — Direct lookup by message ID
+- `getMessagesFor(agentId, limit?, since?)` — Get recent messages where `mentions` includes `agentId` (or `@all`). Optional `since` timestamp for incremental sync. Default limit: 3
+- `getExecutionLogs(agentId?, limit?)` — Get execution log messages, optionally filtered by agent ID. Default limit: 50
 
 **Entity Methods**:
 
-- `saveAgent(agent)` / `listAgents()` / `getAgent(idOrName)`
-- `saveHuman(human)` / `listHumans()` / `getHuman(idOrName)`
+- `saveAgent(agent)` / `listAgents()` / `getAgent(idOrName)` / `deleteAgent(id)`
+- `saveHuman(human)` / `listHumans()` / `getHuman(idOrName)` / `deleteHuman(id)`
 - `checkNameUnique(name)` — Cross-entity name uniqueness check
 
 ## WebSocket Protocol
@@ -108,7 +113,7 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 ### JOIN
 
 ```
--> {action: "join", data: {agent: AgentCard}}
+-> {action: "join", data: {agent: AgentCard, lastSeenTimestamp?: number}}
 <- {event: "workspace.state", data: {members: AgentCard[], recentMessages: SkynetMessage[]}}
 ```
 
@@ -116,7 +121,7 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 2. If reconnecting: cancels pending leave timer, closes stale socket if still open
 3. Adds/updates agent in workspace via `MemberManager`
 4. Establishes socket-to-agent mapping
-5. Returns current member list + last 50 messages to the (re)connecting agent
+5. Returns current member list + recent messages to the (re)connecting agent. If `lastSeenTimestamp` is provided, only messages after that timestamp are returned (incremental sync). Humans receive up to 100 messages (all types); non-human agents receive only messages mentioning them, limited to `recentMentionsLimit` (default 3)
 6. **Only for new members**: broadcasts `AGENT_JOIN` message and persists it. Reconnections are silent — no duplicate join/leave events are broadcast
 
 ### SEND
@@ -138,6 +143,14 @@ Clients send JSON envelopes: `{action: string, data: unknown}`
 
 Updates the agent's status in the workspace (idle / busy / offline).
 
+When the status actually changes (differs from the previous value), the server broadcasts a `status-change` event to all other connected members (excluding the agent itself):
+
+```
+-> (broadcast) {event: "status-change", data: {agentId, status}}
+```
+
+This allows UIs to show real-time status indicators (e.g., "thinking...").
+
 ### LEAVE / Disconnect
 
 There are two disconnect paths:
@@ -158,7 +171,7 @@ There are two disconnect paths:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Health check, returns `{"status":"ok"}` |
+| GET | `/health` | Health check, returns `{"status":"ok","memberCount":N}` |
 
 ### Members & Messages
 
@@ -174,8 +187,11 @@ There are two disconnect paths:
 | POST | `/api/agents` | Create agent (body: `{name, type, role?, persona?}`) |
 | GET | `/api/agents` | List all agents |
 | GET | `/api/agents/:id` | Get agent by UUID or name |
+| DELETE | `/api/agents/:id` | Delete agent by UUID (404 if not found, 409 if connected) |
 | POST | `/api/agents/:id/interrupt` | Interrupt agent's current task (body: `{reason?}`) |
 | POST | `/api/agents/:id/forget` | Reset agent's conversation session |
+| POST | `/api/agents/:id/watch` | Enable execution log streaming to a human (body: `{humanId}`) |
+| POST | `/api/agents/:id/unwatch` | Disable execution log streaming (body: `{humanId}`) |
 
 ### Humans
 
@@ -184,6 +200,7 @@ There are two disconnect paths:
 | POST | `/api/humans` | Create human (body: `{name}`) |
 | GET | `/api/humans` | List all humans |
 | GET | `/api/humans/:id` | Get human by UUID or name |
+| DELETE | `/api/humans/:id` | Delete human by UUID (404 if not found, 409 if connected) |
 
 ### Names
 
@@ -222,7 +239,7 @@ All message delivery is driven by the `mentions` array on `SkynetMessage`. The s
 
 ### 1. Mention Resolution (Server-Side Enrichment)
 
-When a client sends a message, the server runs `enrichMentions()` before routing:
+When a client sends a message, the server runs `enrichMentions()` before routing. **Note:** enrichment only applies to `CHAT` messages — other message types (e.g., `EXECUTION_LOG`, `AGENT_JOIN`) pass through with their original mentions array unchanged.
 
 1. Starts with the `mentions` array provided by the client (may be empty).
 2. Scans the message text for `@name` patterns, matching case-insensitively against all registered agents and humans.

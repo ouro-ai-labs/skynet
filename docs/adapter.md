@@ -6,9 +6,9 @@
 
 ```
 AgentAdapter (abstract base class)
-├── ClaudeCodeAdapter   — claude CLI
-├── GeminiCliAdapter    — gemini CLI
-├── CodexCliAdapter     — codex CLI
+├── ClaudeCodeAdapter   — claude CLI (fully implemented)
+├── GeminiCliAdapter    — gemini CLI (stub)
+├── CodexCliAdapter     — codex CLI (stub)
 └── GenericAdapter      — configurable generic adapter
         ↓
    AgentRunner — connects adapters to the Skynet network (WebSocket)
@@ -21,12 +21,23 @@ Defined in `src/base-adapter.ts`. All adapters must implement the following meth
 | Method | Description |
 |--------|-------------|
 | `isAvailable()` | Check if the corresponding CLI tool is installed locally |
-| `handleMessage(msg)` | Convert a `SkynetMessage` to a prompt, call the CLI, return the text response |
+| `handleMessage(msg, senderName?, notices?)` | Convert a `SkynetMessage` to a prompt, call the CLI, return the text response. Optional `notices` string is prepended (e.g. join/leave events) |
 | `executeTask(task)` | Execute a standalone task, return a `TaskResult` |
-| `setRoomId(roomId)` | Associate with a room (used for session persistence). No-op by default |
+| `supportsQuickReply()` | Whether this adapter supports forked quick replies while busy. Returns `false` by default |
+| `quickReply(prompt)` | Quick reply using a forked context. Only called when `supportsQuickReply()` is `true`. Throws by default |
 | `interrupt()` | Interrupt the currently running process (returns `true` if a process was killed) |
 | `resetSession()` | Reset the conversation session (generates a new session ID, starts fresh) |
+| `getSessionState()` | Return serializable `SessionState` for persistence across restarts, or `undefined` if unsupported |
+| `restoreSessionState(state)` | Restore session state from a previous run. Called before the first `handleMessage()` |
 | `dispose()` | Clean up resources (kill child processes, etc.) |
+
+**Properties and callbacks:**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `persona` | `string \| undefined` | System prompt / persona text. Set by `AgentRunner` before calls begin |
+| `onPrompt` | `(prompt, context) => void` | Optional callback invoked with the exact prompt text before sending to the CLI. `context.type` is `'message'`, `'task'`, or `'quick-reply'` |
+| `onExecutionLog` | `(event, summary, metadata?) => void` | Optional callback invoked when the adapter produces execution log events (tool calls, thinking, etc.) |
 
 `TaskResult` structure:
 
@@ -39,11 +50,20 @@ interface TaskResult {
 }
 ```
 
+`SessionState` structure:
+
+```ts
+interface SessionState {
+  sessionId: string;
+  sessionStarted: boolean;
+}
+```
+
 ## Concrete Adapters
 
 ### ClaudeCodeAdapter
 
-Invokes `claude -p <prompt> --output-format text`.
+Invokes `claude -p <prompt> --output-format stream-json --verbose --dangerously-skip-permissions`.
 
 **Options (`ClaudeCodeOptions`):**
 
@@ -52,30 +72,32 @@ Invokes `claude -p <prompt> --output-format text`.
 | `projectRoot` | `string` | Working directory (required) |
 | `allowedTools` | `string[]` | Passed as `--allowedTools` argument |
 | `model` | `string` | Specify model via `--model` |
-| `sessionStorePath` | `string` | Session storage path, defaults to `<projectRoot>/.skynet/sessions.json` |
 
-**Session Persistence**: Stores session IDs in a local JSON file keyed by roomId. Subsequent calls for the same room automatically include `--resume <sessionId>`, enabling context continuity across process restarts. Storage format:
+**Timeout**: Uses `timeout: 0` (no timeout) — the agent runs until it finishes naturally.
 
-```json
-{
-  "room-abc": "session-id-1",
-  "room-def": "session-id-2"
-}
-```
+**Session Persistence**: Session state (`sessionId` + `sessionStarted` flag) is managed via the base class `getSessionState()` / `restoreSessionState()` interface. `AgentRunner` persists this state to a JSON file at `statePath` and restores it on restart. The first call uses `--session-id <id>` to create a named session; subsequent calls use `--resume <id>` to continue the conversation.
 
-The session ID is extracted from Claude CLI's stderr via regex (`/session[:\s]+([a-f0-9-]+)/i`).
+**System Prompt Injection**: When `persona` is set (by `AgentRunner`), the adapter passes it via `--append-system-prompt`.
 
-### GeminiCliAdapter
+**Image Attachment Support**: When a chat message contains image attachments, the adapter extracts base64-encoded image data, writes each image to a temporary file in the OS temp directory, and appends file path references to the prompt. Temp files are cleaned up after the call completes.
 
-Invokes via pipe: `echo <prompt> | gemini`.
+**Stream-JSON Parsing**: The adapter uses `--output-format stream-json` and parses the JSONL output line-by-line. It extracts `result` events for the final response text, and emits `tool.call` / `tool.result` execution log events via the `onExecutionLog` callback. Tool call summaries are formatted with human-readable context (e.g., `Read /path/to/file`, `Bash: git status`).
 
-**Options**: `projectRoot` only. No session reuse.
+**Quick Reply (Fork)**: `supportsQuickReply()` returns `true` once a session has been started. Quick replies use `--resume <sessionId> --fork-session` to create a lightweight forked context that does not pollute the main conversation. Image attachments are not supported in quick replies and fall back to the normal queue.
 
-### CodexCliAdapter
+**Error Sanitization**: Execa errors are sanitized to prevent leaking the full command line (which includes `--append-system-prompt` with the entire persona). The adapter prefers execa's `shortMessage` and attaches collected stderr for diagnostics.
 
-Invokes `codex -q <prompt>`.
+### GeminiCliAdapter (Stub)
 
-**Options**: `projectRoot` + optional `fullAuto` (passes `--full-auto`). No session reuse.
+**Status: Not yet implemented.** `isAvailable()` always returns `false`; `handleMessage()` and `executeTask()` throw `"GeminiCliAdapter is not yet implemented"`. Will be completed once the Claude Code adapter is stable.
+
+**Options**: `projectRoot` only.
+
+### CodexCliAdapter (Stub)
+
+**Status: Not yet implemented.** `isAvailable()` always returns `false`; `handleMessage()` and `executeTask()` throw `"CodexCliAdapter is not yet implemented"`. Will be completed once the Claude Code adapter is stable.
+
+**Options**: `projectRoot` + optional `fullAuto`.
 
 ### GenericAdapter
 
@@ -92,26 +114,74 @@ A configurable generic adapter that supports any CLI tool.
 | `versionCommand` | `string` | Command for availability detection |
 | `projectRoot` | `string` | Working directory |
 | `shell` | `boolean` | Whether to use shell mode (default `true`) |
-| `timeout` | `number` | Timeout in milliseconds (default 300000) |
+| `timeout` | `number` | Timeout in milliseconds (default `0` — no timeout) |
+
+**Persona Injection**: When `persona` is set, the adapter prepends it to the prompt text directly.
 
 ## Common Characteristics
 
 - Uses `execa` to spawn child processes with `cwd` set to `projectRoot`
-- Uniform 5-minute timeout
+- No default timeout — adapters use `timeout: 0` (let the agent run until done)
 - `messageToPrompt()` converts `SkynetMessage` to plain text prompt based on message type (`chat` / `task-assign`)
 - Each invocation is an independent child process (no persistent process)
+- Error sanitization prevents leaking command-line internals (flags, system prompts) in broadcast messages
 
 ## AgentRunner
 
 Defined in `src/agent-runner.ts`. The glue layer that connects adapters to the Skynet network.
 
+**`AgentRunnerOptions` interface:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `serverUrl` | `string` | (required) | WebSocket server URL |
+| `adapter` | `AgentAdapter` | (required) | The adapter instance |
+| `agentId` | `string` | random UUID | Agent identifier |
+| `agentName` | `string` | `<adapter.name>-<uuid8>` | Display name |
+| `capabilities` | `string[]` | `['code-edit', 'code-review']` | Agent capabilities |
+| `role` | `string` | — | Role description (e.g. "senior engineer") |
+| `persona` | `string` | — | Custom persona/system prompt text |
+| `projectRoot` | `string` | — | Working directory |
+| `statePath` | `string` | — | Path to a JSON file for persisting agent state |
+| `logFile` | `string` | — | Log file path for agent logs |
+| `debounceMs` | `number` | `3000` | Debounce window for batching chat messages. Set to `0` to disable |
+
 **Responsibilities:**
-1. Creates a `SkynetClient` and registers an `AgentCard` (containing agentId, name, capabilities, etc.)
-2. Calls `adapter.setRoomId(roomId)` to associate the room
-3. Listens for `chat` and `task-assign` events, queuing them for processing
-4. **Processes the queue serially** (`processing` lock prevents concurrency)
-5. Sets status to `busy` during processing, `idle` when done
-6. For task-type messages, sends an `in-progress` status update first, then reports `TaskResult` on completion
+
+1. Creates a `SkynetClient` and builds an `AgentCard` (containing agentId, name, capabilities, role, persona, etc.)
+2. **Registers the agent via HTTP API** (`ensureRegistered`): checks `GET /api/agents/:id`, and if not found, creates the agent via `POST /api/agents`. Handles 409 (name conflict) by looking up the existing agent and reusing its ID.
+3. **Injects persona/system prompt** via `skynet-intro.ts`: combines the role, custom persona, and a standard Skynet identity/messaging-rules intro into `adapter.persona`.
+4. Listens for `chat` and `task-assign` events, queuing them for processing
+5. **Processes the queue serially** (`processing` lock prevents concurrency)
+6. Sets status to `busy` during processing, `idle` when done
+7. For task-type messages, sends an `in-progress` status update first, then reports `TaskResult` on completion
+
+**Prompt Logging:**
+
+When `statePath` is set, AgentRunner creates a `prompt.log` file in the same directory. Every prompt sent to the adapter is appended with a timestamp and type (`message`, `task`, or `quick-reply`), enabling post-hoc debugging of agent behavior.
+
+**`<no-reply />` Tag Support:**
+
+If an adapter's response contains the `<no-reply />` XML tag, the entire message is suppressed and not sent to the workspace. This allows agents to signal "I have nothing to add" without generating noise. The `skynet-intro.ts` system prompt teaches agents when and how to use this tag.
+
+**Error Message Sanitization:**
+
+The `sanitizeErrorMessage()` function extracts safe error messages from exceptions. It prefers execa's `shortMessage` (which omits stdout/stderr dumps) and strips `Command failed…: <binary> <args>` prefixes so that adapter internals (flags, system prompts) are never exposed in execution logs broadcast to the workspace.
+
+**Control Events:**
+
+AgentRunner listens for the following control events:
+
+| Event | Behavior |
+|-------|----------|
+| `agent-interrupt` | Kills the running process, clears the message queue and pending notices, resets processing state to idle |
+| `agent-forget` | Resets the adapter session (`resetSession()`), clears the message queue, pending notices, and dedup set, resets processing state to idle |
+| `agent-watch` | Adds the human (from `AgentWatchPayload.humanId`) to the set of verbose log subscribers |
+| `agent-unwatch` | Removes the human (from `AgentUnwatchPayload.humanId`) from verbose log subscribers |
+
+**Verbose Execution Log Subscribers (`agent-watch` / `agent-unwatch`):**
+
+Humans can subscribe to verbose execution logs via `agent-watch`. When at least one subscriber exists, the `onExecutionLog` callback on the adapter is wired to send `ExecutionLog` messages to the workspace, with `mentions` set to the subscriber list so only watchers receive them. The adapter emits events like `tool.call` and `tool.result` (from Claude Code's stream-json output), and AgentRunner emits `processing.start`, `processing.end`, and `processing.error` events for queue lifecycle. Subscribing mid-execution takes effect immediately (the subscriber set is checked live, not snapshotted).
 
 **Message Deduplication:**
 
@@ -134,6 +204,7 @@ When the main processing thread finishes and multiple chat messages have accumul
 You have N unread messages. Please respond to all of them in a single reply:
 
 [sender-1]: message text
+
 [sender-2]: message text
 ```
 
@@ -143,14 +214,22 @@ Responses automatically include all original senders in the `mentions` array, en
 
 AgentRunner uses an age-based debounce mechanism to naturally batch messages that arrive close together. Each message records its arrival time; the queue is only processed once **all** messages have aged at least `debounceMs` (default 3000ms). This prevents ping-pong cascades between agents — when multiple messages arrive in quick succession, they are collected and handled in a single batch rather than triggering individual responses. Task messages bypass the debounce and are processed immediately. Set `debounceMs: 0` to disable.
 
+**State Persistence:**
+
+When `statePath` is configured, AgentRunner persists state to a JSON file after each processing cycle. The persisted data includes:
+
+- `lastSeenTimestamp` — the timestamp of the last processed message, used on reconnection to avoid replaying old messages
+- `session` — the adapter's `SessionState` (if supported), enabling session resumption across restarts
+
+On startup, the runner loads this file and calls `adapter.restoreSessionState(session)` to resume the previous conversation context.
+
 **Member Name Tracking:**
 
-AgentRunner listens for `agent-join`, `agent-leave`, and `workspace-state` events to maintain a local `memberNames` map. This map is used to resolve `@name` mentions in outgoing responses to agent IDs, and to display human-readable sender names in prompts.
+AgentRunner listens for `agent-join`, `agent-leave`, and `workspace-state` events to maintain a local `memberInfo` map. This map is used to resolve `@name` mentions in outgoing responses to agent IDs, and to display human-readable sender names in prompts.
 
 ```ts
 const runner = new AgentRunner({
   serverUrl: 'ws://localhost:3000',
-  roomId: 'my-room',
   adapter: new ClaudeCodeAdapter({ projectRoot: '/path/to/project' }),
   agentName: 'my-claude',
   capabilities: ['code-edit', 'code-review'],
