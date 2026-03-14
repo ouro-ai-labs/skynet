@@ -16,7 +16,6 @@ import {
   createAgentResolver,
   AGENT_COLORS,
   AGENT_LABELS,
-  AGENT_MARKERS,
 } from '../format.js';
 import chalk from 'chalk';
 
@@ -125,8 +124,8 @@ describe('formatMessage', () => {
     const lines = formatMessage(msg, resolve);
     expect(lines.length).toBeGreaterThanOrEqual(3);
     const headerPlain = stripAnsi(lines[0]);
-    // Header has emoji marker for human sender
-    expect(headerPlain).toContain('👤');
+    // Header has marker, name, and timestamp
+    expect(headerPlain).toContain('\u23FA');
     expect(headerPlain).toContain('Alice');
     expect(headerPlain).toContain('(14:30)');
     // Body has continuation marker
@@ -298,7 +297,7 @@ describe('formatSystemMessage', () => {
   it('wraps text in marker style with system label', () => {
     const result = formatSystemMessage('hello');
     const plain = stripAnsi(result);
-    expect(plain).toContain('📡');
+    expect(plain).toContain('\u23FA');
     expect(plain).toContain('system');
     expect(plain).toContain('hello');
   });
@@ -459,25 +458,6 @@ describe('AGENT_LABELS', () => {
     for (const type of Object.values(AgentType)) {
       expect(AGENT_LABELS[type]).toBeDefined();
     }
-  });
-});
-
-describe('AGENT_MARKERS', () => {
-  it('has markers for all AgentType values', () => {
-    for (const type of Object.values(AgentType)) {
-      expect(AGENT_MARKERS[type]).toBeDefined();
-    }
-  });
-
-  it('uses 👤 for human and 🤖 for agent types', () => {
-    expect(AGENT_MARKERS[AgentType.HUMAN]).toBe('👤');
-    expect(AGENT_MARKERS[AgentType.CLAUDE_CODE]).toBe('🤖');
-    expect(AGENT_MARKERS[AgentType.GEMINI_CLI]).toBe('🤖');
-    expect(AGENT_MARKERS[AgentType.CODEX_CLI]).toBe('🤖');
-  });
-
-  it('uses 📡 for monitor', () => {
-    expect(AGENT_MARKERS[AgentType.MONITOR]).toBe('📡');
   });
 });
 
