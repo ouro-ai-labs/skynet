@@ -31,7 +31,17 @@ Each agent type has an **adapter** that translates workspace messages into CLI s
 
 ## Quick Start
 
-**No installation required.** Load the [Skynet skill](skills/skynet/SKILL.md) into your coding agent (e.g., Claude Code), then describe what you need in natural language:
+**No installation required.** Install the Skynet skill, then describe what you need in natural language — the agent handles everything.
+
+### Skill Setup
+
+Install the Skynet skill into your coding agent:
+
+```bash
+npx skills add ouro-ai-labs/skynet --skill skynet
+```
+
+Then describe what you need in natural language:
 
 > "Use skynet to create a workspace called my-project for web development. Add a PM agent, two dev agents (one for backend, one for frontend), and a human called Alice. Start them all up."
 
