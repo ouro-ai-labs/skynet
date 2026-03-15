@@ -175,11 +175,22 @@ export class AgentRunner {
         this.promptLogStream?.write(
           `${separator}\n[${timestamp}] type=${context.type}\n${separator}\n${prompt}\n\n`,
         );
+        // Also log prompt to the agent log for a complete trace
+        this.logger.info(`[prompt] type=${context.type}\n${prompt}`);
+      };
+    } else {
+      // Even without a prompt.log file, log prompts to agent log
+      this.adapter.onPrompt = (prompt, context) => {
+        this.logger.info(`[prompt] type=${context.type}\n${prompt}`);
       };
     }
 
-    // Wire execution log callback — only send when humans are watching via /watch
+    // Wire execution log callback — always log to agent log, and send via WebSocket when watched
     this.adapter.onExecutionLog = (event, summary, metadata) => {
+      // Always write to agent log for a complete execution trace
+      const metaStr = metadata ? ` ${JSON.stringify(metadata)}` : '';
+      this.logger.debug(`[exec] ${event}: ${summary}${metaStr}`);
+      // Send via WebSocket only when humans are watching
       if (this.verboseSubscribers.size === 0) return;
       const mentions = [...this.verboseSubscribers];
       this.client.sendExecutionLog(event, summary, { metadata, mentions });
@@ -397,6 +408,7 @@ export class AgentRunner {
         ? `${notices}\n\nMessage from ${senderName}: ${text}`
         : `Message from ${senderName}: ${text}`;
       const response = await this.adapter.quickReply(prompt);
+      this.logger.info(`[result:quick-reply] ${response ? response.slice(0, 500) : '(empty)'}`);
       if (response && !isNoReply(response)) {
         // Include original sender; server enriches @name mentions from text
         this.client.chat(response, [msg.from]);
@@ -500,6 +512,7 @@ export class AgentRunner {
           const msg = chatBatch[0];
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
           const response = await this.adapter.handleMessage(msg, senderName, notices || undefined);
+          this.logger.info(`[result] ${response ? response.slice(0, 500) : '(empty)'}`);
           if (response && !isNoReply(response)) {
             // Include original sender; server enriches @name mentions from text
             this.client.chat(response, [msg.from]);
@@ -566,6 +579,7 @@ export class AgentRunner {
 
     const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;
     const response = await this.adapter.handleMessage(batchMsg, senderName, notices || undefined);
+    this.logger.info(`[result] ${response ? response.slice(0, 500) : '(empty)'}`);
 
     if (response && !isNoReply(response)) {
       // Include all senders; server enriches @name mentions from text
@@ -626,6 +640,12 @@ export class AgentRunner {
    * enabled mid-execution takes effect immediately.
    */
   private emitWatchLog(event: string, summary: string, options?: Record<string, unknown>): void {
+    // Always log to agent log for a complete execution trace
+    const logLevel = (options?.level as string) === 'error' ? 'error' : 'info';
+    const durationSuffix = options?.durationMs !== undefined ? ` (${options.durationMs}ms)` : '';
+    this.logger[logLevel](`[exec] ${event}: ${summary}${durationSuffix}`);
+
+    // Send via WebSocket only when humans are watching
     if (this.verboseSubscribers.size === 0) return;
     const mentions = [...this.verboseSubscribers];
     const { level, durationMs, ...rest } = options ?? {};
@@ -688,6 +708,7 @@ export class AgentRunner {
     this.client.updateTask(task.taskId, 'in-progress', this.client.agent.id);
 
     const result = await this.adapter.executeTask(task);
+    this.logger.info(`[result:task] success=${result.success} ${result.summary.slice(0, 500)}`);
 
     this.client.reportTaskResult(
       task.taskId,
