@@ -306,6 +306,11 @@ export class ClaudeCodeAdapter extends AgentAdapter {
 
           if (event.type === 'result') {
             resultText = (event.result as string) ?? '';
+            // Stop reading immediately — the result is the last meaningful
+            // event.  If Claude CLI spawned long-running child processes
+            // (e.g. Vite dev server) that inherited stdout, the readline
+            // iterator would block forever waiting for EOF.
+            break;
           }
         } catch {
           // Skip non-JSON lines
