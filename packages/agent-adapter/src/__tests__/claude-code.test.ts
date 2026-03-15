@@ -702,4 +702,39 @@ describe('ClaudeCodeAdapter stream-json parsing', () => {
     expect(args).toContain('stream-json');
     expect(args).not.toContain('text');
   });
+
+  it('does not hang when child process keeps stdout open after result (e.g. Vite dev server)', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Simulate a stdout stream that emits the result but never ends (child process holds fd open)
+    const stdout = new Readable({ read() {} });
+    const resultLine = JSON.stringify({ type: 'result', subtype: 'success', result: 'built the UI' });
+    // Push result then keep the stream open (no null push)
+    stdout.push(resultLine + '\n');
+
+    const proc = {
+      stdout,
+      stderr: Readable.from([]),
+      exitCode: null as number | null,
+      kill: vi.fn(() => { proc.exitCode = 143; }),
+      then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => {
+        // Simulate a process that never exits on its own — resolves only when killed
+        return new Promise<unknown>((res) => {
+          const check = setInterval(() => {
+            if (proc.exitCode !== null) {
+              clearInterval(check);
+              res({ stdout: '', stderr: '' });
+            }
+          }, 50);
+        }).then(resolve, reject);
+      },
+    };
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(proc);
+
+    // This should resolve quickly, not hang forever
+    const result = await adapter.handleMessage(makeMsg());
+    expect(result).toBe('built the UI');
+  }, 10_000);
 });
