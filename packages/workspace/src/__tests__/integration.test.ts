@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SkynetWorkspace } from '../server.js';
 import { SqliteStore } from '../sqlite-store.js';
 import { SkynetClient } from '@skynet-ai/sdk';
-import { AgentType, MENTION_ALL, type SkynetMessage } from '@skynet-ai/protocol';
+import { AgentType, MENTION_ALL, WS_CLOSE_REPLACED, type SkynetMessage } from '@skynet-ai/protocol';
 import { randomUUID } from 'node:crypto';
 
 const PORT = 4200 + Math.floor(Math.random() * 100);
@@ -388,6 +388,44 @@ describe('Server integration', () => {
     if (lastBob) await lastBob.close();
   });
 
+  it('sends WS_CLOSE_REPLACED (4001) when a duplicate connection replaces an existing one', async () => {
+    // Register bob via HTTP API
+    const bobRes = await fetch(`http://localhost:${PORT}/api/humans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'bob-replaced' }),
+    });
+    const bobEntity = await bobRes.json() as { id: string };
+
+    // First connection
+    const bob1 = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: { id: bobEntity.id, name: 'bob-replaced', type: AgentType.HUMAN, status: 'idle' },
+      reconnect: false,
+    });
+    await bob1.connect();
+
+    // Capture close code on the first connection's underlying WebSocket
+    const closeCode = new Promise<number>((resolve) => {
+      const ws = (bob1 as unknown as { ws: { on: (event: string, cb: (code: number) => void) => void } }).ws;
+      ws.on('close', (code: number) => resolve(code));
+    });
+
+    // Second connection with the same agent ID — should replace the first
+    const bob2 = new SkynetClient({
+      serverUrl: `http://localhost:${PORT}`,
+      agent: { id: bobEntity.id, name: 'bob-replaced', type: AgentType.HUMAN, status: 'idle' },
+      reconnect: false,
+    });
+    await bob2.connect();
+
+    // First connection should have received close code 4001
+    const code = await closeCode;
+    expect(code).toBe(WS_CLOSE_REPLACED);
+
+    await bob2.close();
+  });
+
   it('workspace.state respects lastSeenTimestamp from client', async () => {
     const alice = await makeClient(PORT, 'alice-seen');
     await alice.connect();
@@ -498,6 +536,72 @@ describe('Server integration', () => {
     expect(statusEvents).toHaveLength(0);
 
     await alice.close();
+  });
+
+  it('server enriches mentions from markdown-wrapped @names in message text', async () => {
+    const sender = await makeClient(PORT, 'enrich-sender');
+    const target = await makeClient(PORT, 'enrich-target', AgentType.CLAUDE_CODE);
+    await sender.connect();
+    await target.connect();
+    await sleep(50);
+
+    const received: SkynetMessage[] = [];
+    target.on('chat', (msg: SkynetMessage) => received.push(msg));
+
+    // Send message with markdown-wrapped mention — client passes empty mentions
+    sender.chat('**@enrich-target** please do this', []);
+    await sleep(200);
+
+    // The server should have enriched mentions so target receives the message
+    expect(received).toHaveLength(1);
+    expect(received[0].mentions).toContain(target.agent.id);
+
+    await sender.close();
+    await target.close();
+  });
+
+  it('server enriches mentions for offline agents visible on reconnect', async () => {
+    const sender = await makeClient(PORT, 'offline-sender');
+    // Register offline-agent but don't connect it yet
+    const offlineAgent = await makeClient(PORT, 'offline-agent', AgentType.CLAUDE_CODE);
+    await sender.connect();
+    await sleep(50);
+
+    // Send message mentioning the offline agent (client can't resolve, sends empty mentions)
+    sender.chat('Hey **@offline-agent** check this', []);
+    await sleep(200);
+
+    // Now the offline agent connects — should see the message in history
+    const state = await offlineAgent.connect();
+    const chatMessages = state.recentMessages.filter(m => m.type === 'chat');
+    const texts = chatMessages.map(m => (m.payload as { text: string }).text);
+    expect(texts).toContain('Hey **@offline-agent** check this');
+
+    await sender.close();
+    await offlineAgent.close();
+  });
+
+  it('server does not duplicate already-resolved mentions', async () => {
+    const sender = await makeClient(PORT, 'nodup-sender');
+    const target = await makeClient(PORT, 'nodup-target', AgentType.CLAUDE_CODE);
+    await sender.connect();
+    await target.connect();
+    await sleep(50);
+
+    const received: SkynetMessage[] = [];
+    target.on('chat', (msg: SkynetMessage) => received.push(msg));
+
+    // Client already resolved the mention correctly
+    sender.chat('@nodup-target please review', [target.agent.id]);
+    await sleep(200);
+
+    expect(received).toHaveLength(1);
+    // Should have exactly one occurrence of target ID, not duplicated
+    const targetMentions = received[0].mentions!.filter(id => id === target.agent.id);
+    expect(targetMentions).toHaveLength(1);
+
+    await sender.close();
+    await target.close();
   });
 
   it('workspace.state for non-human agents only includes messages mentioning them', async () => {

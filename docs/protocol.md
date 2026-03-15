@@ -16,7 +16,7 @@ interface SkynetMessage {
 }
 ```
 
-The `mentions` field drives all message routing. Mentioned agents receive the message; agents without a mention do not.
+The `mentions` field drives all message routing. Mentioned agents receive the message; agents without a mention do not (humans are an exception — they receive all messages regardless). The final `mentions` array is built from both client-provided values and server-side text scanning. See `docs/workspace.md` [Message Routing](workspace.md#message-routing) for the full enrichment and routing rules.
 
 ## Message Types
 
@@ -40,6 +40,11 @@ enum MessageType {
   // Agent control
   AGENT_INTERRUPT = 'agent.interrupt',  // Interrupt agent's current task
   AGENT_FORGET = 'agent.forget',        // Reset agent's session
+  AGENT_WATCH = 'agent.watch',          // Human subscribes to agent logs
+  AGENT_UNWATCH = 'agent.unwatch',      // Human unsubscribes from agent logs
+
+  // Execution logs
+  EXECUTION_LOG = 'execution.log',      // Agent execution log entry
 }
 ```
 
@@ -123,6 +128,25 @@ interface HumanProfile {
 }
 ```
 
+## Attachment Types
+
+```typescript
+type AttachmentType = 'image';
+
+interface Attachment {
+  type: AttachmentType;
+  mimeType: string;
+  name: string;
+  /** Base64-encoded file data. */
+  data: string;
+  /** Original file size in bytes. */
+  size: number;
+}
+
+/** Maximum attachment size in bytes (5 MB). */
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
+```
+
 ## Payload Types
 
 ### Chat
@@ -130,6 +154,7 @@ interface HumanProfile {
 ```typescript
 interface ChatPayload {
   text: string;
+  attachments?: Attachment[];
 }
 ```
 
@@ -205,6 +230,50 @@ interface AgentInterruptPayload {
 interface AgentForgetPayload {
   agentId: string;
 }
+
+interface AgentWatchPayload {
+  agentId: string;
+  humanId: string;
+}
+
+interface AgentUnwatchPayload {
+  agentId: string;
+  humanId: string;
+}
+```
+
+### Execution Log
+
+```typescript
+type ExecutionLogLevel = 'info' | 'warn' | 'error' | 'debug';
+
+type ExecutionLogEvent =
+  | 'processing.start'
+  | 'processing.end'
+  | 'processing.error'
+  | 'tool.call'
+  | 'tool.result'
+  | 'thinking'
+  | 'custom';
+
+interface ExecutionLogPayload {
+  event: ExecutionLogEvent;
+  summary: string;
+  level: ExecutionLogLevel;
+  durationMs?: number;
+  sourceMessageId?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+## Special Constants
+
+```typescript
+/** Special mention ID that targets all workspace members. */
+const MENTION_ALL = '__all__';
+
+/** Close code sent when a connection is replaced by another with the same agent ID. */
+const WS_CLOSE_REPLACED = 4001;
 ```
 
 ## Client-Server Wire Protocol
@@ -217,7 +286,6 @@ enum ClientAction {
   LEAVE = 'leave',
   SEND = 'send',
   HEARTBEAT = 'heartbeat',
-  TYPING = 'typing',
 }
 
 interface ClientEnvelope {
@@ -227,6 +295,8 @@ interface ClientEnvelope {
 
 interface JoinRequest {
   agent: AgentCard;
+  /** Timestamp of the last message the client saw — server will only replay newer messages. */
+  lastSeenTimestamp?: number;
 }
 
 interface ServerEvent {
@@ -243,7 +313,6 @@ The server sends events to clients as JSON: `{event: string, data: unknown}`.
 |-------|------|------|
 | `workspace.state` | On every (re)connection | `{members: AgentCard[], recentMessages: SkynetMessage[]}` |
 | `heartbeat.ack` | After receiving a heartbeat | `{timestamp: number}` |
-| `typing` | When a member starts/stops typing | `{agentId: string, isTyping: boolean}` |
 | `error` | On invalid client action | `{message: string}` |
 
 **Note:** The `workspace.state` event is sent on every connection, including reconnections. The SDK emits a `workspace-state` event each time, allowing agents to refresh their local state (e.g., member name maps) after network interruptions.

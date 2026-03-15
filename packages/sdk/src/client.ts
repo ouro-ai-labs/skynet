@@ -4,9 +4,13 @@ import {
   type SkynetMessage,
   type AgentCard,
   type Attachment,
+  type ExecutionLogEvent,
+  type ExecutionLogLevel,
+  type ExecutionLogPayload,
   type JoinRequest,
   type ServerEvent,
   ClientAction,
+  WS_CLOSE_REPLACED,
   deserialize,
   MessageType,
   createMessage,
@@ -164,10 +168,19 @@ export class SkynetClient extends EventEmitter {
           case MessageType.AGENT_FORGET:
             this.emit('agent-forget', msg);
             break;
+          case MessageType.AGENT_WATCH:
+            this.emit('agent-watch', msg);
+            break;
+          case MessageType.AGENT_UNWATCH:
+            this.emit('agent-unwatch', msg);
+            break;
+          case MessageType.EXECUTION_LOG:
+            this.emit('execution-log', msg);
+            break;
         }
       });
 
-      this.ws.on('close', () => {
+      this.ws.on('close', (code: number) => {
         this._connected = false;
         this.stopHeartbeat();
 
@@ -175,6 +188,13 @@ export class SkynetClient extends EventEmitter {
         if (!resolved) {
           resolved = true;
           reject(new Error('Connection closed before workspace state was received'));
+        }
+
+        // Connection was replaced by another client with the same agent ID — do not reconnect.
+        if (code === WS_CLOSE_REPLACED) {
+          this._closed = true;
+          this.emit('replaced');
+          return;
         }
 
         if (this._reconnecting) {
@@ -248,6 +268,32 @@ export class SkynetClient extends EventEmitter {
     });
   }
 
+  sendExecutionLog(
+    event: ExecutionLogEvent,
+    summary: string,
+    options?: {
+      level?: ExecutionLogLevel;
+      durationMs?: number;
+      sourceMessageId?: string;
+      metadata?: Record<string, unknown>;
+      mentions?: string[];
+    },
+  ): void {
+    const payload: ExecutionLogPayload = {
+      event,
+      summary,
+      level: options?.level ?? 'info',
+      ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+      ...(options?.sourceMessageId ? { sourceMessageId: options.sourceMessageId } : {}),
+      ...(options?.metadata ? { metadata: options.metadata } : {}),
+    };
+    this.sendMessage({
+      type: MessageType.EXECUTION_LOG,
+      payload,
+      ...(options?.mentions && options.mentions.length > 0 ? { mentions: options.mentions } : {}),
+    });
+  }
+
   /** Send a heartbeat immediately (e.g. on status change) without waiting for the next interval. */
   sendHeartbeatNow(): void {
     this.send({
@@ -281,8 +327,11 @@ export class SkynetClient extends EventEmitter {
     );
     this.emit('reconnecting', { attempt: this._reconnectAttempt, delay });
     this.reconnectTimer = setTimeout(() => {
-      this.connect().catch(() => {
-        // Error is handled by the 'close' event which will schedule another attempt
+      this.connect().catch((err: unknown) => {
+        // Error is handled by the 'close' event which will schedule another attempt.
+        // Log for debugging so reconnection failures are not completely silent.
+        const msg = err instanceof Error ? err.message : String(err);
+        this.emit('debug', `Reconnect attempt ${this._reconnectAttempt} failed: ${msg}`);
       });
     }, delay);
   }

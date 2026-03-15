@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { SkynetClient } from '../client.js';
-import { AgentType } from '@skynet-ai/protocol';
+import { AgentType, WS_CLOSE_REPLACED } from '@skynet-ai/protocol';
 
 let port = 19870;
 function nextPort(): number {
@@ -199,5 +199,56 @@ describe('SkynetClient reconnection', () => {
 
     expect(client.connected).toBe(true);
     expect(reconnectEvents[0]!.delay).toBe(100);
+  }, 10000);
+
+  it('does not reconnect when server closes with WS_CLOSE_REPLACED (4001)', async () => {
+    const p = nextPort();
+    const wss = new WebSocketServer({ port: p });
+    createJoinHandler(wss);
+    cleanups.push(() => closeServer(wss));
+
+    const client = createTestClient(p);
+    cleanups.push(() => client.close());
+    await client.connect();
+
+    let reconnectCount = 0;
+    let replacedCount = 0;
+    client.on('reconnecting', () => { reconnectCount++; });
+    client.on('replaced', () => { replacedCount++; });
+
+    // Server closes the socket with the "replaced" close code
+    for (const ws of wss.clients) {
+      ws.close(WS_CLOSE_REPLACED, 'replaced');
+    }
+
+    await new Promise((r) => setTimeout(r, 500));
+
+    expect(reconnectCount).toBe(0);
+    expect(replacedCount).toBe(1);
+    expect(client.connected).toBe(false);
+  }, 10000);
+
+  it('emits debug event on reconnection failure', async () => {
+    const p = nextPort();
+    const wss = new WebSocketServer({ port: p });
+    createJoinHandler(wss);
+
+    const client = createTestClient(p);
+    cleanups.push(() => client.close());
+    await client.connect();
+
+    const debugMessages: string[] = [];
+    client.on('debug', (msg: string) => {
+      debugMessages.push(msg);
+    });
+
+    await closeServer(wss);
+
+    // Wait for reconnect attempt to fail
+    await new Promise((r) => setTimeout(r, 500));
+
+    expect(debugMessages.length).toBeGreaterThanOrEqual(1);
+    expect(debugMessages[0]).toContain('Reconnect attempt');
+    expect(debugMessages[0]).toContain('failed');
   }, 10000);
 });

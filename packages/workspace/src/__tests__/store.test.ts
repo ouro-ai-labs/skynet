@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SqliteStore } from '../sqlite-store.js';
-import { createChatMessage, createMessage, MessageType, AgentType, MENTION_ALL } from '@skynet-ai/protocol';
+import { createChatMessage, createMessage, createExecutionLog, MessageType, AgentType, MENTION_ALL } from '@skynet-ai/protocol';
 import type { Store } from '../store.js';
 
 describe('SqliteStore', () => {
@@ -191,6 +191,71 @@ describe('SqliteStore', () => {
     const bobMessages = store.getMessagesFor('bob-id');
     expect(bobMessages).toHaveLength(1);
     expect((bobMessages[0].payload as { text: string }).text).toBe('hello everyone');
+  });
+});
+
+describe('SqliteStore execution logs', () => {
+  let store: Store;
+
+  beforeEach(() => {
+    store = new SqliteStore(':memory:');
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it('returns execution logs filtered by type', () => {
+    // Save a mix of chat and execution log messages
+    store.save(createChatMessage('alice', 'hello'));
+    store.save(createExecutionLog('agent-1', 'tool.call', 'Read file.ts'));
+    store.save(createExecutionLog('agent-1', 'tool.result', 'done'));
+    store.save(createChatMessage('bob', 'world'));
+
+    const logs = store.getExecutionLogs();
+    expect(logs).toHaveLength(2);
+    expect(logs[0].type).toBe(MessageType.EXECUTION_LOG);
+    expect(logs[1].type).toBe(MessageType.EXECUTION_LOG);
+  });
+
+  it('filters execution logs by agent ID', () => {
+    store.save(createExecutionLog('agent-1', 'tool.call', 'Read'));
+    store.save(createExecutionLog('agent-2', 'tool.call', 'Write'));
+    store.save(createExecutionLog('agent-1', 'processing.end', 'Done'));
+
+    const agent1Logs = store.getExecutionLogs('agent-1');
+    expect(agent1Logs).toHaveLength(2);
+    expect(agent1Logs.every((l) => l.from === 'agent-1')).toBe(true);
+
+    const agent2Logs = store.getExecutionLogs('agent-2');
+    expect(agent2Logs).toHaveLength(1);
+    expect(agent2Logs[0].from).toBe('agent-2');
+  });
+
+  it('respects limit parameter', () => {
+    for (let i = 0; i < 10; i++) {
+      store.save(createExecutionLog('agent-1', 'tool.call', `tool ${i}`));
+    }
+
+    const logs = store.getExecutionLogs(undefined, 3);
+    expect(logs).toHaveLength(3);
+  });
+
+  it('returns empty array when no execution logs exist', () => {
+    store.save(createChatMessage('alice', 'hello'));
+    expect(store.getExecutionLogs()).toEqual([]);
+  });
+
+  it('returns logs in chronological order', () => {
+    for (let i = 0; i < 5; i++) {
+      const log = createExecutionLog('agent-1', 'tool.call', `tool ${i}`);
+      store.save({ ...log, timestamp: 1000 + i });
+    }
+
+    const logs = store.getExecutionLogs();
+    for (let i = 1; i < logs.length; i++) {
+      expect(logs[i].timestamp).toBeGreaterThanOrEqual(logs[i - 1].timestamp);
+    }
   });
 });
 

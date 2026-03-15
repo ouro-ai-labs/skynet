@@ -6,6 +6,7 @@ import { registerAgentCommand } from './commands/agent.js';
 import { registerHumanCommand } from './commands/human.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerStatusCommand } from './commands/status.js';
+import { registerDoctorCommand } from './commands/doctor.js';
 
 const program = new Command();
 
@@ -20,5 +21,6 @@ registerAgentCommand(program);
 registerHumanCommand(program);
 registerChatCommand(program);
 registerStatusCommand(program);
+registerDoctorCommand(program);
 
 program.parse();

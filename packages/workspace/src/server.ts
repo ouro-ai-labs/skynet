@@ -7,16 +7,20 @@ import {
   type SkynetMessage,
   type AgentCard,
   type AgentStatus,
+  type ChatPayload,
   type HumanProfile,
   type JoinRequest,
   type AgentJoinPayload,
   type AgentLeavePayload,
   type AgentInterruptPayload,
   type AgentForgetPayload,
+  type AgentWatchPayload,
+  type AgentUnwatchPayload,
   AgentType,
   MessageType,
   ClientAction,
   MENTION_ALL,
+  WS_CLOSE_REPLACED,
   createMessage,
   deserialize,
   serialize,
@@ -95,6 +99,7 @@ export class SkynetWorkspace {
     this.fastify.get('/api/members', async () => {
       return this.members.getMembers();
     });
+
   }
 
   private registerAgentRoutes(): void {
@@ -203,6 +208,62 @@ export class SkynetWorkspace {
         });
         this.members.sendTo(agent.id, msg);
         this.logger.info(`Forget sent to agent: ${agent.name} (${agent.id})`);
+        return { ok: true, agentId: agent.id };
+      },
+    );
+
+    // Watch agent — enable verbose execution log streaming to a human
+    this.fastify.post<{ Params: { id: string }; Body: { humanId: string } }>(
+      '/api/agents/:id/watch',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const member = this.members.getMember(agent.id);
+        if (!member) {
+          return reply.status(409).send({ error: 'Agent is not connected' });
+        }
+        const humanId = req.body?.humanId;
+        if (!humanId) {
+          return reply.status(400).send({ error: 'humanId is required' });
+        }
+        const msg = createMessage({
+          type: MessageType.AGENT_WATCH,
+          from: agent.id,
+          payload: { agentId: agent.id, humanId } satisfies AgentWatchPayload,
+          mentions: [agent.id],
+        });
+        this.members.sendTo(agent.id, msg);
+        this.logger.info(`Watch enabled: human=${humanId} → agent=${agent.name} (${agent.id})`);
+        return { ok: true, agentId: agent.id };
+      },
+    );
+
+    // Unwatch agent — disable verbose execution log streaming
+    this.fastify.post<{ Params: { id: string }; Body: { humanId: string } }>(
+      '/api/agents/:id/unwatch',
+      async (req, reply) => {
+        const agent = this.store.getAgent(req.params.id);
+        if (!agent) {
+          return reply.status(404).send({ error: 'Agent not found' });
+        }
+        const member = this.members.getMember(agent.id);
+        if (!member) {
+          return reply.status(409).send({ error: 'Agent is not connected' });
+        }
+        const humanId = req.body?.humanId;
+        if (!humanId) {
+          return reply.status(400).send({ error: 'humanId is required' });
+        }
+        const msg = createMessage({
+          type: MessageType.AGENT_UNWATCH,
+          from: agent.id,
+          payload: { agentId: agent.id, humanId } satisfies AgentUnwatchPayload,
+          mentions: [agent.id],
+        });
+        this.members.sendTo(agent.id, msg);
+        this.logger.info(`Watch disabled: human=${humanId} → agent=${agent.name} (${agent.id})`);
         return { ok: true, agentId: agent.id };
       },
     );
@@ -344,7 +405,7 @@ export class SkynetWorkspace {
       // Remove old socket from map so its close handler finds no agentId and exits early
       this.socketAgentMap.delete(existingMember.socket);
       if (existingMember.socket.readyState === existingMember.socket.OPEN) {
-        existingMember.socket.close();
+        existingMember.socket.close(WS_CLOSE_REPLACED, 'replaced');
       }
     }
     this.logger.info(`Agent joined: ${req.agent.name} (${agentId})${isReconnect ? ' [reconnect]' : ''}`);
@@ -376,6 +437,50 @@ export class SkynetWorkspace {
     }
   }
 
+  /**
+   * Enrich the mentions array by scanning message text against all registered
+   * agents and humans. This ensures mentions are resolved even when the client
+   * fails to parse them (e.g. markdown-wrapped `**@backend**`) or when the
+   * mentioned member was offline and absent from the client's member list.
+   */
+  private enrichMentions(msg: SkynetMessage): string[] {
+    const existing = msg.mentions ? [...msg.mentions] : [];
+
+    // Only enrich chat messages that have text
+    if (msg.type !== MessageType.CHAT) return existing;
+    const text = (msg.payload as ChatPayload)?.text;
+    if (!text || !text.includes('@')) return existing;
+
+    const lower = text.toLowerCase();
+    const senderId = msg.from;
+    const ids = new Set(existing);
+
+    // Scan against all registered agents
+    for (const agent of this.store.listAgents()) {
+      if (agent.id === senderId) continue;
+      if (ids.has(agent.id)) continue;
+      if (lower.includes(`@${agent.name.toLowerCase()}`)) {
+        ids.add(agent.id);
+      }
+    }
+
+    // Scan against all registered humans
+    for (const human of this.store.listHumans()) {
+      if (human.id === senderId) continue;
+      if (ids.has(human.id)) continue;
+      if (lower.includes(`@${human.name.toLowerCase()}`)) {
+        ids.add(human.id);
+      }
+    }
+
+    // Check for @all
+    if (!ids.has(MENTION_ALL) && lower.includes('@all')) {
+      ids.add(MENTION_ALL);
+    }
+
+    return Array.from(ids);
+  }
+
   private handleSend(socket: WebSocket, msg: SkynetMessage): void {
     const agentId = this.socketAgentMap.get(socket);
     if (!agentId) {
@@ -388,6 +493,13 @@ export class SkynetWorkspace {
       ...msg,
       from: agentId,
     });
+
+    // Server-side mention enrichment: resolve @name patterns from text against
+    // the full registry (agents + humans), merging with client-provided mentions.
+    const enriched = this.enrichMentions(fullMsg);
+    if (enriched.length > 0) {
+      fullMsg.mentions = enriched;
+    }
 
     this.store.save(fullMsg);
     this.logger.debug(`Message from=${agentId} type=${fullMsg.type}`);
@@ -414,7 +526,10 @@ export class SkynetWorkspace {
     }
 
     // Humans observe all messages — deliver to connected humans not already reached.
-    this.members.sendToHumans(fullMsg, delivered);
+    // Exception: execution logs are only delivered to explicitly mentioned (watching) humans.
+    if (fullMsg.type !== MessageType.EXECUTION_LOG) {
+      this.members.sendToHumans(fullMsg, delivered);
+    }
   }
 
   private handleHeartbeat(socket: WebSocket, data: { agentId: string; status: AgentStatus }): void {

@@ -48,6 +48,10 @@ vi.mock('@skynet-ai/sdk', () => {
 
     sendMessage() {}
     sendHeartbeatNow() {}
+    executionLogCalls: Array<{ event: string; summary: string; options?: Record<string, unknown> }> = [];
+    sendExecutionLog(event: string, summary: string, options?: Record<string, unknown>) {
+      this.executionLogCalls.push({ event, summary, options });
+    }
     updateTask() {}
     reportTaskResult() {}
   }
@@ -95,6 +99,7 @@ class FakeAdapter extends AgentAdapter {
 
   quickReplyCalls: string[] = [];
   handleMessageCalls: SkynetMessage[] = [];
+  handleMessageNotices: (string | undefined)[] = [];
   restoredSessionState: SessionState | undefined;
   resetSessionCalls = 0;
 
@@ -126,8 +131,9 @@ class FakeAdapter extends AgentAdapter {
 
   async isAvailable() { return true; }
 
-  async handleMessage(msg: SkynetMessage): Promise<string> {
+  async handleMessage(msg: SkynetMessage, _senderName?: string, notices?: string): Promise<string> {
     this.handleMessageCalls.push(msg);
+    this.handleMessageNotices.push(notices);
     if (this.handleDelay > 0) {
       await new Promise(r => setTimeout(r, this.handleDelay));
     }
@@ -160,6 +166,7 @@ interface MockClient {
   agent: AgentCard;
   emit(event: string, ...args: unknown[]): boolean;
   chatCalls: Array<{ text: string; mentions?: string[] }>;
+  executionLogCalls: Array<{ event: string; summary: string; options?: Record<string, unknown> }>;
 }
 
 function getClient(runner: AgentRunner): MockClient {
@@ -253,15 +260,15 @@ describe('AgentRunner pending notices', () => {
       payload: { agent: { id: 'new-1', name: 'newcomer', type: 'claude-code' } },
     });
 
-    // Send a chat message — should include the join notice
+    // Send a chat message — notice should be passed separately, not in payload text
     const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
     client.emit('chat', msg);
     await new Promise(r => setTimeout(r, 50));
 
     expect(adapter.handleMessageCalls).toHaveLength(1);
     const receivedText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
-    expect(receivedText).toContain('[System] newcomer has joined the workspace.');
-    expect(receivedText).toContain('hello');
+    expect(receivedText).toBe('hello');
+    expect(adapter.handleMessageNotices[0]).toContain('[System] newcomer has joined the workspace.');
   });
 
   it('piggybacks leave notice onto next message', async () => {
@@ -290,15 +297,15 @@ describe('AgentRunner pending notices', () => {
       payload: { agentId: 'leaving-1' },
     });
 
-    // Send another message — should include the leave notice
+    // Send another message — notice should be passed separately, not in payload text
     const msg2 = makeChatMsg({ from: 'user-a', text: 'second', mentions: [runner.agentId] });
     client.emit('chat', msg2);
     await new Promise(r => setTimeout(r, 50));
 
     expect(adapter.handleMessageCalls).toHaveLength(2);
     const receivedText = (adapter.handleMessageCalls[1].payload as { text: string }).text;
-    expect(receivedText).toContain('[System] leaver has left the workspace.');
-    expect(receivedText).toContain('second');
+    expect(receivedText).toBe('second');
+    expect(adapter.handleMessageNotices[1]).toContain('[System] leaver has left the workspace.');
   });
 
   it('no notices means original message text is unchanged', async () => {
@@ -310,6 +317,7 @@ describe('AgentRunner pending notices', () => {
 
     const receivedText = (adapter.handleMessageCalls[0].payload as { text: string }).text;
     expect(receivedText).toBe('clean message');
+    expect(adapter.handleMessageNotices[0]).toBeUndefined();
   });
 
   it('clears notices generated during start()', async () => {
@@ -784,7 +792,7 @@ describe('AgentRunner batch processing', () => {
     client.emit('task-assign', taskMsg);
     client.emit('chat', msg3);
 
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 600));
 
     // msg1 processed, msg2 processed (single chat before task), task processed, msg3 processed
     expect(adapter.handleMessageCalls).toHaveLength(3); // msg1, msg2, msg3
@@ -1434,15 +1442,15 @@ describe('AgentRunner agent-join race condition', () => {
     expect(memberInfo.has('late-agent-id')).toBe(true);
     expect(memberInfo.get('late-agent-id')!.name).toBe('late-joiner');
 
-    // Verify @mention resolution works for the late joiner
+    // Verify agent can respond to messages (mention resolution is server-side)
     const msg = makeChatMsg({ from: 'human-1', mentions: [runner.agentId] });
     client.emit('chat', msg);
     await new Promise(r => setTimeout(r, 50));
 
-    // The response contains @late-joiner, which should resolve to 'late-agent-id'
     expect(client.chatCalls.length).toBeGreaterThan(0);
     const lastCall = client.chatCalls[client.chatCalls.length - 1];
-    expect(lastCall.mentions).toContain('late-agent-id');
+    // Client includes original sender; server enriches @name mentions
+    expect(lastCall.mentions).toContain('human-1');
   });
 });
 
@@ -1533,5 +1541,253 @@ describe('isNoReply', () => {
   it('does not match normal messages', () => {
     expect(isNoReply('Hello world')).toBe(false);
     expect(isNoReply('@pm Here is my update.')).toBe(false);
+  });
+});
+
+describe('AgentRunner stop() listener cleanup', () => {
+  it('removes all client listeners on stop()', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    // Client should have listeners registered by start()
+    const listenerCountBefore = (client as unknown as { listenerCount(e: string): number }).listenerCount('chat');
+    expect(listenerCountBefore).toBeGreaterThan(0);
+
+    await runner.stop();
+
+    // After stop(), all listeners should be removed
+    const listenerCountAfter = (client as unknown as { listenerCount(e: string): number }).listenerCount('chat');
+    expect(listenerCountAfter).toBe(0);
+  });
+
+  it('does not process messages after stop()', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      debounceMs: 0,
+    });
+    await runner.start();
+    const client = getClient(runner);
+
+    await runner.stop();
+
+    // Emit a message after stop — should not be processed since listeners are removed
+    const msg = makeChatMsg({ from: 'user-a', text: 'hello', mentions: [runner.agentId] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 50));
+    expect(adapter.handleMessageCalls).toHaveLength(0);
+  });
+});
+
+describe('AgentRunner execution log emissions', () => {
+  /** Simulate a /watch control message from a human. */
+  function emitWatch(client: { emit: (event: string, msg: unknown) => boolean }, agentId: string, humanId: string): void {
+    client.emit('agent-watch', {
+      id: `watch-${Math.random().toString(36).slice(2)}`,
+      type: 'agent.watch',
+      from: agentId,
+      timestamp: Date.now(),
+      payload: { agentId, humanId },
+      mentions: [agentId],
+    });
+  }
+
+  function emitUnwatch(client: { emit: (event: string, msg: unknown) => boolean }, agentId: string, humanId: string): void {
+    client.emit('agent-unwatch', {
+      id: `unwatch-${Math.random().toString(36).slice(2)}`,
+      type: 'agent.unwatch',
+      from: agentId,
+      timestamp: Date.now(),
+      payload: { agentId, humanId },
+      mentions: [agentId],
+    });
+  }
+
+  it('does NOT emit execution logs when no one is watching', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'test-agent-silent',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    registerMember(runner, 'human-1', 'alice', AgentType.HUMAN);
+
+    const msg = makeChatMsg({ mentions: ['test-agent-silent'] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    // No one watching → no execution logs
+    expect(client.executionLogCalls).toHaveLength(0);
+
+    await runner.stop();
+  });
+
+  it('emits processing.start and processing.end when watched', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'test-agent-logs',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    registerMember(runner, 'human-1', 'alice', AgentType.HUMAN);
+
+    // Enable watching
+    emitWatch(client, 'test-agent-logs', 'human-1');
+
+    const msg = makeChatMsg({ mentions: ['test-agent-logs'] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const logEvents = client.executionLogCalls.map(c => c.event);
+    expect(logEvents).toContain('processing.start');
+    expect(logEvents).toContain('processing.end');
+
+    // processing.end should include durationMs
+    const endLog = client.executionLogCalls.find(c => c.event === 'processing.end');
+    expect(endLog?.options?.durationMs).toBeDefined();
+
+    // Logs should mention the watching human
+    expect(endLog?.options?.mentions).toEqual(['human-1']);
+
+    await runner.stop();
+  });
+
+  it('emits processing.error on failure when watched', async () => {
+    const adapter = new FakeAdapter();
+    adapter.handleResponse = ''; // empty
+    const originalHandleMessage = adapter.handleMessage.bind(adapter);
+    adapter.handleMessage = async () => {
+      throw new Error('test failure');
+    };
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'test-agent-err',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    registerMember(runner, 'human-1', 'alice', AgentType.HUMAN);
+    emitWatch(client, 'test-agent-err', 'human-1');
+
+    const msg = makeChatMsg({ mentions: ['test-agent-err'] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const errorLogs = client.executionLogCalls.filter(c => c.event === 'processing.error');
+    expect(errorLogs).toHaveLength(1);
+    expect(errorLogs[0].summary).toContain('test failure');
+
+    // processing.end should NOT be emitted when there was an error
+    const endLogs = client.executionLogCalls.filter(c => c.event === 'processing.end');
+    expect(endLogs).toHaveLength(0);
+
+    adapter.handleMessage = originalHandleMessage;
+    await runner.stop();
+  });
+
+  it('sanitizes command-line errors in processing.error logs', async () => {
+    const adapter = new FakeAdapter();
+    adapter.handleMessage = async () => {
+      const err = new Error(
+        'Command failed with exit code 1: claude -p \'prompt\' --output-format stream-json --append-system-prompt \'You are a secret agent\''
+      );
+      (err as Record<string, unknown>).shortMessage = 'Command failed with exit code 1: claude -p \'prompt\' --output-format stream-json';
+      throw err;
+    };
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'test-agent-sanitize',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    registerMember(runner, 'human-1', 'alice', AgentType.HUMAN);
+    emitWatch(client, 'test-agent-sanitize', 'human-1');
+
+    const msg = makeChatMsg({ mentions: ['test-agent-sanitize'] });
+    client.emit('chat', msg);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    const errorLogs = client.executionLogCalls.filter(c => c.event === 'processing.error');
+    expect(errorLogs).toHaveLength(1);
+    expect(errorLogs[0].summary).not.toContain('--append-system-prompt');
+    expect(errorLogs[0].summary).not.toContain('stream-json');
+    expect(errorLogs[0].summary).toContain('exit code 1');
+
+    await runner.stop();
+  });
+
+  it('adapter.onExecutionLog only sends when watched', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'test-agent-wire',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+
+    // No watchers — callback should be a no-op
+    adapter.onExecutionLog?.('tool.call', 'Read file.ts', { input: { file_path: '/foo.ts' } });
+    expect(client.executionLogCalls).toHaveLength(0);
+
+    // Enable watching
+    emitWatch(client, 'test-agent-wire', 'human-1');
+
+    adapter.onExecutionLog?.('tool.call', 'Edit file.ts', { input: {} });
+    expect(client.executionLogCalls).toHaveLength(1);
+    expect(client.executionLogCalls[0].event).toBe('tool.call');
+    expect(client.executionLogCalls[0].summary).toBe('Edit file.ts');
+    expect(client.executionLogCalls[0].options?.mentions).toEqual(['human-1']);
+
+    await runner.stop();
+  });
+
+  it('unwatch stops execution log delivery', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'test-agent-unwatch',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+
+    // Watch then unwatch
+    emitWatch(client, 'test-agent-unwatch', 'human-1');
+    emitUnwatch(client, 'test-agent-unwatch', 'human-1');
+
+    adapter.onExecutionLog?.('tool.call', 'Read file.ts');
+    expect(client.executionLogCalls).toHaveLength(0);
+
+    await runner.stop();
   });
 });

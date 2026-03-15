@@ -76,7 +76,7 @@ pnpm skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [-
 ```
 
 - `--name` (required): Agent display name
-- `--type` (required): One of `claude-code`, `gemini-cli`, `codex-cli`, `generic`
+- `--type` (required): Agent type. **Currently only `claude-code` is supported.** Other types (`codex-cli`, `gemini-cli`, `generic`) are not yet supported — do not use them unless explicitly asked by the user.
 - `--role` (optional): Agent's role description (e.g., "backend engineer")
 - `--persona` (optional): Persona description for the agent's behavior
 - `--workdir` (optional): Custom working directory (default: `~/.skynet/<ws>/<id>/work`)
@@ -98,13 +98,13 @@ npx skills find <query>
 
 Review the search results with the user and confirm which skill to use before passing it to `--skills`.
 
-### Start an agent (daemon)
+### Start an agent
 
 ```bash
-pnpm skynet agent start <agent-name-or-id> -d --workspace <name-or-id>
+pnpm skynet agent start <agent-name-or-id> --workspace <name-or-id>
 ```
 
-Connects the agent to the workspace and starts processing messages as a background daemon.
+Connects the agent to the workspace and starts processing messages as a background daemon (default). Use `-f` to run in foreground instead.
 
 ### Stop an agent
 
@@ -193,6 +193,18 @@ pnpm skynet chat [--name <human-name>] --workspace <name-or-id>
 
 ---
 
+## Doctor
+
+### Check system prerequisites
+
+```bash
+pnpm skynet doctor
+```
+
+Runs diagnostic checks for Node.js version, pnpm, git, agent CLIs (claude, gemini, codex), workspace status, and port availability. Use this to troubleshoot environment issues.
+
+---
+
 ## Status
 
 ### Check workspace status
@@ -211,7 +223,7 @@ Shows all registered agents and humans with their id, name, role, persona, and o
 2. **Create a workspace**: `pnpm skynet workspace new --name my-project`
 3. **Start the workspace**: `pnpm skynet workspace start my-project -d`
 4. **Create agents**: `pnpm skynet agent new --workspace my-project --name backend --type claude-code --role "backend engineer"`
-5. **Start the agent**: `pnpm skynet agent start backend --workspace my-project -d`
+5. **Start the agent**: `pnpm skynet agent start backend --workspace my-project`
 6. **Create a human**: `pnpm skynet human new --workspace my-project --name alice`
 7. **Human joins chat** (tell them to run): `pnpm skynet chat --workspace my-project --name alice`
 8. **Check status**: `pnpm skynet status --workspace my-project`
@@ -225,6 +237,53 @@ All runtime logs are written to `~/.skynet/<workspace-uuid>/logs/`:
 
 - **Server log**: `~/.skynet/<workspace-uuid>/logs/server.log`
 - **Agent logs**: `~/.skynet/<workspace-uuid>/logs/<agent-uuid>.log`
+
+---
+
+## E2E Testing
+
+### Run the skill-marketplace E2E test
+
+```bash
+pnpm e2e:skill-marketplace [options]
+```
+
+Runs a full end-to-end test of the Skynet workflow using the skill-marketplace scenario. This test:
+
+1. Creates a workspace with PM, backend, and frontend agents (all `claude-code`) and a human
+2. Starts all agents as daemons
+3. Uses **pipe mode** to simulate the human sending the initial project brief to PM
+4. Monitors agent collaboration and tracks progress through 5 phases
+5. Verifies agents produce deliverables in the working directory
+6. Cleans up all resources
+
+**Options**:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--timeout <seconds>` | `1800` (30 min) | Overall timeout |
+| `--workdir <path>` | `/tmp/skynet-e2e-marketplace` | Agent working directory |
+| `--workspace <name>` | `e2e-skill-marketplace` | Workspace name |
+| `--skip-setup` | `false` | Reuse existing workspace (skip creation) |
+| `--skip-cleanup` | `false` | Keep workspace running after test |
+
+**Examples**:
+
+```bash
+# Run full test with defaults
+pnpm e2e:skill-marketplace
+
+# Run with custom timeout and workdir
+pnpm e2e:skill-marketplace --timeout 3600 --workdir /tmp/my-test
+
+# Resume a test (skip setup, reuse existing workspace)
+pnpm e2e:skill-marketplace --skip-setup --workspace e2e-skill-marketplace
+
+# Keep workspace running after test for manual inspection
+pnpm e2e:skill-marketplace --skip-cleanup
+```
+
+> **Note**: This test uses real `claude-code` agents and incurs API costs. Ensure your environment has the necessary API keys configured.
 
 ---
 

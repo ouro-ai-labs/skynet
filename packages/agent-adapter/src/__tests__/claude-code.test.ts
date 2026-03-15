@@ -2,11 +2,49 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { MessageType } from '@skynet-ai/protocol';
 import { ClaudeCodeAdapter } from '../adapters/claude-code.js';
 
+/**
+ * Create a mock process object that mimics an execa ResultPromise:
+ * - has a readable `stdout` stream emitting JSONL lines
+ * - is thenable (awaiting it resolves after stdout is consumed)
+ */
+function createMockProcess(resultText = 'mock response', events: Array<Record<string, unknown>> = []) {
+  const lines = [
+    ...events.map((e) => JSON.stringify(e)),
+    JSON.stringify({ type: 'result', subtype: 'success', result: resultText }),
+  ];
+
+  const stdout = Readable.from(lines.map((l) => l + '\n'));
+  const proc = {
+    stdout,
+    stderr: Readable.from([]),
+    kill: vi.fn(),
+    then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => {
+      return Promise.resolve({ stdout: '', stderr: '' }).then(resolve, reject);
+    },
+  };
+  return proc;
+}
+
+/** Create a mock process that rejects (simulating execa error). */
+function createFailingMockProcess(error: Error) {
+  const stdout = Readable.from([]);
+  const proc = {
+    stdout,
+    stderr: Readable.from([]),
+    kill: vi.fn(),
+    then: (_resolve: (v: unknown) => void, reject?: (e: unknown) => void) => {
+      return Promise.reject(error).then(_resolve, reject);
+    },
+  };
+  return proc;
+}
+
 vi.mock('execa', () => ({
-  execa: vi.fn().mockResolvedValue({ stdout: 'mock response', stderr: '' }),
+  execa: vi.fn(() => createMockProcess()),
   execaCommand: vi.fn().mockResolvedValue({ stdout: 'claude 1.0.0', stderr: '' }),
 }));
 
@@ -53,12 +91,12 @@ describe('ClaudeCodeAdapter session continuity', () => {
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
 
     // First call fails (e.g. timeout)
-    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Command timed out'));
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(createFailingMockProcess(new Error('Command timed out')));
 
     await expect(adapter.handleMessage(makeMsg())).rejects.toThrow('Command timed out');
 
     // Second call should use --resume (not --session-id) to avoid "Session ID already in use"
-    (execa as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ stdout: 'ok', stderr: '' });
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(createMockProcess('ok'));
     await adapter.handleMessage(makeMsg({ text: 'retry' }));
 
     const secondArgs = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1] as string[];
@@ -151,7 +189,7 @@ describe('ClaudeCodeAdapter handleMessage', () => {
 
     expect(execa).toHaveBeenCalledWith(
       'claude',
-      expect.arrayContaining(['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'text']),
+      expect.arrayContaining(['-p', 'Message from human-123: hello "world" $HOME', '--output-format', 'stream-json']),
       expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 0 }),
     );
     expect(result).toBe('mock response');
@@ -223,7 +261,7 @@ describe('ClaudeCodeAdapter error sanitization', () => {
       'Command failed with exit code 1: claude -p "hello" --append-system-prompt "You are a secret agent with classified instructions."',
     );
     (execaError as unknown as { shortMessage: string }).shortMessage = 'Command failed with exit code 1';
-    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(execaError);
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(createFailingMockProcess(execaError));
 
     const err = await adapter.handleMessage(makeMsg()).catch((e: unknown) => e) as Error;
     expect(err).toBeInstanceOf(Error);
@@ -236,7 +274,7 @@ describe('ClaudeCodeAdapter error sanitization', () => {
     const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
 
-    (execa as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Connection refused'));
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(createFailingMockProcess(new Error('Connection refused')));
 
     const err = await adapter.handleMessage(makeMsg()).catch((e: unknown) => e) as Error;
     expect(err).toBeInstanceOf(Error);
@@ -305,7 +343,7 @@ describe('ClaudeCodeAdapter quickReply (session fork)', () => {
         '--resume', sessionId,
         '--fork-session',
       ]),
-      expect.objectContaining({ cwd: tempDir, stdin: 'ignore', timeout: 60_000 }),
+      expect.objectContaining({ cwd: tempDir, stdin: 'ignore' }),
     );
   });
 
@@ -324,11 +362,16 @@ describe('ClaudeCodeAdapter quickReply (session fork)', () => {
   });
 
   it('quickReply returns stdout from forked session', async () => {
+    const { execa } = await import('execa');
     const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
     await adapter.handleMessage(makeMsg());
 
+    // quickReply uses --output-format text (not stream-json), so it awaits the process
+    // directly and reads result.stdout — provide a standard mock for it.
+    (execa as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ stdout: 'quick reply result', stderr: '' });
+
     const result = await adapter.quickReply('what are you doing?');
-    expect(result).toBe('mock response');
+    expect(result).toBe('quick reply result');
   });
 });
 
@@ -593,4 +636,149 @@ describe('ClaudeCodeAdapter resetSession', () => {
     expect(args).toContain('--session-id');
     expect(args).not.toContain('--resume');
   });
+});
+
+describe('ClaudeCodeAdapter stream-json parsing', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'skynet-test-'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('parses result text from stream-json output', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      createMockProcess('final answer here'),
+    );
+
+    const result = await adapter.handleMessage(makeMsg());
+    expect(result).toBe('final answer here');
+  });
+
+  it('emits tool.call events via onExecutionLog callback', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    const logCalls: Array<{ event: string; summary: string; metadata?: Record<string, unknown> }> = [];
+    adapter.onExecutionLog = (event, summary, metadata) => {
+      logCalls.push({ event, summary, metadata });
+    };
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      createMockProcess('done', [
+        {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'tool_use', name: 'Read', id: 'tool-1', input: { file_path: '/foo.ts' } },
+            ],
+          },
+        },
+      ]),
+    );
+
+    await adapter.handleMessage(makeMsg());
+
+    expect(logCalls).toHaveLength(1);
+    expect(logCalls[0].event).toBe('tool.call');
+    expect(logCalls[0].summary).toBe('Read /foo.ts');
+    expect(logCalls[0].metadata).toEqual({ input: { file_path: '/foo.ts' } });
+  });
+
+  it('emits tool.result events via onExecutionLog callback', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    const logCalls: Array<{ event: string; summary: string }> = [];
+    adapter.onExecutionLog = (event, summary) => {
+      logCalls.push({ event, summary });
+    };
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      createMockProcess('done', [
+        { type: 'tool_result', content: 'file contents here' },
+      ]),
+    );
+
+    await adapter.handleMessage(makeMsg());
+
+    expect(logCalls).toHaveLength(1);
+    expect(logCalls[0].event).toBe('tool.result');
+    expect(logCalls[0].summary).toBe('file contents here');
+  });
+
+  it('does not emit logs when onExecutionLog is not set', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+    // No onExecutionLog set
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      createMockProcess('done', [
+        {
+          type: 'assistant',
+          message: {
+            content: [{ type: 'tool_use', name: 'Read', id: 'tool-1', input: {} }],
+          },
+        },
+      ]),
+    );
+
+    // Should not throw even without callback
+    const result = await adapter.handleMessage(makeMsg());
+    expect(result).toBe('done');
+  });
+
+  it('uses stream-json output format for runClaude', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    await adapter.handleMessage(makeMsg());
+
+    const args = (execa as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as string[];
+    expect(args).toContain('--output-format');
+    expect(args).toContain('stream-json');
+    expect(args).not.toContain('text');
+  });
+
+  it('does not hang when child process keeps stdout open after result (e.g. Vite dev server)', async () => {
+    const { execa } = await import('execa');
+    const adapter = new ClaudeCodeAdapter({ projectRoot: tempDir });
+
+    // Simulate a stdout stream that emits the result but never ends (child process holds fd open)
+    const stdout = new Readable({ read() {} });
+    const resultLine = JSON.stringify({ type: 'result', subtype: 'success', result: 'built the UI' });
+    // Push result then keep the stream open (no null push)
+    stdout.push(resultLine + '\n');
+
+    const proc = {
+      stdout,
+      stderr: Readable.from([]),
+      exitCode: null as number | null,
+      kill: vi.fn(() => { proc.exitCode = 143; }),
+      then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => {
+        // Simulate a process that never exits on its own — resolves only when killed
+        return new Promise<unknown>((res) => {
+          const check = setInterval(() => {
+            if (proc.exitCode !== null) {
+              clearInterval(check);
+              res({ stdout: '', stderr: '' });
+            }
+          }, 50);
+        }).then(resolve, reject);
+      },
+    };
+
+    (execa as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(proc);
+
+    // This should resolve quickly, not hang forever
+    const result = await adapter.handleMessage(makeMsg());
+    expect(result).toBe('built the UI');
+  }, 10_000);
 });

@@ -7,6 +7,8 @@ export interface Store {
   getById(id: string): SkynetMessage | undefined;
   /** Get recent messages where `mentions` includes `agentId`, optionally after `since` timestamp. */
   getMessagesFor(agentId: string, limit?: number, since?: number): SkynetMessage[];
+  /** Get execution log messages, optionally filtered by agent ID. */
+  getExecutionLogs(agentId?: string, limit?: number): SkynetMessage[];
 
   // Agents
   saveAgent(agent: AgentCard): void;

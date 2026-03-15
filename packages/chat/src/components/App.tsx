@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import { type SkynetMessage, type Attachment, extractMentionNames, MENTION_ALL } from '@skynet-ai/protocol';
+import { type SkynetMessage, type Attachment } from '@skynet-ai/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -77,9 +77,9 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Management commands: /agent, /human
-    if (cmd.startsWith('/agent') || cmd.startsWith('/human')) {
-      executeCommand(options.serverUrl, text.trim()).then((result) => {
+    // Management commands: /agent, /human, /watch, /unwatch
+    if (cmd.startsWith('/agent') || cmd.startsWith('/human') || cmd.startsWith('/watch') || cmd.startsWith('/unwatch')) {
+      executeCommand(options.serverUrl, text.trim(), agentId).then((result) => {
         if (result) {
           setCommandOutputs((prev) => [...prev, { lines: result.lines, error: result.error }]);
         }
@@ -87,33 +87,24 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Resolve @name tokens to agent IDs
-    const mentionedNames = extractMentionNames(text);
-    const resolvedIds: string[] = [];
-    for (const name of mentionedNames) {
-      if (name === 'all') {
-        resolvedIds.push(MENTION_ALL);
-        continue;
-      }
-      for (const [id, card] of state.members) {
-        if (card.name.toLowerCase() === name) {
-          resolvedIds.push(id);
-          break;
-        }
-      }
-    }
-
-    const mentions = resolvedIds.length > 0 ? resolvedIds : undefined;
+    // Server enriches @name mentions from text; no client-side resolution needed
     const atts = attachments.length > 0 ? attachments : undefined;
-    sendChat(text, mentions, atts);
-  }, [state.members, sendChat, close, exit]);
+    sendChat(text, undefined, atts);
+  }, [sendChat, close, exit, options.serverUrl, agentId]);
 
-  // Ctrl+C to exit
+  // Ctrl+D to exit
   useInput((_input, key) => {
-    if (key.ctrl && _input === 'c') {
+    if (key.ctrl && _input === 'd') {
       close().then(() => exit()).catch(() => exit());
     }
   });
+
+  const handleExitHint = useCallback(() => {
+    setCommandOutputs((prev) => [
+      ...prev,
+      { lines: ['Use Ctrl+D or /quit to exit.'] },
+    ]);
+  }, []);
 
   // Build static items as an append-only list.
   // Ink's <Static> tracks rendered items by index, so the array must only grow —
@@ -190,7 +181,7 @@ export function App({ options }: AppProps): React.ReactElement {
     return (
       <Box flexDirection="column" paddingX={1} paddingY={1}>
         <Text color="red">Failed to connect: {state.error}</Text>
-        <Text dimColor>Press Ctrl+C to exit</Text>
+        <Text dimColor>Press Ctrl+D to exit</Text>
       </Box>
     );
   }
@@ -254,6 +245,7 @@ export function App({ options }: AppProps): React.ReactElement {
         {/* Input */}
         <InputBar
           onSubmit={handleSubmit}
+          onExitHint={handleExitHint}
           members={state.members}
         />
 
@@ -277,12 +269,15 @@ export function App({ options }: AppProps): React.ReactElement {
             <Text>  /agent interrupt     Interrupt agent</Text>
             <Text>  /agent forget        Reset agent session</Text>
             <Text>  /human list          List humans</Text>
+            <Text>  /watch @agent        Watch agent execution</Text>
+            <Text>  /unwatch @agent      Stop watching agent</Text>
             <Text />
             <Text bold> Input</Text>
             <Text>  Up/Down         Input history</Text>
             <Text>  @name           Autocomplete member</Text>
             <Text>  Ctrl+V          Paste image from clipboard</Text>
-            <Text>  Ctrl+C          Exit</Text>
+            <Text>  Ctrl+C          Clear input</Text>
+            <Text>  Ctrl+D          Exit</Text>
             <Text />
             <Text dimColor>Press /help again to close</Text>
           </Box>

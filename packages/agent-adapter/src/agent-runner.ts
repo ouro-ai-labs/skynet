@@ -7,13 +7,14 @@ import {
   type AgentCard,
   type AgentJoinPayload,
   type AgentLeavePayload,
+  type AgentWatchPayload,
+  type AgentUnwatchPayload,
   type ChatPayload,
   type SkynetMessage,
   type TaskPayload,
   AgentType,
   MessageType,
   MENTION_ALL,
-  extractMentionNames,
 } from '@skynet-ai/protocol';
 
 interface MemberInfo {
@@ -69,6 +70,27 @@ interface QueuedMessage {
   arrivedAt: number;
 }
 
+/**
+ * Extract a safe error message from an error, avoiding command-line leaks.
+ * Execa errors include the full command in `.message` but provide a shorter
+ * `.shortMessage` that omits the command output.  We prefer that, then strip
+ * any `Command failed…: <binary> <args>` prefix so adapter internals (flags,
+ * system prompts) are never exposed in execution logs.
+ */
+function sanitizeErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  // Prefer execa's shortMessage (no stdout/stderr dump)
+  const raw: string = (err as unknown as Record<string, unknown>).shortMessage as string ?? err.message;
+  // Strip "Command failed with exit code N: <command...>" prefix
+  const cmdPrefix = /^Command failed.*?:\s*.+/;
+  if (cmdPrefix.test(raw)) {
+    const exitCodeMatch = raw.match(/exit code (\d+)/);
+    const code = exitCodeMatch ? exitCodeMatch[1] : 'unknown';
+    return `Command failed with exit code ${code}`;
+  }
+  return raw;
+}
+
 export class AgentRunner {
   private client: SkynetClient;
   private adapter: AgentAdapter;
@@ -91,6 +113,8 @@ export class AgentRunner {
    * preventing stale post-reset side effects (persistState, reschedule).
    */
   private resetGeneration = 0;
+  /** Human IDs subscribed to verbose execution logs via /watch. */
+  private verboseSubscribers = new Set<string>();
 
   constructor(private options: AgentRunnerOptions) {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
@@ -142,7 +166,9 @@ export class AgentRunner {
       }
       this.promptLogStream = createWriteStream(promptLogPath, { flags: 'a' });
       // Prevent uncaught exceptions from stream errors (e.g. directory removed)
-      this.promptLogStream.on('error', () => {});
+      this.promptLogStream.on('error', (err: Error) => {
+        this.logger.warn('Prompt log stream error:', err);
+      });
       this.adapter.onPrompt = (prompt, context) => {
         const timestamp = new Date().toISOString();
         const separator = '─'.repeat(60);
@@ -151,6 +177,13 @@ export class AgentRunner {
         );
       };
     }
+
+    // Wire execution log callback — only send when humans are watching via /watch
+    this.adapter.onExecutionLog = (event, summary, metadata) => {
+      if (this.verboseSubscribers.size === 0) return;
+      const mentions = [...this.verboseSubscribers];
+      this.client.sendExecutionLog(event, summary, { metadata, mentions });
+    };
   }
 
   async start(): Promise<WorkspaceState> {
@@ -189,6 +222,8 @@ export class AgentRunner {
     this.client.on('task-assign', (msg: SkynetMessage) => this.enqueue(msg));
     this.client.on('agent-interrupt', () => this.handleInterrupt());
     this.client.on('agent-forget', () => this.handleForget());
+    this.client.on('agent-watch', (msg: SkynetMessage) => this.handleWatch(msg));
+    this.client.on('agent-unwatch', (msg: SkynetMessage) => this.handleUnwatch(msg));
 
     const state = await this.client.connect();
     this.logger.info(`Connected, ${state.members.length} members online`);
@@ -210,6 +245,7 @@ export class AgentRunner {
   async stop(): Promise<void> {
     this.clearSchedule();
     this.logger.info('Stopping agent');
+    this.client.removeAllListeners();
     await this.adapter.dispose();
     await this.client.close();
     this.logger.close();
@@ -362,10 +398,8 @@ export class AgentRunner {
         : `Message from ${senderName}: ${text}`;
       const response = await this.adapter.quickReply(prompt);
       if (response && !isNoReply(response)) {
-        const mentions = this.resolveMentions(response);
-        // Always include the original sender in mentions
-        if (!mentions.includes(msg.from)) mentions.push(msg.from);
-        this.client.chat(response, mentions);
+        // Include original sender; server enriches @name mentions from text
+        this.client.chat(response, [msg.from]);
       }
     } catch (err) {
       // Fork failed — fall back to normal queue so the message is not lost
@@ -431,6 +465,10 @@ export class AgentRunner {
     // Capture generation so we can detect if a reset (forget) happened mid-flight.
     const gen = this.resetGeneration;
 
+    const startTime = Date.now();
+    this.emitWatchLog('processing.start', 'Started processing queue');
+    let hadError = false;
+
     // Process leading tasks
     while (this.messageQueue.length > 0 && this.messageQueue[0].msg.type === MessageType.TASK_ASSIGN) {
       const { msg } = this.messageQueue.shift()!;
@@ -438,7 +476,9 @@ export class AgentRunner {
         await this.handleTask(msg);
       } catch (err) {
         this.logger.error(`Error processing task from ${msg.from}:`, err);
+        this.emitWatchLog('processing.error', `Task processing failed: ${sanitizeErrorMessage(err)}`, { level: 'error' });
         this.setStatus('error');
+        hadError = true;
       }
       // Bail out if a forget/reset happened during the await
       if (this.resetGeneration !== gen) return;
@@ -459,21 +499,19 @@ export class AgentRunner {
         if (chatBatch.length === 1) {
           const msg = chatBatch[0];
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
-          const msgToSend = notices
-            ? { ...msg, payload: { ...(msg.payload as ChatPayload), text: `${notices}\n\n${(msg.payload as ChatPayload).text}` } }
-            : msg;
-          const response = await this.adapter.handleMessage(msgToSend, senderName);
+          const response = await this.adapter.handleMessage(msg, senderName, notices || undefined);
           if (response && !isNoReply(response)) {
-            const mentions = this.resolveMentions(response);
-            if (!mentions.includes(msg.from)) mentions.push(msg.from);
-            this.client.chat(response, mentions);
+            // Include original sender; server enriches @name mentions from text
+            this.client.chat(response, [msg.from]);
           }
         } else {
           await this.handleBatchMessages(chatBatch, notices);
         }
       } catch (err) {
         this.logger.error('Error processing messages:', err);
+        this.emitWatchLog('processing.error', `Message processing failed: ${sanitizeErrorMessage(err)}`, { level: 'error' });
         this.setStatus('error');
+        hadError = true;
       }
     }
 
@@ -481,6 +519,9 @@ export class AgentRunner {
     // cleaned up all state. Do NOT overwrite with stale status or persistState.
     if (this.resetGeneration !== gen) return;
 
+    if (!hadError) {
+      this.emitWatchLog('processing.end', 'Finished processing queue', { durationMs: Date.now() - startTime });
+    }
     this.setStatus('idle');
     this.processing = false;
     this.persistState();
@@ -513,11 +554,9 @@ export class AgentRunner {
     // Collect all attachments from the batch
     const allAttachments = messages.flatMap((msg) => (msg.payload as ChatPayload).attachments ?? []);
 
-    const prefix = notices ? `${notices}\n\n` : '';
-
     // Create a synthetic message for the adapter
     const batchPayload: ChatPayload = {
-      text: `${prefix}You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
+      text: `You have ${messages.length} unread messages. Please respond to all of them in a single reply:\n\n${lines.join('\n\n')}`,
       ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
     };
     const batchMsg: SkynetMessage = {
@@ -526,37 +565,13 @@ export class AgentRunner {
     };
 
     const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;
-    const response = await this.adapter.handleMessage(batchMsg, senderName);
+    const response = await this.adapter.handleMessage(batchMsg, senderName, notices || undefined);
 
     if (response && !isNoReply(response)) {
-      const mentions = this.resolveMentions(response);
-      // Include all senders in mentions
-      for (const m of messages) {
-        if (!mentions.includes(m.from)) mentions.push(m.from);
-      }
-      this.client.chat(response, mentions);
+      // Include all senders; server enriches @name mentions from text
+      const senderIds = [...new Set(messages.map(m => m.from))];
+      this.client.chat(response, senderIds);
     }
-  }
-
-  /** Resolve @name mentions in text to agent IDs (excluding self). @all maps to MENTION_ALL. */
-  private resolveMentions(text: string): string[] {
-    const names = extractMentionNames(text);
-    if (names.length === 0) return [];
-    const selfId = this.client.agent.id;
-    const ids: string[] = [];
-    for (const name of names) {
-      if (name === 'all') {
-        ids.push(MENTION_ALL);
-        continue;
-      }
-      for (const [agentId, info] of this.memberInfo) {
-        if (info.name.toLowerCase() === name && agentId !== selfId) {
-          ids.push(agentId);
-          break;
-        }
-      }
-    }
-    return ids;
   }
 
   /** Handle an interrupt control message — kill running process and clear queue. */
@@ -589,6 +604,41 @@ export class AgentRunner {
     this.forkInProgress = false;
     this.setStatus('idle');
     this.persistState();
+  }
+
+  /** Handle a watch control message — add human to verbose subscribers. */
+  private handleWatch(msg: SkynetMessage): void {
+    const payload = msg.payload as AgentWatchPayload;
+    this.verboseSubscribers.add(payload.humanId);
+    this.logger.info(`Watch enabled by human: ${payload.humanId}`);
+  }
+
+  /** Handle an unwatch control message — remove human from verbose subscribers. */
+  private handleUnwatch(msg: SkynetMessage): void {
+    const payload = msg.payload as AgentUnwatchPayload;
+    this.verboseSubscribers.delete(payload.humanId);
+    this.logger.info(`Watch disabled by human: ${payload.humanId}`);
+  }
+
+  /**
+   * Emit an execution log to all current watch subscribers.
+   * Checks verboseSubscribers live (not snapshotted) so that /watch
+   * enabled mid-execution takes effect immediately.
+   */
+  private emitWatchLog(event: string, summary: string, options?: Record<string, unknown>): void {
+    if (this.verboseSubscribers.size === 0) return;
+    const mentions = [...this.verboseSubscribers];
+    const { level, durationMs, ...rest } = options ?? {};
+    this.client.sendExecutionLog(
+      event as import('@skynet-ai/protocol').ExecutionLogEvent,
+      summary,
+      {
+        ...(level ? { level: level as import('@skynet-ai/protocol').ExecutionLogLevel } : {}),
+        ...(durationMs !== undefined ? { durationMs: durationMs as number } : {}),
+        ...rest,
+        mentions,
+      },
+    );
   }
 
   private persistState(): void {

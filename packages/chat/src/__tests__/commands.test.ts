@@ -136,3 +136,62 @@ describe('executeCommand', () => {
     expect(result?.lines[0]).toBe('No agents.');
   });
 });
+
+describe('/watch command', () => {
+  it('/watch without @name shows usage', async () => {
+    const result = await executeCommand('http://localhost', '/watch');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('Usage');
+  });
+
+  it('/watch with bare name (no @) shows usage', async () => {
+    const result = await executeCommand('http://localhost', '/watch alice');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('Usage');
+  });
+
+  it('/watch without humanId returns error', async () => {
+    const result = await executeCommand('http://localhost', '/watch @alice');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('identity');
+  });
+
+  it('/watch @agent sends watch request', async () => {
+    globalThis.fetch = mockFetch([
+      { ok: true, body: mockAgents },
+      { ok: true, body: { ok: true } },
+    ]) as unknown as typeof fetch;
+    const result = await executeCommand('http://localhost', '/watch @alice', 'human-1');
+    expect(result?.error).toBeUndefined();
+    expect(result?.lines[0]).toContain('Watching');
+    expect(result?.lines[0]).toContain('alice');
+  });
+
+  it('/watch @unknown returns error', async () => {
+    globalThis.fetch = mockFetch([
+      { ok: true, body: mockAgents },
+    ]) as unknown as typeof fetch;
+    const result = await executeCommand('http://localhost', '/watch @unknown', 'human-1');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('not found');
+  });
+});
+
+describe('/unwatch command', () => {
+  it('/unwatch without @name shows usage', async () => {
+    const result = await executeCommand('http://localhost', '/unwatch');
+    expect(result?.error).toBe(true);
+    expect(result?.lines[0]).toContain('Usage');
+  });
+
+  it('/unwatch @agent sends unwatch request', async () => {
+    globalThis.fetch = mockFetch([
+      { ok: true, body: mockAgents },
+      { ok: true, body: { ok: true } },
+    ]) as unknown as typeof fetch;
+    const result = await executeCommand('http://localhost', '/unwatch @bob', 'human-1');
+    expect(result?.error).toBeUndefined();
+    expect(result?.lines[0]).toContain('Stopped watching');
+    expect(result?.lines[0]).toContain('bob');
+  });
+});

@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { MENTION_ALL, type SkynetMessage, type AgentCard, type HumanProfile } from '@skynet-ai/protocol';
+import { MENTION_ALL, MessageType, type SkynetMessage, type AgentCard, type HumanProfile } from '@skynet-ai/protocol';
 import type { Store } from './store.js';
 
 export class SqliteStore implements Store {
@@ -23,6 +23,7 @@ export class SqliteStore implements Store {
       );
       CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
       CREATE INDEX IF NOT EXISTS idx_messages_from ON messages("from");
+      CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
 
       CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
@@ -89,6 +90,22 @@ export class SqliteStore implements Store {
           WHERE ${baseCondition}
           ORDER BY timestamp DESC LIMIT ?
         `).all(agentId, MENTION_ALL, limit);
+
+    return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
+  }
+
+  getExecutionLogs(agentId?: string, limit: number = 50): SkynetMessage[] {
+    const rows = agentId
+      ? this.db.prepare(`
+          SELECT * FROM messages
+          WHERE type = ? AND "from" = ?
+          ORDER BY timestamp DESC LIMIT ?
+        `).all(MessageType.EXECUTION_LOG, agentId, limit)
+      : this.db.prepare(`
+          SELECT * FROM messages
+          WHERE type = ?
+          ORDER BY timestamp DESC LIMIT ?
+        `).all(MessageType.EXECUTION_LOG, limit);
 
     return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
   }
