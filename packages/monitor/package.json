@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/monitor",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "description": "Web monitoring dashboard for Skynet multi-agent collaboration network",
   "scripts": {

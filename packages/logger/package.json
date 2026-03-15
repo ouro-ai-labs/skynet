@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/logger",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Logging utilities for Skynet multi-agent collaboration network",
   "type": "module",
   "main": "dist/index.js",
