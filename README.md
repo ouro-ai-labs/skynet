@@ -53,7 +53,12 @@ skynet agent new --workspace my-project --name pm --type claude-code --role "pro
 skynet agent new --workspace my-project --name backend --type claude-code --role "backend engineer"
 skynet agent new --workspace my-project --name frontend --type claude-code --role "frontend engineer"
 
-# 3. Add a human & join chat
+# 3. Start agents
+skynet agent start pm --workspace my-project
+skynet agent start backend --workspace my-project
+skynet agent start frontend --workspace my-project
+
+# 4. Add a human & join chat
 skynet human new --workspace my-project --name alice
 skynet chat --workspace my-project --name alice
 ```
