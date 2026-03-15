@@ -1466,13 +1466,13 @@ describe('AgentRunner prompt logging', () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  it('logs prompt text to prompt.log when statePath is set', async () => {
-    const statePath = join(testDir, 'state.json');
+  it('logs prompt text to agent log via onPrompt callback', async () => {
     const adapter = new FakeAdapter();
+    const logFile = join(testDir, 'agent.log');
     const runner = new AgentRunner({
       serverUrl: 'ws://localhost:0',
       adapter,
-      statePath,
+      logFile,
       debounceMs: 0,
     });
     await runner.start();
@@ -1486,18 +1486,19 @@ describe('AgentRunner prompt logging', () => {
 
     await runner.stop();
 
-    const promptLogPath = join(testDir, 'prompt.log');
-    expect(existsSync(promptLogPath)).toBe(true);
-    const content = readFileSync(promptLogPath, 'utf-8');
-    expect(content).toContain('type=message');
+    expect(existsSync(logFile)).toBe(true);
+    const content = readFileSync(logFile, 'utf-8');
+    expect(content).toContain('[prompt] type=message');
     expect(content).toContain('hello world');
   });
 
-  it('does not create prompt.log when statePath is not set', async () => {
+  it('does not create prompt.log even when statePath is set', async () => {
+    const statePath = join(testDir, 'state.json');
     const adapter = new FakeAdapter();
     const runner = new AgentRunner({
       serverUrl: 'ws://localhost:0',
       adapter,
+      statePath,
       debounceMs: 0,
     });
     await runner.start();
