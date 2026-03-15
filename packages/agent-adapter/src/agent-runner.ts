@@ -107,6 +107,12 @@ export class AgentRunner {
   /** Timer for the next processQueue check. */
   private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly debounceMs: number;
+  /**
+   * Monotonically increasing counter bumped on each forget/reset.
+   * processQueue captures the value at start and bails out if it changes,
+   * preventing stale post-reset side effects (persistState, reschedule).
+   */
+  private resetGeneration = 0;
   /** Human IDs subscribed to verbose execution logs via /watch. */
   private verboseSubscribers = new Set<string>();
 
@@ -456,6 +462,9 @@ export class AgentRunner {
     this.processing = true;
     this.setStatus('busy');
 
+    // Capture generation so we can detect if a reset (forget) happened mid-flight.
+    const gen = this.resetGeneration;
+
     const startTime = Date.now();
     this.emitWatchLog('processing.start', 'Started processing queue');
     let hadError = false;
@@ -471,6 +480,8 @@ export class AgentRunner {
         this.setStatus('error');
         hadError = true;
       }
+      // Bail out if a forget/reset happened during the await
+      if (this.resetGeneration !== gen) return;
     }
 
     // Drain chat messages up to the next task
@@ -503,6 +514,10 @@ export class AgentRunner {
         hadError = true;
       }
     }
+
+    // If a forget/reset happened while we were processing, handleForget already
+    // cleaned up all state. Do NOT overwrite with stale status or persistState.
+    if (this.resetGeneration !== gen) return;
 
     if (!hadError) {
       this.emitWatchLog('processing.end', 'Finished processing queue', { durationMs: Date.now() - startTime });
@@ -578,7 +593,8 @@ export class AgentRunner {
   /** Handle a forget control message — reset session and clear all state. */
   private async handleForget(): Promise<void> {
     this.logger.info('Forget received — resetting session');
-    // Interrupt first if busy
+    // Bump generation so any in-flight processQueue bails out after its next await.
+    this.resetGeneration++;
     this.clearSchedule();
     this.messageQueue = [];
     this.pendingNotices = [];
@@ -587,6 +603,7 @@ export class AgentRunner {
     this.processing = false;
     this.forkInProgress = false;
     this.setStatus('idle');
+    this.persistState();
   }
 
   /** Handle a watch control message — add human to verbose subscribers. */
