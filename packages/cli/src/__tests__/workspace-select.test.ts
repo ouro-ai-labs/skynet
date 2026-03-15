@@ -132,4 +132,27 @@ describe('Commander --workspace option passing to subcommands', () => {
     // Without passThroughOptions, the parent consumes --workspace
     expect(capturedOpts.workspace).toBeUndefined();
   });
+
+  it('passes -d flag to workspace start subcommand with passThroughOptions', () => {
+    const program = new Command();
+    program.enablePositionalOptions();
+
+    let capturedArg: string | undefined;
+    let capturedOpts: Record<string, unknown> = {};
+
+    const parent = program
+      .command('workspace')
+      .enablePositionalOptions()
+      .passThroughOptions();
+
+    parent
+      .command('start')
+      .argument('[name-or-id]', 'Workspace name or UUID')
+      .option('-d, --daemon', 'Run in background as a daemon process')
+      .action((nameOrId, opts) => { capturedArg = nameOrId; capturedOpts = opts; });
+
+    program.parse(['node', 'test', 'workspace', 'start', 'my-ws', '-d']);
+    expect(capturedArg).toBe('my-ws');
+    expect(capturedOpts.daemon).toBe(true);
+  });
 });

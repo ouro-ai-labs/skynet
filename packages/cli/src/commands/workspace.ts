@@ -92,6 +92,8 @@ export function registerWorkspaceCommand(program: Command): void {
   const workspace = program
     .command('workspace')
     .description('Manage Skynet workspaces')
+    .enablePositionalOptions()
+    .passThroughOptions()
     .action(async () => {
       console.error('Missing required argument: workspace name or UUID. Run \'skynet workspace list\' to see available workspaces.');
       console.error('Usage: skynet workspace start <name-or-id>');
