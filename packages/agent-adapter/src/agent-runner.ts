@@ -19,10 +19,11 @@ import {
 interface MemberInfo {
   name: string;
   type: AgentType;
+  role?: string;
 }
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 import type { AgentAdapter, SessionState } from './base-adapter.js';
-import { buildSkynetIntro } from './skynet-intro.js';
+import { buildSkynetIntro, buildMemberRoster } from './skynet-intro.js';
 
 /** Default debounce window (ms) — messages must age this long before processing. */
 const DEFAULT_DEBOUNCE_MS = 3000;
@@ -114,6 +115,9 @@ export class AgentRunner {
   /** Human IDs subscribed to verbose execution logs via /watch. */
   private verboseSubscribers = new Set<string>();
 
+  /** Base persona text (role + persona + skynet intro) without member roster. */
+  private basePersona: string;
+
   constructor(private options: AgentRunnerOptions) {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     const agentCard: AgentCard = {
@@ -153,7 +157,8 @@ export class AgentRunner {
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
     parts.push(buildSkynetIntro(agentCard.name));
-    this.adapter.persona = parts.join('\n\n');
+    this.basePersona = parts.join('\n\n');
+    this.adapter.persona = this.basePersona;
 
     // Log prompts to the agent log for a complete trace
     this.adapter.onPrompt = (prompt, context) => {
@@ -185,14 +190,16 @@ export class AgentRunner {
     // memberInfo incomplete and breaking @mention resolution.
     this.client.on('agent-join', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentJoinPayload;
-      this.memberInfo.set(payload.agent.id, { name: payload.agent.name, type: payload.agent.type });
-      this.pendingNotices.push(`[System] ${payload.agent.name} has joined the workspace.`);
+      this.memberInfo.set(payload.agent.id, { name: payload.agent.name, type: payload.agent.type, role: payload.agent.role });
+      const roleTag = payload.agent.role ? ` (${payload.agent.role})` : '';
+      this.pendingNotices.push(`[System] ${payload.agent.name}${roleTag} has joined the workspace.`);
     });
     this.client.on('agent-leave', (msg: SkynetMessage) => {
       const payload = msg.payload as AgentLeavePayload;
       const info = this.memberInfo.get(payload.agentId);
       const name = info?.name ?? payload.agentId;
-      this.pendingNotices.push(`[System] ${name} has left the workspace.`);
+      const roleTag = info?.role ? ` (${info.role})` : '';
+      this.pendingNotices.push(`[System] ${name}${roleTag} has left the workspace.`);
       this.memberInfo.delete(payload.agentId);
     });
 
@@ -200,8 +207,9 @@ export class AgentRunner {
     this.client.on('workspace-state', (ws: WorkspaceState) => {
       this.memberInfo.clear();
       for (const member of ws.members) {
-        this.memberInfo.set(member.id, { name: member.name, type: member.type });
+        this.memberInfo.set(member.id, { name: member.name, type: member.type, role: member.role });
       }
+      this.refreshPersona();
     });
 
     this.client.on('chat', (msg: SkynetMessage) => this.enqueue(msg));
@@ -218,12 +226,16 @@ export class AgentRunner {
     // Any agent-join events that arrived during connect() have already been
     // processed by the handler above, so merge rather than overwrite.
     for (const member of state.members) {
-      this.memberInfo.set(member.id, { name: member.name, type: member.type });
+      this.memberInfo.set(member.id, { name: member.name, type: member.type, role: member.role });
     }
 
     // Clear any notices generated during initial connection — the agent already
     // knows the initial member list from workspace state.
     this.pendingNotices = [];
+
+    // Inject the current member roster into the system prompt so the agent
+    // knows who else is in the workspace and their roles.
+    this.refreshPersona();
 
     return state;
   }
@@ -245,6 +257,19 @@ export class AgentRunner {
   private setStatus(status: import('@skynet-ai/protocol').AgentStatus): void {
     this.client.agent.status = status;
     this.client.sendHeartbeatNow();
+  }
+
+  /**
+   * Rebuild the adapter persona by appending the current member roster
+   * to the base persona. Called after connection and after forget/reset
+   * so the agent always knows who is in the workspace.
+   */
+  private refreshPersona(): void {
+    const roster = buildMemberRoster(
+      this.client.agent.name,
+      Array.from(this.memberInfo.values()),
+    );
+    this.adapter.persona = roster ? `${this.basePersona}\n${roster}` : this.basePersona;
   }
 
   /** Register the agent via HTTP API if it doesn't already exist in the workspace. */
@@ -588,6 +613,9 @@ export class AgentRunner {
     this.processing = false;
     this.forkInProgress = false;
     this.setStatus('idle');
+    // Re-inject member roster into the fresh session so the agent still
+    // knows who is in the workspace and their roles after the reset.
+    this.refreshPersona();
     this.persistState();
   }
 
