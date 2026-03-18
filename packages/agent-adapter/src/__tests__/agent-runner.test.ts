@@ -1944,7 +1944,7 @@ describe('Agent role awareness', () => {
     await runner.stop();
   });
 
-  it('persona includes member roster after members join', async () => {
+  it('workspace-state updates memberInfo but does NOT refresh persona (preserves KV cache)', async () => {
     const adapter = new FakeAdapter();
     const runner = new AgentRunner({
       serverUrl: 'http://localhost:9999',
@@ -1955,8 +1955,8 @@ describe('Agent role awareness', () => {
     });
     await runner.start();
 
-    // Register members — this triggers agent-join which updates memberInfo
-    // but persona is only refreshed on workspace-state or forget.
+    const personaBefore = adapter.persona;
+
     // Simulate a workspace-state event with members.
     const client = getClient(runner);
     client.emit('workspace-state', {
@@ -1968,12 +1968,13 @@ describe('Agent role awareness', () => {
       recentMessages: [],
     });
 
-    expect(adapter.persona).toContain('@bob');
-    expect(adapter.persona).toContain('backend engineer');
-    expect(adapter.persona).toContain('@carol');
-    expect(adapter.persona).toContain('human');
-    // Self should not appear in the roster
-    expect(adapter.persona).not.toContain('- @me');
+    // memberInfo should be updated
+    const memberInfo = (runner as unknown as { memberInfo: Map<string, MemberInfo> }).memberInfo;
+    expect(memberInfo.get('bob-1')).toEqual({ name: 'bob', type: AgentType.CLAUDE_CODE, role: 'backend engineer' });
+    expect(memberInfo.get('carol-1')).toEqual({ name: 'carol', type: AgentType.HUMAN, role: undefined });
+
+    // Persona should NOT have changed — avoids invalidating KV cache
+    expect(adapter.persona).toBe(personaBefore);
 
     await runner.stop();
   });
@@ -1989,28 +1990,21 @@ describe('Agent role awareness', () => {
     });
     await runner.start();
 
-    // Simulate workspace state with a member
+    // Register a member with a unique name (updates memberInfo but not persona)
+    registerMember(runner, 'zara-1', 'zara', AgentType.CLAUDE_CODE, 'PM');
+
+    // Persona should NOT contain zara yet (no refreshPersona on join)
+    expect(adapter.persona).not.toContain('@zara');
+
+    // Emit forget — this rebuilds the session and refreshes persona
     const client = getClient(runner);
-    client.emit('workspace-state', {
-      members: [
-        { id: 'me', name: 'me', type: AgentType.CLAUDE_CODE, status: 'idle' },
-        { id: 'bob-1', name: 'bob', type: AgentType.CLAUDE_CODE, role: 'PM', status: 'idle' },
-      ],
-      recentMessages: [],
-    });
-
-    // Persona should contain bob
-    expect(adapter.persona).toContain('@bob');
-    expect(adapter.persona).toContain('PM');
-
-    // Emit forget
     client.emit('agent-forget');
 
     // Wait for async resetSession
     await new Promise(r => setTimeout(r, 50));
 
-    // Persona should still contain the member roster after forget
-    expect(adapter.persona).toContain('@bob');
+    // Persona should now contain the member roster after forget
+    expect(adapter.persona).toContain('@zara');
     expect(adapter.persona).toContain('PM');
     // Session should have been reset
     expect(adapter.resetSessionCalls).toBe(1);
@@ -2018,7 +2012,7 @@ describe('Agent role awareness', () => {
     await runner.stop();
   });
 
-  it('workspace-state reconnection refreshes persona with roles', async () => {
+  it('workspace-state reconnection does NOT refresh persona (preserves KV cache)', async () => {
     const adapter = new FakeAdapter();
     const runner = new AgentRunner({
       serverUrl: 'http://localhost:9999',
@@ -2029,8 +2023,7 @@ describe('Agent role awareness', () => {
     });
     await runner.start();
 
-    // Initially no members in the roster (connect returns empty members)
-    expect(adapter.persona).not.toContain('backend engineer');
+    const personaBefore = adapter.persona;
 
     // Simulate reconnection with workspace state that includes members
     const client = getClient(runner);
@@ -2042,8 +2035,12 @@ describe('Agent role awareness', () => {
       recentMessages: [],
     });
 
-    expect(adapter.persona).toContain('@xavier');
-    expect(adapter.persona).toContain('backend engineer');
+    // memberInfo should be updated for @mention resolution
+    const memberInfo = (runner as unknown as { memberInfo: Map<string, MemberInfo> }).memberInfo;
+    expect(memberInfo.get('xavier-1')).toEqual({ name: 'xavier', type: AgentType.CLAUDE_CODE, role: 'backend engineer' });
+
+    // But persona should NOT change — avoids invalidating KV cache mid-session
+    expect(adapter.persona).toBe(personaBefore);
 
     await runner.stop();
   });

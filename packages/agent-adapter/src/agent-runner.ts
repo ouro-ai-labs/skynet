@@ -203,13 +203,13 @@ export class AgentRunner {
       this.memberInfo.delete(payload.agentId);
     });
 
-    // Refresh member info on reconnection
+    // Refresh member info on reconnection (but do NOT refresh persona here —
+    // changing the system prompt mid-session invalidates the KV cache).
     this.client.on('workspace-state', (ws: WorkspaceState) => {
       this.memberInfo.clear();
       for (const member of ws.members) {
         this.memberInfo.set(member.id, { name: member.name, type: member.type, role: member.role });
       }
-      this.refreshPersona();
     });
 
     this.client.on('chat', (msg: SkynetMessage) => this.enqueue(msg));
