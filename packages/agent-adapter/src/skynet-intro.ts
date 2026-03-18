@@ -1,3 +1,29 @@
+import { AgentType } from '@skynet-ai/protocol';
+
+/** Minimal member info needed to build the roster. */
+export interface RosterMember {
+  name: string;
+  type: AgentType;
+  role?: string;
+}
+
+/**
+ * Build a human-readable roster of workspace members for injection into the
+ * agent's system prompt. Excludes the agent itself (identified by `selfName`).
+ */
+export function buildMemberRoster(selfName: string, members: RosterMember[]): string {
+  const others = members.filter((m) => m.name !== selfName);
+  if (others.length === 0) return '';
+
+  const lines = others.map((m) => {
+    const kind = m.type === AgentType.HUMAN ? 'human' : m.type;
+    const roleTag = m.role ? ` — ${m.role}` : '';
+    return `- @${m.name}${roleTag} (${kind})`;
+  });
+
+  return `\n## Workspace Members\n\nThese are the members currently in the workspace. Use @name to collaborate with them:\n\n${lines.join('\n')}`;
+}
+
 /**
  * Build the Skynet intro text injected into every agent's system prompt.
  * Teaches agents their identity and the messaging rules of the collaboration network.

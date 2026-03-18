@@ -7,7 +7,7 @@ import type { SkynetMessage, AgentCard, TaskPayload } from '@skynet-ai/protocol'
 import { AgentRunner, isNoReply } from '../agent-runner.js';
 import { AgentAdapter, type TaskResult, type SessionState } from '../base-adapter.js';
 import { AgentType } from '@skynet-ai/protocol';
-import { buildSkynetIntro } from '../skynet-intro.js';
+import { buildSkynetIntro, buildMemberRoster } from '../skynet-intro.js';
 
 // ── Mocks ──
 
@@ -160,6 +160,7 @@ class FakeAdapter extends AgentAdapter {
 interface MemberInfo {
   name: string;
   type: AgentType;
+  role?: string;
 }
 
 interface MockClient {
@@ -174,14 +175,14 @@ function getClient(runner: AgentRunner): MockClient {
 }
 
 /** Register a member in the runner's memberInfo map via agent-join event. */
-function registerMember(runner: AgentRunner, id: string, name: string, type: AgentType): void {
+function registerMember(runner: AgentRunner, id: string, name: string, type: AgentType, role?: string): void {
   const client = getClient(runner);
   client.emit('agent-join', {
     id: `join-${id}`,
     type: 'agent.join',
     from: 'server',
     timestamp: Date.now(),
-    payload: { agent: { id, name, type } },
+    payload: { agent: { id, name, type, role } },
   });
   // Drain the pending notice so it doesn't leak into tests
   (runner as unknown as { pendingNotices: string[] }).pendingNotices = [];
@@ -1788,6 +1789,258 @@ describe('AgentRunner execution log emissions', () => {
 
     adapter.onExecutionLog?.('tool.call', 'Read file.ts');
     expect(client.executionLogCalls).toHaveLength(0);
+
+    await runner.stop();
+  });
+});
+
+// ── Member roster and role awareness tests ──
+
+describe('buildMemberRoster', () => {
+  it('returns empty string when no other members', () => {
+    const result = buildMemberRoster('self', [{ name: 'self', type: AgentType.CLAUDE_CODE }]);
+    expect(result).toBe('');
+  });
+
+  it('returns empty string when members list is empty', () => {
+    const result = buildMemberRoster('self', []);
+    expect(result).toBe('');
+  });
+
+  it('lists other members with their roles', () => {
+    const members = [
+      { name: 'self', type: AgentType.CLAUDE_CODE, role: 'PM' },
+      { name: 'bob', type: AgentType.CLAUDE_CODE, role: 'backend engineer' },
+      { name: 'carol', type: AgentType.HUMAN },
+    ];
+    const result = buildMemberRoster('self', members);
+    expect(result).toContain('@bob');
+    expect(result).toContain('backend engineer');
+    expect(result).toContain('@carol');
+    expect(result).toContain('human');
+    expect(result).not.toContain('@self');
+  });
+
+  it('omits role tag when role is undefined', () => {
+    const members = [
+      { name: 'alice', type: AgentType.GEMINI_CLI },
+    ];
+    const result = buildMemberRoster('self', members);
+    expect(result).toContain('@alice');
+    expect(result).not.toContain('—');
+  });
+});
+
+describe('Agent role awareness', () => {
+  it('join notice includes role when present', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    client.emit('agent-join', {
+      id: 'join-1',
+      type: 'agent.join',
+      from: 'server',
+      timestamp: Date.now(),
+      payload: { agent: { id: 'bob-1', name: 'bob', type: AgentType.CLAUDE_CODE, role: 'backend engineer' } },
+    });
+
+    const notices = (runner as unknown as { pendingNotices: string[] }).pendingNotices;
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain('bob');
+    expect(notices[0]).toContain('backend engineer');
+
+    await runner.stop();
+  });
+
+  it('join notice omits role when absent', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const client = getClient(runner);
+    client.emit('agent-join', {
+      id: 'join-2',
+      type: 'agent.join',
+      from: 'server',
+      timestamp: Date.now(),
+      payload: { agent: { id: 'alice-1', name: 'alice', type: AgentType.HUMAN } },
+    });
+
+    const notices = (runner as unknown as { pendingNotices: string[] }).pendingNotices;
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toBe('[System] alice has joined the workspace.');
+
+    await runner.stop();
+  });
+
+  it('leave notice includes role when present', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    // First register the member with a role
+    const client = getClient(runner);
+    client.emit('agent-join', {
+      id: 'join-3',
+      type: 'agent.join',
+      from: 'server',
+      timestamp: Date.now(),
+      payload: { agent: { id: 'bob-1', name: 'bob', type: AgentType.CLAUDE_CODE, role: 'frontend dev' } },
+    });
+    // Clear join notice
+    (runner as unknown as { pendingNotices: string[] }).pendingNotices = [];
+
+    // Now emit leave
+    client.emit('agent-leave', {
+      id: 'leave-1',
+      type: 'agent.leave',
+      from: 'server',
+      timestamp: Date.now(),
+      payload: { agentId: 'bob-1' },
+    });
+
+    const notices = (runner as unknown as { pendingNotices: string[] }).pendingNotices;
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain('bob');
+    expect(notices[0]).toContain('frontend dev');
+
+    await runner.stop();
+  });
+
+  it('memberInfo stores role from agent-join', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    registerMember(runner, 'bob-1', 'bob', AgentType.CLAUDE_CODE, 'PM');
+
+    const memberInfo = (runner as unknown as { memberInfo: Map<string, MemberInfo> }).memberInfo;
+    const bob = memberInfo.get('bob-1');
+    expect(bob).toBeDefined();
+    expect(bob!.role).toBe('PM');
+
+    await runner.stop();
+  });
+
+  it('workspace-state updates memberInfo but does NOT refresh persona (preserves KV cache)', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      agentName: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const personaBefore = adapter.persona;
+
+    // Simulate a workspace-state event with members.
+    const client = getClient(runner);
+    client.emit('workspace-state', {
+      members: [
+        { id: 'me', name: 'me', type: AgentType.CLAUDE_CODE, status: 'idle' },
+        { id: 'bob-1', name: 'bob', type: AgentType.CLAUDE_CODE, role: 'backend engineer', status: 'idle' },
+        { id: 'carol-1', name: 'carol', type: AgentType.HUMAN, status: 'idle' },
+      ],
+      recentMessages: [],
+    });
+
+    // memberInfo should be updated
+    const memberInfo = (runner as unknown as { memberInfo: Map<string, MemberInfo> }).memberInfo;
+    expect(memberInfo.get('bob-1')).toEqual({ name: 'bob', type: AgentType.CLAUDE_CODE, role: 'backend engineer' });
+    expect(memberInfo.get('carol-1')).toEqual({ name: 'carol', type: AgentType.HUMAN, role: undefined });
+
+    // Persona should NOT have changed — avoids invalidating KV cache
+    expect(adapter.persona).toBe(personaBefore);
+
+    await runner.stop();
+  });
+
+  it('persona is refreshed after forget', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      agentName: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    // Register a member with a unique name (updates memberInfo but not persona)
+    registerMember(runner, 'zara-1', 'zara', AgentType.CLAUDE_CODE, 'PM');
+
+    // Persona should NOT contain zara yet (no refreshPersona on join)
+    expect(adapter.persona).not.toContain('@zara');
+
+    // Emit forget — this rebuilds the session and refreshes persona
+    const client = getClient(runner);
+    client.emit('agent-forget');
+
+    // Wait for async resetSession
+    await new Promise(r => setTimeout(r, 50));
+
+    // Persona should now contain the member roster after forget
+    expect(adapter.persona).toContain('@zara');
+    expect(adapter.persona).toContain('PM');
+    // Session should have been reset
+    expect(adapter.resetSessionCalls).toBe(1);
+
+    await runner.stop();
+  });
+
+  it('workspace-state reconnection does NOT refresh persona (preserves KV cache)', async () => {
+    const adapter = new FakeAdapter();
+    const runner = new AgentRunner({
+      serverUrl: 'http://localhost:9999',
+      adapter,
+      agentId: 'me',
+      agentName: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+
+    const personaBefore = adapter.persona;
+
+    // Simulate reconnection with workspace state that includes members
+    const client = getClient(runner);
+    client.emit('workspace-state', {
+      members: [
+        { id: 'me', name: 'me', type: AgentType.CLAUDE_CODE, status: 'idle' },
+        { id: 'xavier-1', name: 'xavier', type: AgentType.CLAUDE_CODE, role: 'backend engineer', status: 'idle' },
+      ],
+      recentMessages: [],
+    });
+
+    // memberInfo should be updated for @mention resolution
+    const memberInfo = (runner as unknown as { memberInfo: Map<string, MemberInfo> }).memberInfo;
+    expect(memberInfo.get('xavier-1')).toEqual({ name: 'xavier', type: AgentType.CLAUDE_CODE, role: 'backend engineer' });
+
+    // But persona should NOT change — avoids invalidating KV cache mid-session
+    expect(adapter.persona).toBe(personaBefore);
 
     await runner.stop();
   });
