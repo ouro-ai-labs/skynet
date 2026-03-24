@@ -172,6 +172,71 @@ describe('compact mode (1:1)', () => {
     const result = formatForWeixin(msg, resolve, { compact: true });
     expect(result).toBe('[alice] Result [OK]: Done');
   });
+
+  it('includes attachment indicators in compact mode', () => {
+    const msg: SkynetMessage = {
+      id: 'msg-c3',
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      timestamp: Date.now(),
+      payload: {
+        text: 'Here is the screenshot',
+        attachments: [{ type: 'image', mimeType: 'image/png', name: 'shot.png', data: '', size: 51200 }],
+      },
+    };
+    const result = formatForWeixin(msg, resolve, { compact: true });
+    expect(result).toBe('Here is the screenshot\n[shot.png 50KB]');
+  });
+});
+
+describe('attachment formatting', () => {
+  it('appends attachment indicator to chat message', () => {
+    const msg: SkynetMessage = {
+      id: 'msg-att-1',
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      timestamp: Date.now(),
+      payload: {
+        text: 'Check this',
+        attachments: [{ type: 'image', mimeType: 'image/png', name: 'screenshot.png', data: '', size: 131072 }],
+      },
+    };
+    const result = formatForWeixin(msg, resolve);
+    expect(result).toBe('[alice]\nCheck this\n[screenshot.png 128KB]');
+  });
+
+  it('formats multiple attachments', () => {
+    const msg: SkynetMessage = {
+      id: 'msg-att-2',
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      timestamp: Date.now(),
+      payload: {
+        text: 'Two files',
+        attachments: [
+          { type: 'image', mimeType: 'image/png', name: 'a.png', data: '', size: 1024 },
+          { type: 'image', mimeType: 'image/jpeg', name: 'b.jpg', data: '', size: 2097152 },
+        ],
+      },
+    };
+    const result = formatForWeixin(msg, resolve);
+    expect(result).toBe('[alice]\nTwo files\n[a.png 1KB]\n[b.jpg 2.0MB]');
+  });
+
+  it('handles chat with no text but has attachment', () => {
+    const msg: SkynetMessage = {
+      id: 'msg-att-3',
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      timestamp: Date.now(),
+      payload: {
+        text: '',
+        attachments: [{ type: 'image', mimeType: 'image/png', name: 'img.png', data: '', size: 512 }],
+      },
+    };
+    const result = formatForWeixin(msg, resolve);
+    expect(result).toBe('[alice]\n[img.png 512B]');
+  });
 });
 
 describe('isOneOnOne', () => {

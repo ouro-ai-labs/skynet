@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AgentType, MessageType, type SkynetMessage } from '@skynet-ai/protocol';
+import { AgentType, MessageType, type Attachment, type SkynetMessage } from '@skynet-ai/protocol';
 
 // --- Mock SkynetClient ---
 const { clientInstances } = vi.hoisted(() => {
@@ -11,7 +11,7 @@ vi.mock('@skynet-ai/sdk', async () => {
 
   class FakeClient extends EventEmitter {
     agent = { id: 'human-1', name: 'tester', type: 'human', capabilities: ['chat'], status: 'idle' };
-    chatCalls: Array<{ text: string; mentions?: string[] }> = [];
+    chatCalls: Array<{ text: string; mentions?: string[]; attachments?: Attachment[] }> = [];
     closed = false;
 
     constructor(_opts: unknown) {
@@ -28,8 +28,8 @@ vi.mock('@skynet-ai/sdk', async () => {
       };
     }
 
-    chat(text: string, mentions?: string[]) {
-      this.chatCalls.push({ text, mentions });
+    chat(text: string, mentions?: string[], attachments?: Attachment[]) {
+      this.chatCalls.push({ text, mentions, attachments });
     }
 
     async close() {
@@ -47,7 +47,7 @@ const { botInstances } = vi.hoisted(() => {
 
 vi.mock('@pinixai/weixin-bot', () => {
   class FakeBot {
-    messageHandler: ((msg: { userId: string; text: string }) => Promise<void>) | null = null;
+    messageHandler: ((msg: Record<string, unknown>) => Promise<void>) | null = null;
     sendCalls: Array<{ userId: string; text: string }> = [];
     typingCalls: Array<{ userId: string; action: string }> = [];
     loggedIn = false;
@@ -62,7 +62,7 @@ vi.mock('@pinixai/weixin-bot', () => {
       this.loggedIn = true;
     }
 
-    onMessage(handler: (msg: { userId: string; text: string }) => Promise<void>) {
+    onMessage(handler: (msg: Record<string, unknown>) => Promise<void>) {
       this.messageHandler = handler;
     }
 
@@ -115,7 +115,7 @@ describe('runChatWeixin', () => {
 
     const bot = lastBot();
     const client = lastClient();
-    const handler = bot.messageHandler as (msg: { userId: string; text: string }) => Promise<void>;
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
     expect(handler).toBeTruthy();
 
     await handler({ userId: 'wx-user-1', text: 'hello @alice' });
@@ -131,7 +131,7 @@ describe('runChatWeixin', () => {
 
     const bot = lastBot();
     const client = lastClient();
-    const handler = bot.messageHandler as (msg: { userId: string; text: string }) => Promise<void>;
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
 
     // First, establish the WeChat userId by sending a message
     await handler({ userId: 'wx-user-1', text: 'hi' });
@@ -162,7 +162,7 @@ describe('runChatWeixin', () => {
 
     const bot = lastBot();
     const client = lastClient();
-    const handler = bot.messageHandler as (msg: { userId: string; text: string }) => Promise<void>;
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
 
     // Establish WeChat userId
     await handler({ userId: 'wx-user-1', text: 'hi' });
@@ -189,7 +189,7 @@ describe('runChatWeixin', () => {
 
     const bot = lastBot();
     const client = lastClient();
-    const handler = bot.messageHandler as (msg: { userId: string; text: string }) => Promise<void>;
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
 
     await handler({ userId: 'wx-user-1', text: '  ' });
 
@@ -203,7 +203,7 @@ describe('runChatWeixin', () => {
 
     const bot = lastBot();
     const client = lastClient();
-    const handler = bot.messageHandler as (msg: { userId: string; text: string }) => Promise<void>;
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
 
     // Establish WeChat userId
     await handler({ userId: 'wx-user-1', text: 'hi' });
@@ -227,7 +227,7 @@ describe('runChatWeixin', () => {
 
     const bot = lastBot();
     const client = lastClient();
-    const handler = bot.messageHandler as (msg: { userId: string; text: string }) => Promise<void>;
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
 
     // Establish WeChat userId
     await handler({ userId: 'wx-user-1', text: 'hi' });
@@ -256,5 +256,73 @@ describe('runChatWeixin', () => {
     const bot = lastBot();
     expect(bot.loggedIn).toBe(true);
     expect(bot.running).toBe(true);
+  });
+
+  it('forwards WeChat image messages to Skynet as attachments', async () => {
+    // Mock fetch to return a small PNG-like buffer
+    const fakeImageData = Buffer.from('fake-png-data');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'image/png' }),
+      arrayBuffer: async () => fakeImageData.buffer.slice(
+        fakeImageData.byteOffset,
+        fakeImageData.byteOffset + fakeImageData.byteLength,
+      ),
+    } as Response);
+
+    const { runChatWeixin } = await import('../weixin.js');
+    await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+
+    const bot = lastBot();
+    const client = lastClient();
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
+
+    await handler({
+      userId: 'wx-user-1',
+      text: 'https://example.com/img.png',
+      type: 'image',
+      raw: {
+        item_list: [
+          {
+            type: 2,
+            image_item: { media: { encrypt_query_param: '', aes_key: '' }, url: 'https://example.com/img.png' },
+          },
+        ],
+      },
+      _contextToken: 'ctx-1',
+      timestamp: new Date(),
+    });
+
+    const calls = client.chatCalls as Array<{ text: string; attachments?: Attachment[] }>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0].attachments).toHaveLength(1);
+    expect(calls[0].attachments![0].type).toBe('image');
+    expect(calls[0].attachments![0].mimeType).toBe('image/png');
+    expect(calls[0].attachments![0].data).toBe(fakeImageData.toString('base64'));
+
+    fetchSpy.mockRestore();
+  });
+
+  it('skips image messages when URL is missing', async () => {
+    const { runChatWeixin } = await import('../weixin.js');
+    await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+
+    const bot = lastBot();
+    const client = lastClient();
+    const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
+
+    await handler({
+      userId: 'wx-user-1',
+      text: '[image]',
+      type: 'image',
+      raw: {
+        item_list: [{ type: 2, image_item: { media: { encrypt_query_param: '', aes_key: '' } } }],
+      },
+      _contextToken: 'ctx-1',
+      timestamp: new Date(),
+    });
+
+    const calls = client.chatCalls as Array<{ text: string }>;
+    expect(calls).toHaveLength(0);
   });
 });

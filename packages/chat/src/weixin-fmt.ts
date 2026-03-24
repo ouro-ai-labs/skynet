@@ -1,5 +1,6 @@
 import {
   type AgentCard,
+  type Attachment,
   type ChatPayload,
   type AgentJoinPayload,
   type AgentLeavePayload,
@@ -67,10 +68,12 @@ export function isOneOnOne(members: Map<string, AgentCard>): boolean {
 
 function formatChat(msg: SkynetMessage, resolve: AgentResolver, compact: boolean): string {
   const p = msg.payload as ChatPayload;
+  const attachmentLines = formatAttachments(p.attachments);
 
   // In 1:1 mode, just return the message text without any prefix
   if (compact) {
-    return p.text;
+    const parts = [p.text, attachmentLines].filter(Boolean);
+    return parts.join('\n');
   }
 
   const sender = resolve(msg.from);
@@ -85,7 +88,19 @@ function formatChat(msg: SkynetMessage, resolve: AgentResolver, compact: boolean
     }
   }
   const arrow = targets.length > 0 ? ` -> ${targets.join(', ')}` : '';
-  return `[${sender.name}]${arrow}\n${p.text}`;
+  const body = [p.text, attachmentLines].filter(Boolean).join('\n');
+  return `[${sender.name}]${arrow}\n${body}`;
+}
+
+function formatAttachments(attachments?: Attachment[]): string {
+  if (!attachments || attachments.length === 0) return '';
+  return attachments.map((att) => `[${att.name} ${formatSize(att.size)}]`).join('\n');
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 function formatTaskAssign(msg: SkynetMessage, resolve: AgentResolver): string {
