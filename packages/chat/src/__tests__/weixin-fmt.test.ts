@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AgentType, MessageType, type AgentCard, type SkynetMessage } from '@skynet-ai/protocol';
-import { formatForWeixin, chunkMessage, createAgentResolver } from '../weixin-fmt.js';
+import { formatForWeixin, chunkMessage, createAgentResolver, isOneOnOne } from '../weixin-fmt.js';
 
 const members = new Map<string, AgentCard>([
   ['agent-1', { id: 'agent-1', name: 'alice', type: AgentType.CLAUDE_CODE, capabilities: [], status: 'idle' }],
@@ -144,6 +144,51 @@ describe('formatForWeixin', () => {
     const result = formatForWeixin(msg, resolve)!;
     // eslint-disable-next-line no-control-regex
     expect(result).not.toMatch(/\u001b\[/);
+  });
+});
+
+describe('compact mode (1:1)', () => {
+  it('outputs only message text without sender prefix', () => {
+    const msg: SkynetMessage = {
+      id: 'msg-c1',
+      type: MessageType.CHAT,
+      from: 'agent-1',
+      timestamp: Date.now(),
+      payload: { text: 'Hello from Alice' },
+      mentions: ['human-1'],
+    };
+    const result = formatForWeixin(msg, resolve, { compact: true });
+    expect(result).toBe('Hello from Alice');
+  });
+
+  it('non-chat messages still show prefix in compact mode', () => {
+    const msg: SkynetMessage = {
+      id: 'msg-c2',
+      type: MessageType.TASK_RESULT,
+      from: 'agent-1',
+      timestamp: Date.now(),
+      payload: { taskId: 'task-1', success: true, summary: 'Done' },
+    };
+    const result = formatForWeixin(msg, resolve, { compact: true });
+    expect(result).toBe('[alice] Result [OK]: Done');
+  });
+});
+
+describe('isOneOnOne', () => {
+  it('returns true for 1 agent + 1 human', () => {
+    const m = new Map<string, AgentCard>([
+      ['a1', { id: 'a1', name: 'alice', type: AgentType.CLAUDE_CODE, capabilities: [], status: 'idle' }],
+      ['h1', { id: 'h1', name: 'casey', type: AgentType.HUMAN, capabilities: ['chat'], status: 'idle' }],
+    ]);
+    expect(isOneOnOne(m)).toBe(true);
+  });
+
+  it('returns false for 2 agents + 1 human', () => {
+    expect(isOneOnOne(members)).toBe(false);
+  });
+
+  it('returns false for empty workspace', () => {
+    expect(isOneOnOne(new Map())).toBe(false);
   });
 });
 

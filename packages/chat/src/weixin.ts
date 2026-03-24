@@ -8,7 +8,7 @@ import {
 } from '@skynet-ai/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 import type { IncomingMessage, WeixinBot as WeixinBotType } from '@pinixai/weixin-bot';
-import { createAgentResolver, formatForWeixin, chunkMessage } from './weixin-fmt.js';
+import { createAgentResolver, formatForWeixin, chunkMessage, isOneOnOne } from './weixin-fmt.js';
 import { executeCommand } from './commands.js';
 
 export interface ChatWeixinOptions {
@@ -118,7 +118,8 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
     if (!weixinUserId) return;
 
     const resolve = createAgentResolver(members);
-    const formatted = formatForWeixin(msg, resolve);
+    const compact = isOneOnOne(members);
+    const formatted = formatForWeixin(msg, resolve, { compact });
     if (!formatted) return;
 
     try {

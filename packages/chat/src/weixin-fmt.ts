@@ -6,6 +6,7 @@ import {
   type TaskPayload,
   type TaskResultPayload,
   type SkynetMessage,
+  AgentType,
   MessageType,
 } from '@skynet-ai/protocol';
 import { type AgentResolver, createAgentResolver } from './format.js';
@@ -22,14 +23,20 @@ function formatTime(ms: number): string {
   return `${h}:${m}`;
 }
 
+export interface FormatOptions {
+  /** When true, strip sender/target prefix from chat messages (1:1 mode). */
+  compact?: boolean;
+}
+
 /**
  * Format a SkynetMessage as plain text for WeChat (no ANSI, no Unicode markers).
  * Returns null for message types that should be suppressed (e.g. execution logs).
  */
-export function formatForWeixin(msg: SkynetMessage, resolve: AgentResolver): string | null {
+export function formatForWeixin(msg: SkynetMessage, resolve: AgentResolver, opts?: FormatOptions): string | null {
+  const compact = opts?.compact ?? false;
   switch (msg.type) {
     case MessageType.CHAT:
-      return formatChat(msg, resolve);
+      return formatChat(msg, resolve, compact);
     case MessageType.TASK_ASSIGN:
       return formatTaskAssign(msg, resolve);
     case MessageType.TASK_RESULT:
@@ -45,9 +52,28 @@ export function formatForWeixin(msg: SkynetMessage, resolve: AgentResolver): str
   }
 }
 
-function formatChat(msg: SkynetMessage, resolve: AgentResolver): string {
-  const sender = resolve(msg.from);
+/**
+ * Check if the workspace is in 1:1 mode (exactly 1 agent + 1 human).
+ */
+export function isOneOnOne(members: Map<string, AgentCard>): boolean {
+  let agents = 0;
+  let humans = 0;
+  for (const m of members.values()) {
+    if (m.type === AgentType.HUMAN) humans++;
+    else agents++;
+  }
+  return agents === 1 && humans === 1;
+}
+
+function formatChat(msg: SkynetMessage, resolve: AgentResolver, compact: boolean): string {
   const p = msg.payload as ChatPayload;
+
+  // In 1:1 mode, just return the message text without any prefix
+  if (compact) {
+    return p.text;
+  }
+
+  const sender = resolve(msg.from);
   const targets: string[] = [];
   if (msg.mentions && msg.mentions.length > 0) {
     for (const mid of msg.mentions) {
