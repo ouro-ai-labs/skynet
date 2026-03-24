@@ -1,9 +1,11 @@
 import {
   type AgentCard,
+  type Attachment,
   type AgentJoinPayload,
   type AgentLeavePayload,
   type SkynetMessage,
   AgentType,
+  MAX_ATTACHMENT_SIZE,
   MessageType,
 } from '@skynet-ai/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
@@ -84,6 +86,16 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
     // Capture the WeChat user ID from first message
     if (!weixinUserId) {
       weixinUserId = msg.userId;
+    }
+
+    // Handle image messages: fetch the image and forward as attachment
+    if (msg.type === 'image') {
+      const attachment = await fetchWeixinImage(msg);
+      if (attachment) {
+        const mentions = getAutoMentions(members, agentId, '');
+        client.chat(msg.text?.trim() || '', mentions, [attachment]);
+      }
+      return;
     }
 
     const text = msg.text?.trim();
@@ -174,6 +186,49 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
 
   // Start the WeChat long-polling loop (blocks until bot.stop() is called)
   await bot.run();
+}
+
+/**
+ * Extract the image URL from a WeChat image message and fetch it as a Skynet Attachment.
+ * Returns null if the image cannot be fetched or exceeds the size limit.
+ */
+async function fetchWeixinImage(msg: IncomingMessage): Promise<Attachment | null> {
+  const imageItem = msg.raw?.item_list?.[0]?.image_item;
+  const url = imageItem?.url;
+  if (!url) {
+    console.error('WeChat image message has no URL; skipping.');
+    return null;
+  }
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.error(`Failed to fetch WeChat image: HTTP ${resp.status}`);
+      return null;
+    }
+
+    const buf = Buffer.from(await resp.arrayBuffer());
+    if (buf.length > MAX_ATTACHMENT_SIZE) {
+      console.error(`WeChat image too large (${buf.length} bytes); max ${MAX_ATTACHMENT_SIZE} bytes.`);
+      return null;
+    }
+
+    const contentType = resp.headers.get('content-type') ?? 'image/png';
+    const mimeType = contentType.split(';')[0].trim();
+    const ext = mimeType.split('/')[1] ?? 'png';
+    const name = `weixin-image-${Date.now()}.${ext}`;
+
+    return {
+      type: 'image',
+      mimeType,
+      name,
+      data: buf.toString('base64'),
+      size: buf.length,
+    };
+  } catch (err) {
+    console.error(`Failed to fetch WeChat image: ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
 }
 
 /**
