@@ -12,6 +12,9 @@ export async function executeCommand(serverUrl: string, input: string, humanId?:
   const arg = parts[2];
 
   switch (category) {
+    case '/help':
+    case '/h':
+      return handleHelpCommand();
     case '/agent':
       return handleAgentCommand(serverUrl, subcommand, arg);
     case '/human':
@@ -23,6 +26,23 @@ export async function executeCommand(serverUrl: string, input: string, humanId?:
     default:
       return null;
   }
+}
+
+function handleHelpCommand(): CommandResult {
+  return {
+    lines: [
+      'Available commands:',
+      '',
+      '/help              Show this help',
+      '/agent list        List all agents',
+      '/agent interrupt @name  Interrupt an agent',
+      '/agent interrupt @all   Interrupt all agents',
+      '/agent forget @name     Reset agent session',
+      '/human list        List all humans',
+      '/watch @name       Subscribe to agent logs',
+      '/unwatch @name     Unsubscribe from agent logs',
+    ],
+  };
 }
 
 async function handleAgentCommand(serverUrl: string, sub: string | undefined, arg?: string): Promise<CommandResult> {
