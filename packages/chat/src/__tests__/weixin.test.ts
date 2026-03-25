@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AgentType, MessageType, type Attachment, type SkynetMessage } from '@skynet-ai/protocol';
+import { AgentType, MessageType, MENTION_ALL, type Attachment, type SkynetMessage } from '@skynet-ai/protocol';
 
 // --- Mock SkynetClient ---
 const { clientInstances } = vi.hoisted(() => {
@@ -324,5 +324,133 @@ describe('runChatWeixin', () => {
 
     const calls = client.chatCalls as Array<{ text: string }>;
     expect(calls).toHaveLength(0);
+  });
+
+  describe('last mention default', () => {
+    it('reuses last mentions when sending without @mention in multi-agent workspace', async () => {
+      const { runChatWeixin } = await import('../weixin.js');
+      await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+
+      const bot = lastBot();
+      const client = lastClient();
+      const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
+
+      // Add a second agent so auto-mention (1:1 mode) doesn't kick in
+      const joinMsg: SkynetMessage = {
+        id: 'join-1',
+        type: MessageType.AGENT_JOIN,
+        from: 'system',
+        timestamp: Date.now(),
+        payload: { agent: { id: 'agent-2', name: 'bob', type: AgentType.GEMINI_CLI, capabilities: [], status: 'idle' } },
+      };
+      client.emit('agent-join', joinMsg);
+
+      // Send a message with explicit @mention
+      await handler({ userId: 'wx-user-1', text: 'hello @alice' });
+
+      // Simulate the echoed message from server with resolved mentions
+      const echoMsg: SkynetMessage = {
+        id: 'echo-1',
+        type: MessageType.CHAT,
+        from: 'human-1',
+        timestamp: Date.now(),
+        payload: { text: 'hello @alice' },
+        mentions: ['agent-1'],
+      };
+      client.emit('message', echoMsg);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Now send a message without @mention — should reuse last mentions
+      await handler({ userId: 'wx-user-1', text: 'what do you think?' });
+
+      const calls = client.chatCalls as Array<{ text: string; mentions?: string[] }>;
+      expect(calls).toHaveLength(2);
+      // First message: has @, so mentions should be undefined (server resolves)
+      expect(calls[0].mentions).toBeUndefined();
+      // Second message: no @, should default to last mentions
+      expect(calls[1].mentions).toEqual(['agent-1']);
+    });
+
+    it('does not reuse MENTION_ALL as last mentions', async () => {
+      const { runChatWeixin } = await import('../weixin.js');
+      await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+
+      const bot = lastBot();
+      const client = lastClient();
+      const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
+
+      // Add a second agent
+      const joinMsg: SkynetMessage = {
+        id: 'join-1',
+        type: MessageType.AGENT_JOIN,
+        from: 'system',
+        timestamp: Date.now(),
+        payload: { agent: { id: 'agent-2', name: 'bob', type: AgentType.GEMINI_CLI, capabilities: [], status: 'idle' } },
+      };
+      client.emit('agent-join', joinMsg);
+
+      await handler({ userId: 'wx-user-1', text: 'hello @all' });
+
+      // Simulate echoed message with only MENTION_ALL
+      const echoMsg: SkynetMessage = {
+        id: 'echo-1',
+        type: MessageType.CHAT,
+        from: 'human-1',
+        timestamp: Date.now(),
+        payload: { text: 'hello @all' },
+        mentions: [MENTION_ALL],
+      };
+      client.emit('message', echoMsg);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Send without @mention — should NOT reuse @all
+      await handler({ userId: 'wx-user-1', text: 'follow up' });
+
+      const calls = client.chatCalls as Array<{ text: string; mentions?: string[] }>;
+      expect(calls).toHaveLength(2);
+      expect(calls[1].mentions).toBeUndefined();
+    });
+
+    it('updates last mentions when a new @mention is used', async () => {
+      const { runChatWeixin } = await import('../weixin.js');
+      await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+
+      const bot = lastBot();
+      const client = lastClient();
+      const handler = bot.messageHandler as (msg: Record<string, unknown>) => Promise<void>;
+
+      // Add a second agent
+      const joinMsg: SkynetMessage = {
+        id: 'join-1',
+        type: MessageType.AGENT_JOIN,
+        from: 'system',
+        timestamp: Date.now(),
+        payload: { agent: { id: 'agent-2', name: 'bob', type: AgentType.GEMINI_CLI, capabilities: [], status: 'idle' } },
+      };
+      client.emit('agent-join', joinMsg);
+
+      // First mention alice
+      await handler({ userId: 'wx-user-1', text: 'hello @alice' });
+      client.emit('message', {
+        id: 'echo-1', type: MessageType.CHAT, from: 'human-1',
+        timestamp: Date.now(), payload: { text: 'hello @alice' }, mentions: ['agent-1'],
+      } as SkynetMessage);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Then mention bob
+      await handler({ userId: 'wx-user-1', text: 'hey @bob' });
+      client.emit('message', {
+        id: 'echo-2', type: MessageType.CHAT, from: 'human-1',
+        timestamp: Date.now(), payload: { text: 'hey @bob' }, mentions: ['agent-2'],
+      } as SkynetMessage);
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Send without @mention — should use bob (the latest)
+      await handler({ userId: 'wx-user-1', text: 'and one more thing' });
+
+      const calls = client.chatCalls as Array<{ text: string; mentions?: string[] }>;
+      expect(calls).toHaveLength(3);
+      expect(calls[2].mentions).toEqual(['agent-2']);
+    });
   });
 });
