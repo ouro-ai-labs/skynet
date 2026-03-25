@@ -110,6 +110,17 @@ export class SqliteStore implements Store {
     return (rows as Array<Record<string, unknown>>).reverse().map(this.rowToMessage);
   }
 
+  purgeOlderThan(maxAgeMs: number): number {
+    const cutoff = Date.now() - maxAgeMs;
+    const result = this.db.prepare('DELETE FROM messages WHERE timestamp < ?').run(cutoff);
+    return result.changes;
+  }
+
+  getMessageCount(): number {
+    const row = this.db.prepare('SELECT COUNT(*) as count FROM messages').get() as { count: number };
+    return row.count;
+  }
+
   // ── Agents ──
 
   saveAgent(agent: AgentCard): void {

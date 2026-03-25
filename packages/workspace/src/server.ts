@@ -38,6 +38,10 @@ export interface SkynetWorkspaceOptions {
   recentMentionsLimit?: number;
   /** Log file path. When set, server logs are written to this file. */
   logFile?: string;
+  /** Max age of messages in milliseconds. Messages older than this are periodically purged. Default: 604800000 (7 days). Set to 0 to disable. */
+  retentionMaxAgeMs?: number;
+  /** How often to run the retention cleanup, in milliseconds. Default: 3600000 (1 hour). */
+  retentionIntervalMs?: number;
 }
 
 export class SkynetWorkspace {
@@ -50,12 +54,17 @@ export class SkynetWorkspace {
   private pendingLeaves = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly disconnectGraceMs: number;
   private readonly recentMentionsLimit: number;
+  private readonly retentionMaxAgeMs: number;
+  private readonly retentionIntervalMs: number;
+  private retentionTimer: ReturnType<typeof setInterval> | null = null;
   private _stopping = false;
 
   constructor(private options: SkynetWorkspaceOptions) {
     this.store = options.store;
     this.disconnectGraceMs = options.disconnectGraceMs ?? 300000;
     this.recentMentionsLimit = options.recentMentionsLimit ?? 3;
+    this.retentionMaxAgeMs = options.retentionMaxAgeMs ?? 7 * 24 * 60 * 60 * 1000; // 7 days
+    this.retentionIntervalMs = options.retentionIntervalMs ?? 60 * 60 * 1000; // 1 hour
     this.logger = new Logger('workspace', {
       filePath: options.logFile,
       level: 'debug',
@@ -78,6 +87,26 @@ export class SkynetWorkspace {
     const host = this.options.host ?? '0.0.0.0';
     await this.fastify.listen({ port, host });
     this.logger.info(`Server started on ${host}:${port}`);
+
+    this.startRetentionTimer();
+  }
+
+  private startRetentionTimer(): void {
+    if (this.retentionMaxAgeMs <= 0) return;
+    // Run once immediately, then on interval
+    this.runRetention();
+    this.retentionTimer = setInterval(() => this.runRetention(), this.retentionIntervalMs);
+  }
+
+  private runRetention(): void {
+    try {
+      const deleted = this.store.purgeOlderThan(this.retentionMaxAgeMs);
+      if (deleted > 0) {
+        this.logger.info(`Retention: purged ${deleted} messages older than ${this.retentionMaxAgeMs}ms`);
+      }
+    } catch (err) {
+      this.logger.warn('Retention purge failed', err);
+    }
   }
 
   private registerHealthRoutes(): void {
@@ -621,6 +650,10 @@ export class SkynetWorkspace {
 
   async stop(): Promise<void> {
     this._stopping = true;
+    if (this.retentionTimer) {
+      clearInterval(this.retentionTimer);
+      this.retentionTimer = null;
+    }
     for (const timer of this.pendingLeaves.values()) {
       clearTimeout(timer);
     }

@@ -9,6 +9,10 @@ export interface Store {
   getMessagesFor(agentId: string, limit?: number, since?: number): SkynetMessage[];
   /** Get execution log messages, optionally filtered by agent ID. */
   getExecutionLogs(agentId?: string, limit?: number): SkynetMessage[];
+  /** Delete messages older than `maxAgeMs` milliseconds. Returns the number of deleted rows. */
+  purgeOlderThan(maxAgeMs: number): number;
+  /** Return the total number of stored messages. */
+  getMessageCount(): number;
 
   // Agents
   saveAgent(agent: AgentCard): void;
