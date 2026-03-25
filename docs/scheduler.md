@@ -7,7 +7,7 @@
 Humans `@mention` an agent and describe a recurring task in natural language. The agent (an LLM) understands the scheduling intent, converts it to a cron expression, and outputs a structured `<schedule-create />` XML tag. The agent runner parses the tag, calls the workspace schedule API, and the scheduler fires `TASK_ASSIGN` messages on each cron tick.
 
 ```
-Human → @backend "每天早上9点帮我review PR"
+Human → @backend "Review my PRs every day at 9am"
                 ↓
 Agent (LLM) → understands intent, outputs <schedule-create ... />
                 ↓
@@ -273,25 +273,25 @@ Powered by [croner](https://github.com/hexagon/croner) — zero-dependency, ESM,
 
 | Human says | Agent creates |
 |------------|---------------|
-| "每天早上9点帮我review PR" | `cron="0 9 * * *"` |
-| "每半小时检查一下CI状态" | `cron="*/30 * * * *"` |
-| "周一到周五下午5点总结今天的改动" | `cron="0 17 * * 1-5"` |
-| "取消那个CI检查的定时任务" | `<schedule-delete id="..." />` |
-| "现在有哪些定时任务？" | `<schedule-list />` |
+| "Review my PRs every day at 9am" | `cron="0 9 * * *"` |
+| "Check CI status every 30 minutes" | `cron="*/30 * * * *"` |
+| "Summarize today's changes weekdays at 5pm" | `cron="0 17 * * 1-5"` |
+| "Cancel that CI check schedule" | `<schedule-delete id="..." />` |
+| "What scheduled tasks do we have?" | `<schedule-list />` |
 
 ### Full Chat Flow
 
 ```
-Alice:   @backend 每天早上9点帮我review一下昨天的PR
-backend: 好的，已设置每天 9:00 自动执行 PR review。
+Alice:   @backend Review yesterday's PRs every day at 9am
+backend: Done — scheduled "daily-review" to run every day at 9:00 AM.
 
 ... next day, 09:00 ...
 
 backend: [receives TASK_ASSIGN from scheduler]
-backend: @alice 昨天有3个PR需要关注：
-         1. #142 — 新增用户认证模块，代码质量良好，建议合入
-         2. #143 — 重构数据库层，有几个潜在的并发问题需要讨论
-         3. #144 — 文档更新，LGTM
+backend: @alice 3 PRs from yesterday need attention:
+         1. #142 — New auth module, code quality looks good, recommend merging
+         2. #143 — Database layer refactor, a few potential concurrency issues to discuss
+         3. #144 — Docs update, LGTM
 ```
 
 ## File Structure
