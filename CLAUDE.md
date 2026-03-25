@@ -58,6 +58,7 @@ If you modify code under these paths, also read the matching docs first:
 - `packages/sdk` → `docs/usage.md` (client SDK usage, reconnection, error handling)
 - `packages/agent-adapter` → `docs/adapter.md` (adapter contracts, CLI process management)
 - `packages/cli` (skynet CLI behavior) → **must update both** `skills/skynet/SKILL.md` (agent skill) **and** `docs/cli.md` (CLI reference)
+- Scheduler / cron → `docs/scheduler.md` (architecture, API, agent XML tags, CLI commands)
 - Entity model → `docs/entities.md` (workspace, agent, human lifecycle)
 
 ## Language
