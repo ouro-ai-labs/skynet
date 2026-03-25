@@ -331,7 +331,7 @@ skynet human delete a1b2c3d4-... --force
 
 ## `skynet chat` — Start Chat TUI
 
-Launch the chat terminal UI to participate in the workspace as a human. In pipe mode, the chat reads from stdin and writes to stdout, which is useful for scripting and integration with external tools.
+Launch the chat terminal UI to participate in the workspace as a human. In pipe mode, the chat reads from stdin and writes to stdout, which is useful for scripting and integration with external tools. In WeChat bridge mode, the chat forwards messages bidirectionally between WeChat and the workspace.
 
 ```bash
 skynet chat --workspace <name-or-id>
@@ -341,6 +341,9 @@ skynet chat --workspace <name-or-id> --name alice
 
 # Non-interactive pipe mode (read from stdin, write to stdout)
 skynet chat --workspace <name-or-id> --pipe --name alice
+
+# WeChat bridge mode
+skynet chat --workspace <name-or-id> --weixin --name alice
 ```
 
 | Flag | Description |
@@ -348,8 +351,9 @@ skynet chat --workspace <name-or-id> --pipe --name alice
 | `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Human name (skip selection prompt) |
 | `--pipe` | Non-interactive pipe mode: read from stdin, write to stdout |
+| `--weixin` | WeChat bridge mode: forward messages between WeChat and the workspace |
 
-When multiple humans are registered and `--name` is not provided, an interactive selection prompt is shown. In `--pipe` mode, `--name` is required when multiple humans exist (there is no interactive prompt to fall back on).
+When multiple humans are registered and `--name` is not provided, an interactive selection prompt is shown. In `--pipe` and `--weixin` modes, `--name` is required when multiple humans exist (there is no interactive prompt to fall back on).
 
 ---
 
