@@ -423,7 +423,6 @@ This runs tests for all packages via turborepo. Currently covers:
 - `@skynet-ai/workspace` — member management, entity management, message store, integration (32 tests)
 - `@skynet-ai/sdk` — client connection and events (5 tests)
 - `@skynet-ai/agent-adapter` — adapter implementations, agent runner, E2E multi-agent (22 tests)
-- `@skynet-ai/coordinator` — file locks, task queue (18 tests)
 - `@skynet-ai/chat` — formatting, markdown rendering, input state (56 tests)
 - `@skynet-ai/cli` — config management (4 tests)
 

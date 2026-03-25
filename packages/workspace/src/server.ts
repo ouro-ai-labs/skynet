@@ -16,6 +16,8 @@ import {
   type AgentForgetPayload,
   type AgentWatchPayload,
   type AgentUnwatchPayload,
+  type ScheduleCreatePayload,
+  type ScheduleInfo,
   AgentType,
   MessageType,
   ClientAction,
@@ -26,6 +28,7 @@ import {
   serialize,
 } from '@skynet-ai/protocol';
 import { MemberManager } from './member-manager.js';
+import { Scheduler } from './scheduler.js';
 import type { Store } from './store.js';
 
 export interface SkynetWorkspaceOptions {
@@ -44,6 +47,7 @@ export class SkynetWorkspace {
   private fastify = Fastify({ logger: true });
   private members = new MemberManager();
   private store: Store;
+  private scheduler: Scheduler;
   private logger: Logger;
   private socketAgentMap = new WeakMap<WebSocket, string>();
   /** Pending leave timers — cancelled if agent reconnects within grace period. */
@@ -61,6 +65,11 @@ export class SkynetWorkspace {
       level: 'debug',
       console: false,
     });
+    this.scheduler = new Scheduler(
+      this.store,
+      (agentId, msg) => this.routeScheduledMessage(agentId, msg),
+      options.logFile,
+    );
   }
 
   async start(): Promise<void> {
@@ -71,12 +80,14 @@ export class SkynetWorkspace {
     this.registerAgentControlRoutes();
     this.registerHumanRoutes();
     this.registerMessageRoutes();
+    this.registerScheduleRoutes();
     this.registerNameRoutes();
     this.registerWebSocket();
 
     const port = this.options.port ?? 4117;
     const host = this.options.host ?? '0.0.0.0';
     await this.fastify.listen({ port, host });
+    this.scheduler.start();
     this.logger.info(`Server started on ${host}:${port}`);
   }
 
@@ -619,8 +630,84 @@ export class SkynetWorkspace {
     this.members.broadcast(leaveMsg);
   }
 
+  private registerScheduleRoutes(): void {
+    // Create schedule
+    this.fastify.post<{ Body: ScheduleCreatePayload & { createdBy?: string } }>(
+      '/api/schedules',
+      async (req, reply) => {
+        const { name, cronExpr, agentId, taskTemplate, createdBy } = req.body;
+        if (!name || !cronExpr || !agentId || !taskTemplate) {
+          return reply.status(400).send({ error: 'name, cronExpr, agentId, and taskTemplate are required' });
+        }
+        // Validate agent exists
+        if (!this.store.getAgent(agentId)) {
+          return reply.status(404).send({ error: `Agent '${agentId}' not found` });
+        }
+        try {
+          const schedule = this.scheduler.create({ name, cronExpr, agentId, taskTemplate }, createdBy);
+          return reply.status(201).send(schedule);
+        } catch (err) {
+          return reply.status(400).send({ error: `Invalid cron expression: ${(err as Error).message}` });
+        }
+      },
+    );
+
+    // List schedules
+    this.fastify.get<{ Querystring: { agentId?: string } }>(
+      '/api/schedules',
+      async (req) => this.scheduler.list(req.query.agentId),
+    );
+
+    // Get schedule
+    this.fastify.get<{ Params: { id: string } }>(
+      '/api/schedules/:id',
+      async (req, reply) => {
+        const schedule = this.scheduler.get(req.params.id);
+        if (!schedule) return reply.status(404).send({ error: 'Schedule not found' });
+        return schedule;
+      },
+    );
+
+    // Update schedule
+    this.fastify.patch<{
+      Params: { id: string };
+      Body: Partial<Pick<ScheduleInfo, 'name' | 'cronExpr' | 'agentId' | 'taskTemplate' | 'enabled'>>;
+    }>(
+      '/api/schedules/:id',
+      async (req, reply) => {
+        const updated = this.scheduler.update(req.params.id, req.body);
+        if (!updated) return reply.status(404).send({ error: 'Schedule not found' });
+        return updated;
+      },
+    );
+
+    // Delete schedule
+    this.fastify.delete<{ Params: { id: string } }>(
+      '/api/schedules/:id',
+      async (req, reply) => {
+        const deleted = this.scheduler.delete(req.params.id);
+        if (!deleted) return reply.status(404).send({ error: 'Schedule not found' });
+        return { deleted: true };
+      },
+    );
+  }
+
+  /** Route a scheduler-generated task message to the target agent. */
+  private routeScheduledMessage(agentId: string, msg: import('@skynet-ai/protocol').SkynetMessage): void {
+    this.store.save(msg);
+    // Try to deliver to connected agent
+    const member = this.members.getMember(agentId);
+    if (member) {
+      this.members.sendTo(agentId, msg);
+    }
+    // Also notify connected humans
+    this.members.sendToHumans(msg, new Set());
+    this.logger.info(`Scheduled task routed to agent=${agentId} msg=${msg.id}`);
+  }
+
   async stop(): Promise<void> {
     this._stopping = true;
+    this.scheduler.stop();
     for (const timer of this.pendingLeaves.values()) {
       clearTimeout(timer);
     }

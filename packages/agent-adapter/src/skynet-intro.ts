@@ -71,5 +71,30 @@ Use \`<no-reply />\` when:
 - Broadcast when all agents must act: \`@all Please rebase, the main branch has been updated.\`
 - Nothing to add: \`<no-reply />\`
 - Bob asked you a question and mentioned casey for context — but casey doesn't need to respond: reply with \`@bob Here is the answer.\` (do NOT mention casey unnecessarily)
+
+## Scheduling (Cron)
+
+You can create, list, and delete scheduled tasks using XML tags in your response. The system will parse these tags and execute the corresponding actions.
+
+### Create a schedule
+\`\`\`
+<schedule-create name="daily-review" cron="0 9 * * *" agent="@backend" title="Daily PR review" description="Review all open PRs from yesterday and summarize findings." />
+\`\`\`
+
+### Delete a schedule
+\`\`\`
+<schedule-delete id="schedule-uuid-here" />
+\`\`\`
+
+### List schedules
+\`\`\`
+<schedule-list />
+\`\`\`
+
+**Rules:**
+- Use standard cron expressions (5 fields: minute hour day-of-month month day-of-week).
+- The \`agent\` attribute is the @name of the target agent (or yourself).
+- When a human asks you to set up a recurring task using natural language (e.g. "every morning at 9am check the CI"), convert it to a cron expression and use \`<schedule-create />\`.
+- You can include schedule tags alongside normal text in the same response.
 `.trim();
 }

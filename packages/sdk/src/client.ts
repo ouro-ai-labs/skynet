@@ -9,6 +9,8 @@ import {
   type ExecutionLogPayload,
   type JoinRequest,
   type ServerEvent,
+  type ScheduleInfo,
+  type ScheduleCreatePayload,
   ClientAction,
   WS_CLOSE_REPLACED,
   deserialize,
@@ -177,6 +179,9 @@ export class SkynetClient extends EventEmitter {
           case MessageType.EXECUTION_LOG:
             this.emit('execution-log', msg);
             break;
+          case MessageType.SCHEDULE_TRIGGER:
+            this.emit('schedule-trigger', msg);
+            break;
         }
       });
 
@@ -292,6 +297,75 @@ export class SkynetClient extends EventEmitter {
       payload,
       ...(options?.mentions && options.mentions.length > 0 ? { mentions: options.mentions } : {}),
     });
+  }
+
+  // ── Schedule API (HTTP) ──
+
+  async createSchedule(payload: ScheduleCreatePayload & { createdBy?: string }): Promise<ScheduleInfo> {
+    return this.httpPost<ScheduleInfo>('/api/schedules', payload);
+  }
+
+  async listSchedules(agentId?: string): Promise<ScheduleInfo[]> {
+    const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
+    return this.httpGet<ScheduleInfo[]>(`/api/schedules${query}`);
+  }
+
+  async getSchedule(id: string): Promise<ScheduleInfo> {
+    return this.httpGet<ScheduleInfo>(`/api/schedules/${encodeURIComponent(id)}`);
+  }
+
+  async updateSchedule(
+    id: string,
+    patch: Partial<Pick<ScheduleInfo, 'name' | 'cronExpr' | 'agentId' | 'taskTemplate' | 'enabled'>>,
+  ): Promise<ScheduleInfo> {
+    return this.httpPatch<ScheduleInfo>(`/api/schedules/${encodeURIComponent(id)}`, patch);
+  }
+
+  async deleteSchedule(id: string): Promise<void> {
+    await this.httpDelete(`/api/schedules/${encodeURIComponent(id)}`);
+  }
+
+  private async httpGet<T>(path: string): Promise<T> {
+    const res = await fetch(`${this.serverUrl}${path}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error((body.error as string) ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  private async httpPost<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${this.serverUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error((data.error as string) ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  private async httpPatch<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${this.serverUrl}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error((data.error as string) ?? `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  private async httpDelete(path: string): Promise<void> {
+    const res = await fetch(`${this.serverUrl}${path}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as Record<string, unknown>;
+      throw new Error((data.error as string) ?? `HTTP ${res.status}`);
+    }
   }
 
   /** Send a heartbeat immediately (e.g. on status change) without waiting for the next interval. */

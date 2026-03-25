@@ -24,6 +24,7 @@ interface MemberInfo {
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 import type { AgentAdapter, SessionState } from './base-adapter.js';
 import { buildSkynetIntro, buildMemberRoster } from './skynet-intro.js';
+import { parseScheduleCommands, stripScheduleTags, type ScheduleCommand } from './schedule-parser.js';
 
 /** Default debounce window (ms) — messages must age this long before processing. */
 const DEFAULT_DEBOUNCE_MS = 3000;
@@ -403,8 +404,9 @@ export class AgentRunner {
       const prompt = notices
         ? `${notices}\n\nMessage from ${senderName}: ${text}`
         : `Message from ${senderName}: ${text}`;
-      const response = await this.adapter.quickReply(prompt);
+      let response = await this.adapter.quickReply(prompt);
       this.logger.info(`[result:quick-reply] ${response ? response.slice(0, 500) : '(empty)'}`);
+      if (response) response = await this.processResponse(response);
       if (response && !isNoReply(response)) {
         // Include original sender; server enriches @name mentions from text
         this.client.chat(response, [msg.from]);
@@ -507,8 +509,9 @@ export class AgentRunner {
         if (chatBatch.length === 1) {
           const msg = chatBatch[0];
           const senderName = this.memberInfo.get(msg.from)?.name ?? msg.from;
-          const response = await this.adapter.handleMessage(msg, senderName, notices || undefined);
+          let response = await this.adapter.handleMessage(msg, senderName, notices || undefined);
           this.logger.info(`[result] ${response ? response.slice(0, 500) : '(empty)'}`);
+          if (response) response = await this.processResponse(response);
           if (response && !isNoReply(response)) {
             // Include original sender; server enriches @name mentions from text
             this.client.chat(response, [msg.from]);
@@ -574,8 +577,9 @@ export class AgentRunner {
     };
 
     const senderName = this.memberInfo.get(messages[0].from)?.name ?? messages[0].from;
-    const response = await this.adapter.handleMessage(batchMsg, senderName, notices || undefined);
+    let response = await this.adapter.handleMessage(batchMsg, senderName, notices || undefined);
     this.logger.info(`[result] ${response ? response.slice(0, 500) : '(empty)'}`);
+    if (response) response = await this.processResponse(response);
 
     if (response && !isNoReply(response)) {
       // Include all senders; server enriches @name mentions from text
@@ -698,6 +702,67 @@ export class AgentRunner {
     } catch {
       return { lastSeenTimestamp: 0 };
     }
+  }
+
+  /**
+   * Parse schedule commands from agent response, execute them via SDK,
+   * and return the cleaned response text (without schedule tags).
+   */
+  private async processResponse(response: string): Promise<string> {
+    const commands = parseScheduleCommands(response);
+    if (commands.length === 0) return response;
+
+    for (const cmd of commands) {
+      try {
+        await this.executeScheduleCommand(cmd);
+      } catch (err) {
+        this.logger.error(`Schedule command failed: ${(err as Error).message}`);
+      }
+    }
+
+    return stripScheduleTags(response);
+  }
+
+  private async executeScheduleCommand(cmd: ScheduleCommand): Promise<void> {
+    switch (cmd.type) {
+      case 'create': {
+        // Resolve @name to agent ID
+        const agentId = this.resolveAgentName(cmd.agent);
+        if (!agentId) {
+          this.logger.warn(`Schedule create: unknown agent '${cmd.agent}'`);
+          return;
+        }
+        const schedule = await this.client.createSchedule({
+          name: cmd.name,
+          cronExpr: cmd.cron,
+          agentId,
+          taskTemplate: { title: cmd.title, description: cmd.description },
+          createdBy: this.client.agent.id,
+        });
+        this.logger.info(`Schedule created: ${schedule.name} (${schedule.id})`);
+        break;
+      }
+      case 'delete': {
+        await this.client.deleteSchedule(cmd.id);
+        this.logger.info(`Schedule deleted: ${cmd.id}`);
+        break;
+      }
+      case 'list': {
+        const schedules = await this.client.listSchedules();
+        this.logger.info(`Schedules: ${JSON.stringify(schedules)}`);
+        break;
+      }
+    }
+  }
+
+  /** Resolve an agent name to its ID from the member info map. */
+  private resolveAgentName(name: string): string | undefined {
+    // Check if it's already the agent's own name
+    if (name === this.client.agent.name) return this.client.agent.id;
+    for (const [id, info] of this.memberInfo) {
+      if (info.name === name) return id;
+    }
+    return undefined;
   }
 
   private async handleTask(msg: SkynetMessage): Promise<void> {
