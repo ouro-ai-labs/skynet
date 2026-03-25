@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/chat",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Chat TUI for human participation in Skynet multi-agent network",
   "type": "module",
   "main": "dist/index.js",
