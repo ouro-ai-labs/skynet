@@ -7,6 +7,7 @@ import {
   AgentType,
   MAX_ATTACHMENT_SIZE,
   MessageType,
+  MENTION_ALL,
 } from '@skynet-ai/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 import type { IncomingMessage, WeixinBot as WeixinBotType } from '@pinixai/weixin-bot';
@@ -32,6 +33,9 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
 
   // Track the WeChat user we're bridging to (captured from first incoming message)
   let weixinUserId: string | undefined;
+
+  // Track last explicit mentions for "last mention" default
+  let lastMentions: string[] | undefined;
 
   // --- 1. Connect to Skynet workspace ---
   const client = new SkynetClient({
@@ -92,7 +96,8 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
     if (msg.type === 'image') {
       const attachment = await fetchWeixinImage(msg);
       if (attachment) {
-        const mentions = getAutoMentions(members, agentId, '');
+        const mentions = getAutoMentions(members, agentId, '') ?? lastMentions;
+        if (mentions) lastMentions = mentions;
         client.chat(msg.text?.trim() || '', mentions, [attachment]);
       }
       return;
@@ -116,12 +121,21 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
 
     // Auto-mention: when workspace has exactly 1 agent and 1 human,
     // automatically mention that agent so the user doesn't need to type @name.
-    const mentions = getAutoMentions(members, agentId, text);
+    // Falls back to last mentioned targets if no explicit @ and no auto-mention.
+    const mentions = getAutoMentions(members, agentId, text)
+      ?? (!text.includes('@') ? lastMentions : undefined);
     client.chat(text, mentions);
   });
 
   // --- 5. Skynet → WeChat ---
   client.on('message', async (msg: SkynetMessage) => {
+    // Track mentions from our own echoed messages for "last mention" default
+    if (msg.from === agentId && msg.type === MessageType.CHAT && msg.mentions && msg.mentions.length > 0) {
+      const filtered = msg.mentions.filter((id) => id !== MENTION_ALL);
+      if (filtered.length > 0) {
+        lastMentions = filtered;
+      }
+    }
     // Skip own messages to avoid echo
     if (msg.from === agentId) return;
     // Skip execution logs

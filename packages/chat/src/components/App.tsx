@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Box, Static, Text, useApp, useInput } from 'ink';
-import { type SkynetMessage, type Attachment } from '@skynet-ai/protocol';
+import { type SkynetMessage, type Attachment, MENTION_ALL, MessageType } from '@skynet-ai/protocol';
 import type { UseSkynetOptions } from '../hooks/useSkynet.js';
 import { useSkynet } from '../hooks/useSkynet.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -59,6 +59,23 @@ export function App({ options }: AppProps): React.ReactElement {
   const [memberListCounter, setMemberListCounter] = useState(0);
   const [commandOutputs, setCommandOutputs] = useState<Array<{ lines: string[]; error?: boolean }>>([]);
 
+  // Track mentions from our own echoed messages for "last mention" default
+  const lastMentionsRef = useRef<string[]>([]);
+  const trackedMsgCountRef = useRef(0);
+
+  useEffect(() => {
+    for (let i = trackedMsgCountRef.current; i < state.messages.length; i++) {
+      const msg = state.messages[i];
+      if (msg.from === agentId && msg.type === MessageType.CHAT && msg.mentions && msg.mentions.length > 0) {
+        const filtered = msg.mentions.filter((id) => id !== MENTION_ALL);
+        if (filtered.length > 0) {
+          lastMentionsRef.current = filtered;
+        }
+      }
+    }
+    trackedMsgCountRef.current = state.messages.length;
+  }, [state.messages, agentId]);
+
   const handleSubmit = useCallback((text: string, attachments: Attachment[]) => {
     const cmd = text.toLowerCase().trim();
 
@@ -87,9 +104,13 @@ export function App({ options }: AppProps): React.ReactElement {
       return;
     }
 
-    // Server enriches @name mentions from text; no client-side resolution needed
     const atts = attachments.length > 0 ? attachments : undefined;
-    sendChat(text, undefined, atts);
+    // If no explicit @mention, default to the last mentioned targets
+    if (!text.includes('@') && lastMentionsRef.current.length > 0) {
+      sendChat(text, lastMentionsRef.current, atts);
+    } else {
+      sendChat(text, undefined, atts);
+    }
   }, [sendChat, close, exit, options.serverUrl, agentId]);
 
   // Ctrl+D to exit
