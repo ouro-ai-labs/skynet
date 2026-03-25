@@ -11,6 +11,11 @@ import {
 } from '@skynet-ai/protocol';
 import { SkynetClient, type WorkspaceState } from '@skynet-ai/sdk';
 
+/** Maximum number of messages kept in memory. Older messages are dropped. */
+const MAX_MESSAGES = 500;
+/** Maximum number of system messages kept in memory. */
+const MAX_SYSTEM_MESSAGES = 50;
+
 export interface UseSkynetOptions {
   serverUrl: string;
   name: string;
@@ -49,7 +54,10 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
   const [busyAgents, setBusyAgents] = useState<Map<string, number>>(new Map());
 
   const addSystemMessage = useCallback((text: string) => {
-    setSystemMessages((prev) => [...prev, text]);
+    setSystemMessages((prev) => {
+      const next = [...prev, text];
+      return next.length > MAX_SYSTEM_MESSAGES ? next.slice(-MAX_SYSTEM_MESSAGES) : next;
+    });
   }, []);
 
   useEffect(() => {
@@ -108,7 +116,10 @@ export function useSkynet(opts: UseSkynetOptions): UseSkynetReturn {
           return prev;
         });
       }
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) => {
+        const next = [...prev, msg];
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+      });
     }
 
     function onStatusChange(data: { agentId: string; status: string }): void {

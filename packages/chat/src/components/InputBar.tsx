@@ -14,6 +14,9 @@ import {
 import { readClipboardImage, formatSize } from '../clipboard.js';
 import { useBracketedPaste } from '../hooks/useBracketedPaste.js';
 
+/** Maximum number of input history entries kept in memory. */
+const MAX_INPUT_HISTORY = 100;
+
 interface InputBarProps {
   onSubmit: (text: string, attachments: Attachment[]) => void;
   onExitHint: () => void;
@@ -193,6 +196,9 @@ export function InputBar({ onSubmit, onExitHint, members }: InputBarProps): Reac
       if (hasContent) {
         const fullText = composePasteMessage(pastedBlocks, value);
         historyRef.current.push(value);
+        if (historyRef.current.length > MAX_INPUT_HISTORY) {
+          historyRef.current = historyRef.current.slice(-MAX_INPUT_HISTORY);
+        }
         onSubmit(fullText, attachments);
       }
       dispatch({ type: 'RESET' });
