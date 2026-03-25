@@ -8,8 +8,9 @@
 packages/workspace/src/
   server.ts          # SkynetWorkspace — Fastify + WebSocket main server
   member-manager.ts  # MemberManager — In-memory workspace member management
+  scheduler.ts       # Scheduler — Cron-based recurring task scheduler
   store.ts           # Store interface
-  sqlite-store.ts    # SqliteStore — SQLite message + entity persistence
+  sqlite-store.ts    # SqliteStore — SQLite message + entity + schedule persistence
   index.ts           # Module exports
 ```
 

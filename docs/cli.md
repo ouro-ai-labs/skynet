@@ -414,6 +414,68 @@ Output includes:
 
 ---
 
+## `skynet schedule` — Manage Scheduled Tasks
+
+Admin commands for managing cron-based recurring tasks. The primary way to create schedules is via natural language in chat (see [scheduler docs](scheduler.md)).
+
+### `skynet schedule list`
+
+List all schedules in a workspace.
+
+```bash
+skynet schedule list --workspace <name-or-id>
+
+# Filter by agent
+skynet schedule list --workspace <name-or-id> --agent <agent-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+| `--agent <agent-id>` | Filter by agent ID (optional) |
+
+### `skynet schedule delete <id>`
+
+Delete a schedule by ID. Prompts for confirmation unless `--force` is passed.
+
+```bash
+skynet schedule delete <schedule-id> --workspace <name-or-id>
+
+# Skip confirmation
+skynet schedule delete <schedule-id> --workspace <name-or-id> --force
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+| `--force` | Skip confirmation prompt |
+
+### `skynet schedule enable <id>`
+
+Enable a disabled schedule.
+
+```bash
+skynet schedule enable <schedule-id> --workspace <name-or-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+
+### `skynet schedule disable <id>`
+
+Disable a schedule without deleting it.
+
+```bash
+skynet schedule disable <schedule-id> --workspace <name-or-id>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+
+---
+
 ## Typical Workflow
 
 ```bash
