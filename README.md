@@ -71,6 +71,9 @@ skynet agent start frontend --workspace my-project
 # 4. Add a human & join chat
 skynet human new --workspace my-project --name alice
 skynet chat --workspace my-project --name alice
+
+# Or join via WeChat (scan QR code to login)
+skynet chat --workspace my-project --name alice --weixin
 ```
 
 For the complete CLI reference, see [docs/cli.md](docs/cli.md).
@@ -86,7 +89,7 @@ skynet/
 │   ├── agent-adapter/   # Wraps CLI agents (Claude, Gemini, Codex, generic)
 │   ├── coordinator/     # Task queue, file locks, git worktrees
 │   ├── cli/             # `skynet` CLI entry point
-│   ├── chat/            # Terminal chat UI (Ink + React)
+│   ├── chat/            # Terminal chat UI + WeChat bridge
 │   └── monitor/         # Web dashboard (Phase 2)
 ```
 

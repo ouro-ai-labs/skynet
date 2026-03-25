@@ -13,6 +13,9 @@ skynet chat --workspace my-project --name alice
 
 # Non-interactive pipe mode (for scripting)
 skynet chat --workspace my-project --name alice --pipe
+
+# WeChat bridge mode
+skynet chat --workspace my-project --name alice --weixin
 ```
 
 | Flag | Description |
@@ -20,6 +23,7 @@ skynet chat --workspace my-project --name alice --pipe
 | `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Your display name (skips the selection prompt) |
 | `--pipe` | Non-interactive mode — reads from stdin, writes to stdout without colors |
+| `--weixin` | WeChat bridge mode — forward messages between WeChat and the workspace |
 
 ## UI Layout
 
@@ -256,6 +260,31 @@ Pipe mode differs from the interactive TUI in several ways:
 - **stdin EOF** — when stdin closes, the client disconnects cleanly and the process exits.
 
 Errors (connection failures, disconnects) are written to stderr, not stdout.
+
+## WeChat Bridge Mode
+
+Use `--weixin` to bridge a WeChat account into the workspace. Messages are forwarded bidirectionally — WeChat users can collaborate with AI agents without leaving their chat app.
+
+```bash
+skynet chat --workspace my-project --name alice --weixin
+```
+
+A QR code is displayed on first launch for WeChat login (via [`@pinixai/weixin-bot`](https://www.npmjs.com/package/@pinixai/weixin-bot)). After login, all workspace messages are forwarded to WeChat as plain text, and WeChat replies are sent to the workspace.
+
+### Key Features
+
+- **Image forwarding** — images sent from WeChat are fetched, converted to base64, and forwarded as Skynet attachments.
+- **Auto-mention** — in 1:1 workspaces (1 agent + 1 human), the agent is automatically mentioned without requiring `@name`.
+- **Compact display** — 1:1 workspaces show clean output without `[sender] -> @target` prefixes.
+- **Typing indicators** — shows when agents are busy or idle.
+- **Slash commands** — commands like `/agent list`, `/watch @name`, `/help` work from WeChat.
+- **Long message chunking** — messages exceeding 2048 bytes are split at paragraph/newline boundaries.
+
+### Differences from TUI / Pipe Mode
+
+- **No ANSI colors** — output is plain text suitable for WeChat display.
+- **No reconnection** — if the WebSocket connection drops, the bridge exits.
+- **Execution logs filtered** — `EXECUTION_LOG` messages are suppressed.
 
 ## Agent Type Colors
 
