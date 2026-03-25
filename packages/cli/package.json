@@ -28,7 +28,6 @@
   "dependencies": {
     "@skynet-ai/agent-adapter": "workspace:*",
     "@skynet-ai/logger": "workspace:*",
-    "@skynet-ai/coordinator": "workspace:*",
     "@skynet-ai/chat": "workspace:*",
     "@skynet-ai/protocol": "workspace:*",
     "@skynet-ai/sdk": "workspace:*",

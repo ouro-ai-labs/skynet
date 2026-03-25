@@ -6,3 +6,4 @@ export { GenericAdapter, type GenericAdapterConfig } from './adapters/generic.js
 export { detectAvailableAgents, createAdapter, type DetectedAgent } from './detect.js';
 export { AgentRunner, isNoReply, type AgentRunnerOptions } from './agent-runner.js';
 export { buildSkynetIntro, buildMemberRoster, type RosterMember } from './skynet-intro.js';
+export { parseScheduleCommands, stripScheduleTags, type ScheduleCommand, type ScheduleCreateCommand, type ScheduleDeleteCommand, type ScheduleListCommand } from './schedule-parser.js';

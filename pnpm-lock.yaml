@@ -97,9 +97,6 @@ importers:
       '@skynet-ai/chat':
         specifier: workspace:*
         version: link:../chat
-      '@skynet-ai/coordinator':
-        specifier: workspace:*
-        version: link:../coordinator
       '@skynet-ai/logger':
         specifier: workspace:*
         version: link:../logger
@@ -121,22 +118,6 @@ importers:
       inquirer:
         specifier: ^12.0.0
         version: 12.11.1(@types/node@22.19.13)
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.13
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  packages/coordinator:
-    dependencies:
-      '@skynet-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      execa:
-        specifier: ^9.0.0
-        version: 9.6.1
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -198,6 +179,9 @@ importers:
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
       fastify:
         specifier: ^5.0.0
         version: 5.8.1
@@ -890,6 +874,10 @@ packages:
   cookie@1.1.1:
     resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}
     engines: {node: '>=18'}
+
+  croner@10.0.1:
+    resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
+    engines: {node: '>=18.0'}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -2238,6 +2226,8 @@ snapshots:
   convert-to-spaces@2.0.1: {}
 
   cookie@1.1.1: {}
+
+  croner@10.0.1: {}
 
   cross-spawn@7.0.6:
     dependencies:

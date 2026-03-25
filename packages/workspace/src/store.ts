@@ -1,4 +1,4 @@
-import type { SkynetMessage, AgentCard, HumanProfile } from '@skynet-ai/protocol';
+import type { SkynetMessage, AgentCard, HumanProfile, ScheduleInfo } from '@skynet-ai/protocol';
 
 export interface Store {
   // Messages
@@ -25,6 +25,14 @@ export interface Store {
   listHumans(): HumanProfile[];
   getHuman(idOrName: string): HumanProfile | undefined;
   deleteHuman(id: string): boolean;
+
+  // Schedules
+  saveSchedule(schedule: ScheduleInfo): void;
+  listSchedules(agentId?: string): ScheduleInfo[];
+  getSchedule(id: string): ScheduleInfo | undefined;
+  updateSchedule(id: string, patch: Partial<Pick<ScheduleInfo, 'name' | 'cronExpr' | 'agentId' | 'taskTemplate' | 'enabled'>>): ScheduleInfo | undefined;
+  updateScheduleLastRun(id: string, timestamp: number, nextRunAt?: number): void;
+  deleteSchedule(id: string): boolean;
 
   // Name uniqueness
   checkNameUnique(name: string): boolean;

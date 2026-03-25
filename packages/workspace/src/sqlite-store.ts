@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { MENTION_ALL, MessageType, type SkynetMessage, type AgentCard, type HumanProfile } from '@skynet-ai/protocol';
+import { MENTION_ALL, MessageType, type SkynetMessage, type AgentCard, type HumanProfile, type ScheduleInfo } from '@skynet-ai/protocol';
 import type { Store } from './store.js';
 
 export class SqliteStore implements Store {
@@ -39,6 +39,22 @@ export class SqliteStore implements Store {
         name TEXT UNIQUE NOT NULL,
         created_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS schedules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        cron_expr TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        task_template TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT,
+        last_run_at INTEGER,
+        next_run_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_schedules_agent_id ON schedules(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_schedules_enabled ON schedules(enabled);
     `);
   }
 
@@ -181,6 +197,80 @@ export class SqliteStore implements Store {
     return true;
   }
 
+  // ── Schedules ──
+
+  saveSchedule(schedule: ScheduleInfo): void {
+    this.db.prepare(`
+      INSERT INTO schedules (id, name, cron_expr, agent_id, task_template, enabled, created_by, last_run_at, next_run_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      schedule.id,
+      schedule.name,
+      schedule.cronExpr,
+      schedule.agentId,
+      JSON.stringify(schedule.taskTemplate),
+      schedule.enabled ? 1 : 0,
+      schedule.createdBy ?? null,
+      schedule.lastRunAt ?? null,
+      schedule.nextRunAt ?? null,
+      schedule.createdAt,
+      schedule.updatedAt,
+    );
+  }
+
+  listSchedules(agentId?: string): ScheduleInfo[] {
+    const rows = agentId
+      ? this.db.prepare('SELECT * FROM schedules WHERE agent_id = ? ORDER BY created_at').all(agentId)
+      : this.db.prepare('SELECT * FROM schedules ORDER BY created_at').all();
+    return (rows as Array<Record<string, unknown>>).map(this.rowToSchedule);
+  }
+
+  getSchedule(id: string): ScheduleInfo | undefined {
+    const row = this.db.prepare('SELECT * FROM schedules WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? this.rowToSchedule(row) : undefined;
+  }
+
+  updateSchedule(
+    id: string,
+    patch: Partial<Pick<ScheduleInfo, 'name' | 'cronExpr' | 'agentId' | 'taskTemplate' | 'enabled'>>,
+  ): ScheduleInfo | undefined {
+    const existing = this.getSchedule(id);
+    if (!existing) return undefined;
+
+    const sets: string[] = [];
+    const params: unknown[] = [];
+
+    if (patch.name !== undefined) { sets.push('name = ?'); params.push(patch.name); }
+    if (patch.cronExpr !== undefined) { sets.push('cron_expr = ?'); params.push(patch.cronExpr); }
+    if (patch.agentId !== undefined) { sets.push('agent_id = ?'); params.push(patch.agentId); }
+    if (patch.taskTemplate !== undefined) { sets.push('task_template = ?'); params.push(JSON.stringify(patch.taskTemplate)); }
+    if (patch.enabled !== undefined) { sets.push('enabled = ?'); params.push(patch.enabled ? 1 : 0); }
+
+    if (sets.length === 0) return existing;
+
+    sets.push('updated_at = ?');
+    params.push(Date.now());
+    params.push(id);
+
+    this.db.prepare(`UPDATE schedules SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    return this.getSchedule(id);
+  }
+
+  updateScheduleLastRun(id: string, timestamp: number, nextRunAt?: number): void {
+    if (nextRunAt !== undefined) {
+      this.db.prepare('UPDATE schedules SET last_run_at = ?, next_run_at = ?, updated_at = ? WHERE id = ?')
+        .run(timestamp, nextRunAt, Date.now(), id);
+    } else {
+      this.db.prepare('UPDATE schedules SET last_run_at = ?, updated_at = ? WHERE id = ?')
+        .run(timestamp, Date.now(), id);
+    }
+  }
+
+  deleteSchedule(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM schedules WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
   // ── Helpers ──
 
   private rowToMessage(row: Record<string, unknown>): SkynetMessage {
@@ -204,6 +294,22 @@ export class SqliteStore implements Store {
       persona: (row.persona as string) || undefined,
       createdAt: row.created_at as number,
       status: 'offline',
+    };
+  }
+
+  private rowToSchedule(row: Record<string, unknown>): ScheduleInfo {
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      cronExpr: row.cron_expr as string,
+      agentId: row.agent_id as string,
+      taskTemplate: JSON.parse(row.task_template as string),
+      enabled: (row.enabled as number) === 1,
+      createdBy: (row.created_by as string) || undefined,
+      lastRunAt: (row.last_run_at as number) || undefined,
+      nextRunAt: (row.next_run_at as number) || undefined,
+      createdAt: row.created_at as number,
+      updatedAt: row.updated_at as number,
     };
   }
 

@@ -7,6 +7,7 @@ import { registerHumanCommand } from './commands/human.js';
 import { registerChatCommand } from './commands/chat.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerDoctorCommand } from './commands/doctor.js';
+import { registerScheduleCommand } from './commands/schedule.js';
 
 const program = new Command();
 
@@ -21,6 +22,7 @@ registerAgentCommand(program);
 registerHumanCommand(program);
 registerChatCommand(program);
 registerStatusCommand(program);
+registerScheduleCommand(program);
 registerDoctorCommand(program);
 
 program.parse();

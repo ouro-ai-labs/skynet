@@ -68,7 +68,6 @@ skynet/
 │   ├── workspace/         # Workspace server (WebSocket + HTTP + entity management)
 │   ├── sdk/               # Client SDK
 │   ├── agent-adapter/     # Agent adapters (Claude Code, Gemini CLI, Codex CLI, generic)
-│   ├── coordinator/       # Task assignment, file locks, git worktree management
 │   ├── logger/            # Logging utilities (used by workspace, agent-adapter)
 │   ├── monitor/           # Web monitoring dashboard (Phase 2 placeholder)
 │   │   ├── server/

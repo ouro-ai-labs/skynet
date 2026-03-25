@@ -43,7 +43,6 @@ This is a pnpm workspaces + turborepo monorepo. Packages live under `packages/`:
 - `packages/workspace` — WebSocket server, member management, message routing
 - `packages/sdk` — Client SDK for connecting to the server
 - `packages/agent-adapter` — Agent adapters (Claude Code, Gemini CLI, Codex CLI, generic)
-- `packages/coordinator` — Task assignment, file locks, git worktree management
 - `packages/monitor` — Web monitoring dashboard (React + Vite)
 - `packages/chat` — Chat TUI for human participation
 - `packages/cli` — `skynet` CLI entry point

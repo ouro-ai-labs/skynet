@@ -54,6 +54,13 @@ export enum MessageType {
   AGENT_WATCH = 'agent.watch',
   AGENT_UNWATCH = 'agent.unwatch',
 
+  // Scheduling
+  SCHEDULE_CREATE = 'schedule.create',
+  SCHEDULE_UPDATE = 'schedule.update',
+  SCHEDULE_DELETE = 'schedule.delete',
+  SCHEDULE_LIST = 'schedule.list',
+  SCHEDULE_TRIGGER = 'schedule.trigger',
+
   // Context sharing
   CONTEXT_SHARE = 'context.share',
   FILE_CHANGE = 'file.change',
@@ -159,6 +166,61 @@ export interface FileChangePayload {
   path: string;
   changeType: 'created' | 'modified' | 'deleted';
   agentId: string;
+}
+
+// ── Schedule Types ──
+
+export interface ScheduleInfo {
+  id: string;
+  name: string;
+  /** Cron expression (e.g. "0 9 * * *" = every day at 9am). */
+  cronExpr: string;
+  /** Target agent ID to receive the task on each tick. */
+  agentId: string;
+  /** Task template sent to the agent on each tick. */
+  taskTemplate: {
+    title: string;
+    description: string;
+    files?: string[];
+    metadata?: Record<string, unknown>;
+  };
+  enabled: boolean;
+  /** Who created this schedule (human or agent ID). */
+  createdBy?: string;
+  lastRunAt?: number;
+  nextRunAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ScheduleCreatePayload {
+  name: string;
+  cronExpr: string;
+  agentId: string;
+  taskTemplate: ScheduleInfo['taskTemplate'];
+}
+
+export interface ScheduleUpdatePayload {
+  scheduleId: string;
+  name?: string;
+  cronExpr?: string;
+  agentId?: string;
+  taskTemplate?: ScheduleInfo['taskTemplate'];
+  enabled?: boolean;
+}
+
+export interface ScheduleDeletePayload {
+  scheduleId: string;
+}
+
+export interface ScheduleListPayload {
+  agentId?: string;
+}
+
+/** Payload for SCHEDULE_TRIGGER — sent when a cron tick fires. */
+export interface ScheduleTriggerPayload {
+  scheduleId: string;
+  schedule: ScheduleInfo;
 }
 
 // ── Execution Log Types ──

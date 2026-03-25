@@ -101,7 +101,7 @@ Example:
 ```
 
 The persona is used for:
-- **Task routing**: the coordinator can match tasks to agents based on their strengths
+- **Task routing**: the scheduler can match tasks to agents based on their strengths
 - **Collaboration context**: when agents communicate, they can understand each other's expertise
 - **Human readability**: the monitor dashboard displays agent profiles for humans to understand the team composition
 

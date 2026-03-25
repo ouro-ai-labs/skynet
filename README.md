@@ -84,7 +84,6 @@ skynet/
 │   ├── workspace/       # WebSocket server + message persistence
 │   ├── sdk/             # Client SDK (connect, send, subscribe)
 │   ├── agent-adapter/   # Wraps CLI agents (Claude, Gemini, Codex, generic)
-│   ├── coordinator/     # Task queue, file locks, git worktrees
 │   ├── cli/             # `skynet` CLI entry point
 │   ├── chat/            # Terminal chat UI (Ink + React)
 │   └── monitor/         # Web dashboard (Phase 2)
