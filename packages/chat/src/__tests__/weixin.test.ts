@@ -108,6 +108,47 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('AbortSignal.any polyfill', () => {
+  it('installs polyfill when AbortSignal.any is missing', async () => {
+    const original = AbortSignal.any;
+    // Simulate Node < 22 by removing AbortSignal.any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (AbortSignal as any).any;
+    try {
+      const { runChatWeixin } = await import('../weixin.js');
+      await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+      expect(typeof AbortSignal.any).toBe('function');
+
+      // Verify polyfill works: propagates abort from one signal
+      const controller = new AbortController();
+      const combined = AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]);
+      expect(combined.aborted).toBe(false);
+      controller.abort(new Error('test'));
+      expect(combined.aborted).toBe(true);
+      expect((combined.reason as Error).message).toBe('test');
+    } finally {
+      AbortSignal.any = original;
+    }
+  });
+
+  it('handles already-aborted signals', async () => {
+    const original = AbortSignal.any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (AbortSignal as any).any;
+    try {
+      const { runChatWeixin } = await import('../weixin.js');
+      await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
+
+      const aborted = AbortSignal.abort(new Error('pre-aborted'));
+      const combined = AbortSignal.any([aborted, AbortSignal.timeout(60_000)]);
+      expect(combined.aborted).toBe(true);
+      expect((combined.reason as Error).message).toBe('pre-aborted');
+    } finally {
+      AbortSignal.any = original;
+    }
+  });
+});
+
 describe('runChatWeixin', () => {
   it('forwards WeChat messages to Skynet workspace', async () => {
     const { runChatWeixin } = await import('../weixin.js');
