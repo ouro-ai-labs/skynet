@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "CLI entry point for Skynet multi-agent collaboration network",
   "type": "module",
   "main": "dist/index.js",
