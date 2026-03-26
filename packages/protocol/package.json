@@ -1,6 +1,6 @@
 {
   "name": "@skynet-ai/protocol",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Message types and serialization for Skynet multi-agent collaboration network",
   "type": "module",
   "main": "dist/index.js",
