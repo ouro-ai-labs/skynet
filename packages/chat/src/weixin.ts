@@ -87,68 +87,72 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
 
   // --- 4. WeChat → Skynet ---
   bot.onMessage(async (msg: IncomingMessage) => {
-    // Capture the WeChat user ID from first message
-    if (!weixinUserId) {
-      weixinUserId = msg.userId;
-    }
-
-    // Handle image messages: fetch the image and forward as attachment
-    if (msg.type === 'image') {
-      const attachment = await fetchWeixinImage(msg);
-      if (attachment) {
-        const mentions = getAutoMentions(members, agentId, '') ?? lastMentions;
-        if (mentions) lastMentions = mentions;
-        client.chat(msg.text?.trim() || '', mentions, [attachment]);
+    try {
+      // Capture the WeChat user ID from first message
+      if (!weixinUserId) {
+        weixinUserId = msg.userId;
       }
-      return;
-    }
 
-    const text = msg.text?.trim();
-    if (!text) return;
-
-    // Handle slash commands locally (e.g. /agent list, /watch @name)
-    if (text.startsWith('/')) {
-      const result = await executeCommand(opts.serverUrl, text, agentId);
-      if (result) {
-        const reply = result.lines.join('\n');
-        if (reply) {
-          await bot.reply(msg, reply);
+      // Handle image messages: fetch the image and forward as attachment
+      if (msg.type === 'image') {
+        const attachment = await fetchWeixinImage(msg);
+        if (attachment) {
+          const mentions = getAutoMentions(members, agentId, '') ?? lastMentions;
+          if (mentions) lastMentions = mentions;
+          client.chat(msg.text?.trim() || '', mentions, [attachment]);
         }
         return;
       }
-      // Unknown command — fall through and send as chat
-    }
 
-    // Auto-mention: when workspace has exactly 1 agent and 1 human,
-    // automatically mention that agent so the user doesn't need to type @name.
-    // Falls back to last mentioned targets if no explicit @ and no auto-mention.
-    const mentions = getAutoMentions(members, agentId, text)
-      ?? (!text.includes('@') ? lastMentions : undefined);
-    client.chat(text, mentions);
+      const text = msg.text?.trim();
+      if (!text) return;
+
+      // Handle slash commands locally (e.g. /agent list, /watch @name)
+      if (text.startsWith('/')) {
+        const result = await executeCommand(opts.serverUrl, text, agentId);
+        if (result) {
+          const reply = result.lines.join('\n');
+          if (reply) {
+            await bot.reply(msg, reply);
+          }
+          return;
+        }
+        // Unknown command — fall through and send as chat
+      }
+
+      // Auto-mention: when workspace has exactly 1 agent and 1 human,
+      // automatically mention that agent so the user doesn't need to type @name.
+      // Falls back to last mentioned targets if no explicit @ and no auto-mention.
+      const mentions = getAutoMentions(members, agentId, text)
+        ?? (!text.includes('@') ? lastMentions : undefined);
+      client.chat(text, mentions);
+    } catch (err) {
+      console.error(`Error handling WeChat message: ${err instanceof Error ? err.message : err}`);
+    }
   });
 
   // --- 5. Skynet → WeChat ---
   client.on('message', async (msg: SkynetMessage) => {
-    // Track mentions from our own echoed messages for "last mention" default
-    if (msg.from === agentId && msg.type === MessageType.CHAT && msg.mentions && msg.mentions.length > 0) {
-      const filtered = msg.mentions.filter((id) => id !== MENTION_ALL);
-      if (filtered.length > 0) {
-        lastMentions = filtered;
-      }
-    }
-    // Skip own messages to avoid echo
-    if (msg.from === agentId) return;
-    // Skip execution logs
-    if (msg.type === MessageType.EXECUTION_LOG) return;
-    // Can't send if we don't know the WeChat user yet
-    if (!weixinUserId) return;
-
-    const resolve = createAgentResolver(members);
-    const compact = isOneOnOne(members);
-    const formatted = formatForWeixin(msg, resolve, { compact });
-    if (!formatted) return;
-
     try {
+      // Track mentions from our own echoed messages for "last mention" default
+      if (msg.from === agentId && msg.type === MessageType.CHAT && msg.mentions && msg.mentions.length > 0) {
+        const filtered = msg.mentions.filter((id) => id !== MENTION_ALL);
+        if (filtered.length > 0) {
+          lastMentions = filtered;
+        }
+      }
+      // Skip own messages to avoid echo
+      if (msg.from === agentId) return;
+      // Skip execution logs
+      if (msg.type === MessageType.EXECUTION_LOG) return;
+      // Can't send if we don't know the WeChat user yet
+      if (!weixinUserId) return;
+
+      const resolve = createAgentResolver(members);
+      const compact = isOneOnOne(members);
+      const formatted = formatForWeixin(msg, resolve, { compact });
+      if (!formatted) return;
+
       const chunks = chunkMessage(formatted);
       for (const chunk of chunks) {
         await bot.send(weixinUserId, chunk);
@@ -188,7 +192,10 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
   });
 
   // --- 8. Start polling and handle shutdown ---
+  let shuttingDown = false;
   const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log('\nShutting down...');
     bot.stop();
     client.close().catch(() => {});
@@ -198,8 +205,28 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // Start the WeChat long-polling loop (blocks until bot.stop() is called)
-  await bot.run();
+  // Prevent unhandled rejections from crashing the process
+  process.on('unhandledRejection', (reason) => {
+    console.error(`Unhandled rejection: ${reason instanceof Error ? reason.message : reason}`);
+  });
+
+  // Start the WeChat long-polling loop with automatic restart on failure
+  const MAX_RESTART_DELAY_MS = 30_000;
+  let restartDelay = 1_000;
+
+  while (!shuttingDown) {
+    try {
+      await bot.run();
+      // bot.run() returned normally (e.g. bot.stop() was called) — exit the loop
+      break;
+    } catch (err) {
+      if (shuttingDown) break;
+      console.error(`WeChat polling error: ${err instanceof Error ? err.message : err}`);
+      console.error(`Restarting WeChat polling in ${restartDelay / 1000}s...`);
+      await new Promise((r) => setTimeout(r, restartDelay));
+      restartDelay = Math.min(restartDelay * 2, MAX_RESTART_DELAY_MS);
+    }
+  }
 }
 
 /**
