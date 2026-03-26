@@ -26,6 +26,21 @@ export interface ChatWeixinOptions {
  * bidirectionally between WeChat and the workspace.
  */
 export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
+  // Polyfill AbortSignal.any() for Node < 22 (used by @pinixai/weixin-bot)
+  if (typeof AbortSignal.any !== 'function') {
+    AbortSignal.any = (signals: AbortSignal[]): AbortSignal => {
+      const controller = new AbortController();
+      for (const signal of signals) {
+        if (signal.aborted) {
+          controller.abort(signal.reason);
+          return controller.signal;
+        }
+        signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+      }
+      return controller.signal;
+    };
+  }
+
   const { WeixinBot } = await import('@pinixai/weixin-bot');
 
   const agentId = opts.id ?? `human-weixin-${Date.now()}`;
