@@ -11,17 +11,20 @@ function getPidsDir(workspaceId: string): string {
 }
 
 /**
- * Returns the PID file path for a workspace server or agent process.
+ * Returns the PID file path for a workspace server, agent, or chat process.
  */
-export function getPidFilePath(workspaceId: string, type: 'server' | 'agent', agentId?: string): string {
+export function getPidFilePath(workspaceId: string, type: 'server' | 'agent' | 'chat', entityId?: string): string {
   const dir = getPidsDir(workspaceId);
   if (type === 'server') {
     return join(dir, 'server.pid');
   }
-  if (!agentId) {
-    throw new Error('agentId is required for agent PID files');
+  if (!entityId) {
+    throw new Error(`entityId is required for ${type} PID files`);
   }
-  return join(dir, `agent-${agentId}.pid`);
+  if (type === 'chat') {
+    return join(dir, `chat-${entityId}.pid`);
+  }
+  return join(dir, `agent-${entityId}.pid`);
 }
 
 /**
