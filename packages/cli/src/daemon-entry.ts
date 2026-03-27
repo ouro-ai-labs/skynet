@@ -4,6 +4,7 @@
  * Usage:
  *   node daemon-entry.js workspace --workspace-id <id>
  *   node daemon-entry.js agent --workspace-id <id> --agent-id <id> --server-url <url>
+ *   node daemon-entry.js chat --workspace-id <id> --human-id <id> --human-name <name> --server-url <url>
  */
 import { join } from 'node:path';
 import { createWriteStream, mkdirSync } from 'node:fs';
@@ -18,6 +19,8 @@ const { positionals, values } = parseArgs({
     'workspace-id': { type: 'string' },
     'agent-id': { type: 'string' },
     'server-url': { type: 'string' },
+    'human-id': { type: 'string' },
+    'human-name': { type: 'string' },
   },
 });
 
@@ -25,23 +28,29 @@ const mode = positionals[0];
 const workspaceId = values['workspace-id'];
 
 if (!mode || !workspaceId) {
-  process.stderr.write('Usage: daemon-entry.js <workspace|agent> --workspace-id <id> [--agent-id <id> --server-url <url>]\n');
+  process.stderr.write('Usage: daemon-entry.js <workspace|agent|chat> --workspace-id <id> [...]\n');
   process.exit(1);
 }
 
 const wsDir = getWorkspaceDir(workspaceId);
 
 // Determine PID file and log file
-const pidFile = mode === 'workspace'
-  ? getPidFilePath(workspaceId, 'server')
-  : getPidFilePath(workspaceId, 'agent', values['agent-id']);
+let pidFile: string;
+let logFileName: string;
+
+if (mode === 'workspace') {
+  pidFile = getPidFilePath(workspaceId, 'server');
+  logFileName = 'server.log';
+} else if (mode === 'chat') {
+  pidFile = getPidFilePath(workspaceId, 'chat', values['human-id']);
+  logFileName = `chat-${values['human-id']}.log`;
+} else {
+  pidFile = getPidFilePath(workspaceId, 'agent', values['agent-id']);
+  logFileName = `${values['agent-id']}.log`;
+}
 
 const logDir = join(wsDir, 'logs');
 mkdirSync(logDir, { recursive: true });
-
-const logFileName = mode === 'workspace'
-  ? 'server.log'
-  : `${values['agent-id']}.log`;
 const logFile = join(logDir, logFileName);
 
 // Redirect stdout/stderr to log file
@@ -159,6 +168,27 @@ async function runAgent(): Promise<void> {
   await new Promise(() => {});
 }
 
+async function runChat(): Promise<void> {
+  const humanId = values['human-id'];
+  const humanName = values['human-name'];
+  const serverUrl = values['server-url'];
+
+  if (!humanId || !humanName || !serverUrl) {
+    console.error('--human-id, --human-name, and --server-url are required for chat mode');
+    process.exit(1);
+  }
+
+  const { runChatWeixin } = await import('@skynet-ai/chat');
+
+  process.on('SIGTERM', () => {
+    console.log('Daemon received SIGTERM, shutting down chat bridge...');
+    process.exit(0);
+  });
+
+  console.log(`[daemon] WeChat bridge starting for "${humanName}" (pid: ${process.pid})`);
+  await runChatWeixin({ serverUrl, name: humanName, id: humanId });
+}
+
 // Run the appropriate mode
 if (mode === 'workspace') {
   runWorkspace().catch((err) => {
@@ -168,6 +198,11 @@ if (mode === 'workspace') {
 } else if (mode === 'agent') {
   runAgent().catch((err) => {
     console.error('Agent daemon error:', err);
+    process.exit(1);
+  });
+} else if (mode === 'chat') {
+  runChat().catch((err) => {
+    console.error('Chat daemon error:', err);
     process.exit(1);
   });
 } else {

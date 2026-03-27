@@ -342,8 +342,11 @@ skynet chat --workspace <name-or-id> --name alice
 # Non-interactive pipe mode (read from stdin, write to stdout)
 skynet chat --workspace <name-or-id> --pipe --name alice
 
-# WeChat bridge mode
+# WeChat bridge mode (daemon by default)
 skynet chat --workspace <name-or-id> --weixin --name alice
+
+# WeChat bridge in foreground
+skynet chat --workspace <name-or-id> --weixin --name alice -f
 ```
 
 | Flag | Description |
@@ -352,8 +355,53 @@ skynet chat --workspace <name-or-id> --weixin --name alice
 | `--name <name>` | Human name (skip selection prompt) |
 | `--pipe` | Non-interactive pipe mode: read from stdin, write to stdout |
 | `--weixin` | WeChat bridge mode: forward messages between WeChat and the workspace |
+| `-f, --foreground` | Run WeChat bridge in foreground instead of daemon mode |
 
 When multiple humans are registered and `--name` is not provided, an interactive selection prompt is shown. In `--pipe` and `--weixin` modes, `--name` is required when multiple humans exist (there is no interactive prompt to fall back on).
+
+The `--weixin` mode runs as a background daemon by default (like agents). Use `-f` to run in the foreground. The daemon writes logs to `~/.skynet/<ws-id>/logs/chat-<human-id>.log`.
+
+### `skynet chat stop`
+
+Stop a WeChat bridge daemon.
+
+```bash
+skynet chat stop --workspace <name-or-id> --name alice
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+| `--name <name>` | Human name |
+
+### `skynet chat status`
+
+Show whether the WeChat bridge daemon is running and its PID.
+
+```bash
+skynet chat status --workspace <name-or-id> --name alice
+```
+
+| Flag | Description |
+|------|-------------|
+| `--workspace <name-or-id>` | Workspace name or UUID |
+| `--name <name>` | Human name |
+
+### `skynet chat logs`
+
+Tail the WeChat bridge log file.
+
+```bash
+skynet chat logs --workspace <name-or-id> --name alice
+skynet chat logs --workspace <name-or-id> --name alice -n 100
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--workspace <name-or-id>` | Workspace name or UUID | |
+| `--name <name>` | Human name | |
+| `-n, --lines <count>` | Number of lines to show | `50` |
+| `-f, --follow` | Follow log output (use `--no-follow` to disable) | `true` |
 
 ---
 
@@ -539,10 +587,12 @@ skynet workspace stop my-project
 │   ├── data.db                   # SQLite message store
 │   ├── logs/
 │   │   ├── server.log            # Workspace server logs
-│   │   └── <agent-uuid>.log      # Agent logs
+│   │   ├── <agent-uuid>.log      # Agent logs
+│   │   └── chat-<human-uuid>.log # WeChat bridge logs
 │   ├── pids/
 │   │   ├── server.pid            # Workspace daemon PID
-│   │   └── agent-<agent-uuid>.pid  # Agent daemon PID
+│   │   ├── agent-<agent-uuid>.pid  # Agent daemon PID
+│   │   └── chat-<human-uuid>.pid   # WeChat bridge daemon PID
 │   └── <agent-uuid>/
 │       ├── profile.md            # Agent profile
 │       ├── agent.json            # Local config (custom workdir, etc.)

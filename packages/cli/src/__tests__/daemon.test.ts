@@ -48,8 +48,19 @@ describe('daemon module', () => {
       expect(pidPath).toBe(join(tempDir, wsId, 'pids', `agent-${agentId}.pid`));
     });
 
-    it('throws when agent type used without agentId', () => {
-      expect(() => getPidFilePath('ws-id', 'agent')).toThrow('agentId is required');
+    it('returns chat PID file path', () => {
+      const wsId = 'test-ws-id';
+      const humanId = 'human-123';
+      const pidPath = getPidFilePath(wsId, 'chat', humanId);
+      expect(pidPath).toBe(join(tempDir, wsId, 'pids', `chat-${humanId}.pid`));
+    });
+
+    it('throws when agent type used without entityId', () => {
+      expect(() => getPidFilePath('ws-id', 'agent')).toThrow('entityId is required');
+    });
+
+    it('throws when chat type used without entityId', () => {
+      expect(() => getPidFilePath('ws-id', 'chat')).toThrow('entityId is required');
     });
   });
 
