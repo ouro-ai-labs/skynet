@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentType, MessageType, MENTION_ALL, type Attachment, type SkynetMessage } from '@skynet-ai/protocol';
+import { createRequire } from 'node:module';
+
+// Check if @pinixai/weixin-bot is installed (it's an optional dep, unavailable on Node < 22)
+const require_ = createRequire(import.meta.url);
+let weixinBotAvailable = false;
+try {
+  require_.resolve('@pinixai/weixin-bot');
+  weixinBotAvailable = true;
+} catch {}
 
 // --- Mock SkynetClient ---
 const { clientInstances } = vi.hoisted(() => {
@@ -108,7 +117,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('AbortSignal.any polyfill', () => {
+describe.runIf(weixinBotAvailable)('AbortSignal.any polyfill', () => {
   it('installs polyfill when AbortSignal.any is missing', async () => {
     const original = AbortSignal.any;
     // Simulate Node < 22 by removing AbortSignal.any
@@ -149,7 +158,7 @@ describe('AbortSignal.any polyfill', () => {
   });
 });
 
-describe('runChatWeixin', () => {
+describe.runIf(weixinBotAvailable)('runChatWeixin', () => {
   it('forwards WeChat messages to Skynet workspace', async () => {
     const { runChatWeixin } = await import('../weixin.js');
     await runChatWeixin({ serverUrl: 'http://localhost:3000', name: 'tester', id: 'human-1' });
