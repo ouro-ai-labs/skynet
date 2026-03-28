@@ -54,6 +54,40 @@ vi.mock('@skynet-ai/sdk', () => {
     }
     updateTask() {}
     reportTaskResult() {}
+
+    // Schedule mocks
+    schedulesStore: Array<Record<string, unknown>> = [];
+    createScheduleCalls: Array<Record<string, unknown>> = [];
+    deleteScheduleCalls: string[] = [];
+    listSchedulesCalls = 0;
+
+    async createSchedule(payload: Record<string, unknown>) {
+      this.createScheduleCalls.push(payload);
+      const schedule = {
+        id: `sched-${Math.random().toString(36).slice(2)}`,
+        name: payload.name,
+        cronExpr: payload.cronExpr,
+        agentId: payload.agentId,
+        taskTemplate: payload.taskTemplate,
+        enabled: true,
+        createdBy: payload.createdBy,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      this.schedulesStore.push(schedule);
+      return schedule;
+    }
+
+    async deleteSchedule(id: string) {
+      this.deleteScheduleCalls.push(id);
+      this.schedulesStore = this.schedulesStore.filter((s) => s.id !== id);
+      return { deleted: true };
+    }
+
+    async listSchedules() {
+      this.listSchedulesCalls++;
+      return this.schedulesStore;
+    }
   }
 
   return { SkynetClient: MockSkynetClient };
@@ -168,6 +202,10 @@ interface MockClient {
   emit(event: string, ...args: unknown[]): boolean;
   chatCalls: Array<{ text: string; mentions?: string[] }>;
   executionLogCalls: Array<{ event: string; summary: string; options?: Record<string, unknown> }>;
+  schedulesStore: Array<Record<string, unknown>>;
+  createScheduleCalls: Array<Record<string, unknown>>;
+  deleteScheduleCalls: string[];
+  listSchedulesCalls: number;
 }
 
 function getClient(runner: AgentRunner): MockClient {
@@ -2043,5 +2081,150 @@ describe('Agent role awareness', () => {
     expect(adapter.persona).toBe(personaBefore);
 
     await runner.stop();
+  });
+});
+
+describe('AgentRunner schedule command feedback', () => {
+  let adapter: FakeAdapter;
+  let runner: AgentRunner;
+
+  beforeEach(async () => {
+    adapter = new FakeAdapter();
+    runner = new AgentRunner({
+      serverUrl: 'ws://localhost:0',
+      adapter,
+      agentId: 'me',
+      agentName: 'me',
+      debounceMs: 0,
+    });
+    await runner.start();
+    registerMember(runner, 'backend-1', 'backend', AgentType.CLAUDE_CODE, 'backend engineer');
+  });
+
+  afterEach(async () => {
+    await runner.stop();
+  });
+
+  it('schedule-list feeds results back via quickReply', async () => {
+    const client = getClient(runner);
+    client.schedulesStore.push({
+      id: 'sched-abc',
+      name: 'daily-review',
+      cronExpr: '0 9 * * *',
+      agentId: 'backend-1',
+      taskTemplate: { title: 'Review PRs', description: 'Check open PRs' },
+      enabled: true,
+      createdBy: 'human-1',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    adapter.handleResponse = 'Let me check. <schedule-list />';
+    adapter.quickReplyResponse = 'Here are the schedules: daily-review runs at 9am.';
+
+    const msg = makeChatMsg({ mentions: [runner.agentId], text: 'What schedules do we have?' });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 100));
+
+    // quickReply should have been called with the schedule list
+    expect(adapter.quickReplyCalls.length).toBe(1);
+    expect(adapter.quickReplyCalls[0]).toContain('[System] Schedules (1)');
+    expect(adapter.quickReplyCalls[0]).toContain('sched-abc');
+    expect(adapter.quickReplyCalls[0]).toContain('@backend');
+
+    // Chat output should include both the original text and the quickReply follow-up
+    const lastChat = client.chatCalls[client.chatCalls.length - 1];
+    expect(lastChat.text).toContain('Let me check.');
+    expect(lastChat.text).toContain('Here are the schedules');
+    expect(lastChat.text).not.toContain('<schedule-list');
+  });
+
+  it('schedule-list with no schedules feeds empty result via quickReply', async () => {
+    const client = getClient(runner);
+    adapter.handleResponse = 'Checking... <schedule-list />';
+    adapter.quickReplyResponse = 'No scheduled tasks found.';
+
+    const msg = makeChatMsg({ mentions: [runner.agentId], text: 'list schedules' });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(adapter.quickReplyCalls.length).toBe(1);
+    expect(adapter.quickReplyCalls[0]).toContain('[System] No schedules found.');
+  });
+
+  it('schedule-create feeds created ID back via quickReply', async () => {
+    const client = getClient(runner);
+    adapter.handleResponse = 'Done! <schedule-create name="ci-check" cron="*/30 * * * *" agent="@backend" title="CI Check" description="Check CI status" />';
+    adapter.quickReplyResponse = 'Scheduled ci-check to run every 30 minutes.';
+
+    const msg = makeChatMsg({ mentions: [runner.agentId], text: 'check CI every 30 min' });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(adapter.quickReplyCalls.length).toBe(1);
+    expect(adapter.quickReplyCalls[0]).toContain('[System] Schedule created:');
+    expect(adapter.quickReplyCalls[0]).toContain('name="ci-check"');
+    expect(adapter.quickReplyCalls[0]).toMatch(/id="sched-[a-z0-9]+"/);
+  });
+
+  it('schedule-delete feeds confirmation back via quickReply', async () => {
+    const client = getClient(runner);
+    client.schedulesStore.push({ id: 'sched-xyz' });
+    adapter.handleResponse = 'Deleting. <schedule-delete id="sched-xyz" />';
+    adapter.quickReplyResponse = 'Schedule deleted successfully.';
+
+    const msg = makeChatMsg({ mentions: [runner.agentId], text: 'delete that schedule' });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(adapter.quickReplyCalls.length).toBe(1);
+    expect(adapter.quickReplyCalls[0]).toContain('[System] Schedule deleted: id="sched-xyz"');
+    expect(client.deleteScheduleCalls).toContain('sched-xyz');
+  });
+
+  it('schedule command error is fed back via quickReply', async () => {
+    const client = getClient(runner);
+    (client as unknown as { createSchedule: () => Promise<never> }).createSchedule = async () => {
+      throw new Error('server error');
+    };
+
+    adapter.handleResponse = 'Setting up... <schedule-create name="fail" cron="0 9 * * *" agent="@backend" title="Fail" description="fail" />';
+    adapter.quickReplyResponse = 'Sorry, failed to create the schedule.';
+
+    const msg = makeChatMsg({ mentions: [runner.agentId], text: 'schedule something' });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(adapter.quickReplyCalls.length).toBe(1);
+    expect(adapter.quickReplyCalls[0]).toContain('[System] Schedule create failed: server error');
+  });
+
+  it('falls back to pendingNotices when quickReply fails', async () => {
+    const client = getClient(runner);
+    client.schedulesStore.push({
+      id: 'sched-123',
+      name: 'nightly',
+      cronExpr: '0 0 * * *',
+      agentId: 'me',
+      taskTemplate: { title: 'Nightly build', description: 'Run build' },
+      enabled: true,
+      createdBy: 'human-1',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    adapter.handleResponse = 'Let me check. <schedule-list />';
+    // Make quickReply throw to trigger fallback
+    adapter.quickReply = async () => { throw new Error('quickReply unavailable'); };
+
+    const msg = makeChatMsg({ mentions: [runner.agentId], text: 'list schedules' });
+    client.emit('chat', msg);
+    await new Promise(r => setTimeout(r, 100));
+
+    // Should fall back to pendingNotices
+    const notices = (runner as unknown as { pendingNotices: string[] }).pendingNotices;
+    expect(notices.length).toBe(1);
+    expect(notices[0]).toContain('[System] Schedules (1)');
+    expect(notices[0]).toContain('sched-123');
   });
 });

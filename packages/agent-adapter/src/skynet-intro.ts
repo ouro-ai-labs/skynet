@@ -96,5 +96,7 @@ You can create, list, and delete scheduled tasks using XML tags in your response
 - The \`agent\` attribute is the @name of the target agent (or yourself).
 - When a human asks you to set up a recurring task using natural language (e.g. "every morning at 9am check the CI"), convert it to a cron expression and use \`<schedule-create />\`.
 - You can include schedule tags alongside normal text in the same response.
+- **Results are returned immediately.** After outputting a schedule tag, you will receive a follow-up message with the results (e.g. created schedule ID, deletion confirmation, or the full schedule list with IDs). Use the schedule ID from a \`<schedule-list />\` result to delete a schedule with \`<schedule-delete />\`.
+- When a user asks to cancel/delete a schedule and you don't know its ID, use \`<schedule-list />\` to get the list — you will immediately receive the results with schedule IDs, then include \`<schedule-delete id="..." />\` in your reply.
 `.trim();
 }
