@@ -198,8 +198,17 @@ export class SkynetWorkspace {
       if (this.members.getMember(agent.id)) {
         return reply.status(409).send({ error: 'Agent is currently connected. Disconnect it first.' });
       }
+      // Clean up schedules associated with this agent
+      const orphanedSchedules = this.scheduler.list(agent.id);
+      for (const sched of orphanedSchedules) {
+        this.scheduler.delete(sched.id);
+      }
+
       this.store.deleteAgent(agent.id);
-      return reply.status(200).send({ deleted: agent });
+      return reply.status(200).send({
+        deleted: agent,
+        deletedSchedules: orphanedSchedules.length,
+      });
     });
   }
 

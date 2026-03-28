@@ -241,6 +241,15 @@ describe('buildSkynetIntro', () => {
     expect(intro).toContain('Messaging Rules');
     expect(intro).toContain('<no-reply />');
   });
+
+  it('includes XML schedule instructions and warns against built-in tools', () => {
+    const intro = buildSkynetIntro('jarvis');
+    expect(intro).toContain('<schedule-list />');
+    expect(intro).toContain('<schedule-create');
+    expect(intro).toContain('<schedule-delete');
+    expect(intro).toContain('Do NOT use');
+    expect(intro).toContain('CronList');
+  });
 });
 
 describe('AgentRunner system prompt identity', () => {

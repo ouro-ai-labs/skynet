@@ -74,29 +74,17 @@ Use \`<no-reply />\` when:
 
 ## Scheduling (Cron)
 
-You can create, list, and delete scheduled tasks using XML tags in your response. The system will parse these tags and execute the corresponding actions.
+Manage scheduled tasks with these XML tags in your response. Do NOT use built-in tools like \`CronList\`, \`CronCreate\`, \`CronDelete\`, or \`RemoteTrigger\` — those are session-scoped and will be lost on reset. Skynet schedules are server-side and persistent.
 
-### Create a schedule
 \`\`\`
-<schedule-create name="daily-review" cron="0 9 * * *" agent="@backend" title="Daily PR review" description="Review all open PRs from yesterday and summarize findings." />
-\`\`\`
-
-### Delete a schedule
-\`\`\`
+<schedule-list />
+<schedule-create name="daily-review" cron="0 9 * * *" agent="@backend" title="Daily PR review" description="Review all open PRs and summarize findings." />
 <schedule-delete id="schedule-uuid-here" />
 \`\`\`
 
-### List schedules
-\`\`\`
-<schedule-list />
-\`\`\`
-
-**Rules:**
-- Use standard cron expressions (5 fields: minute hour day-of-month month day-of-week).
-- The \`agent\` attribute is the @name of the target agent (or yourself).
-- When a human asks you to set up a recurring task using natural language (e.g. "every morning at 9am check the CI"), convert it to a cron expression and use \`<schedule-create />\`.
-- You can include schedule tags alongside normal text in the same response.
-- **Results are returned immediately.** After outputting a schedule tag, you will receive a follow-up message with the results (e.g. created schedule ID, deletion confirmation, or the full schedule list with IDs). Use the schedule ID from a \`<schedule-list />\` result to delete a schedule with \`<schedule-delete />\`.
-- When a user asks to cancel/delete a schedule and you don't know its ID, use \`<schedule-list />\` to get the list — you will immediately receive the results with schedule IDs, then include \`<schedule-delete id="..." />\` in your reply.
+- Cron uses 5 fields: minute hour day-of-month month day-of-week.
+- \`agent\` is the @name of the target agent (or yourself).
+- Tags can appear alongside normal text in the same response.
+- Results are returned immediately as a follow-up message. To delete a schedule whose ID you don't know, first use \`<schedule-list />\`, then use the returned ID in \`<schedule-delete />\`.
 `.trim();
 }
