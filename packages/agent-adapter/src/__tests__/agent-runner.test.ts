@@ -242,28 +242,13 @@ describe('buildSkynetIntro', () => {
     expect(intro).toContain('<no-reply />');
   });
 
-  it('claude-code agents get built-in scheduling tool instructions', () => {
-    const intro = buildSkynetIntro('jarvis', AgentType.CLAUDE_CODE);
-    expect(intro).toContain('CronCreate');
-    expect(intro).toContain('CronList');
-    expect(intro).toContain('CronDelete');
-    // Should not contain the XML tag usage examples (cron="..." agent="..." etc.)
-    expect(intro).not.toContain('cron="0 9 * * *"');
-    expect(intro).not.toContain('<schedule-list />\n```');
-  });
-
-  it('non-claude-code agents get XML tag scheduling instructions', () => {
-    const intro = buildSkynetIntro('gemini-bot', AgentType.GEMINI_CLI);
+  it('includes XML schedule instructions and warns against built-in tools', () => {
+    const intro = buildSkynetIntro('jarvis');
+    expect(intro).toContain('<schedule-list />');
     expect(intro).toContain('<schedule-create');
-    expect(intro).toContain('<schedule-list');
     expect(intro).toContain('<schedule-delete');
-    expect(intro).not.toContain('CronCreate');
-  });
-
-  it('defaults to XML tag instructions when agent type is omitted', () => {
-    const intro = buildSkynetIntro('generic-bot');
-    expect(intro).toContain('<schedule-list');
-    expect(intro).not.toContain('CronCreate');
+    expect(intro).toContain('Do NOT use');
+    expect(intro).toContain('CronList');
   });
 });
 
