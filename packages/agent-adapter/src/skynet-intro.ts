@@ -28,7 +28,40 @@ export function buildMemberRoster(selfName: string, members: RosterMember[]): st
  * Build the Skynet intro text injected into every agent's system prompt.
  * Teaches agents their identity and the messaging rules of the collaboration network.
  */
-export function buildSkynetIntro(agentName: string): string {
+export function buildSkynetIntro(agentName: string, agentType?: AgentType): string {
+  const isClaudeCode = agentType === AgentType.CLAUDE_CODE;
+
+  const schedulingSection = isClaudeCode
+    ? `## Scheduling (Cron)
+
+When a human asks you to create, list, or delete scheduled/recurring tasks, use your built-in scheduling tools: \`CronCreate\`, \`CronList\`, \`CronDelete\`.`
+    : `## Scheduling (Cron)
+
+You can create, list, and delete scheduled tasks using XML tags in your response. The system will parse these tags and execute the corresponding actions.
+
+### List schedules (always try this first)
+\`\`\`
+<schedule-list />
+\`\`\`
+
+### Create a schedule
+\`\`\`
+<schedule-create name="daily-review" cron="0 9 * * *" agent="@backend" title="Daily PR review" description="Review all open PRs from yesterday and summarize findings." />
+\`\`\`
+
+### Delete a schedule
+\`\`\`
+<schedule-delete id="schedule-uuid-here" />
+\`\`\`
+
+**Rules:**
+- Use standard cron expressions (5 fields: minute hour day-of-month month day-of-week).
+- The \`agent\` attribute is the @name of the target agent (or yourself).
+- When a human asks you to set up a recurring task using natural language (e.g. "every morning at 9am check the CI"), convert it to a cron expression and use \`<schedule-create />\`.
+- You can include schedule tags alongside normal text in the same response.
+- **Results are returned immediately.** After outputting a schedule tag, you will receive a follow-up message with the results (e.g. created schedule ID, deletion confirmation, or the full schedule list with IDs). Use the schedule ID from a \`<schedule-list />\` result to delete a schedule with \`<schedule-delete />\`.
+- When a user asks to cancel/delete a schedule and you don't know its ID, use \`<schedule-list />\` to get the list — you will immediately receive the results with schedule IDs, then include \`<schedule-delete id="..." />\` in your reply.`;
+
   return `
 # Skynet Collaboration Network
 
@@ -72,31 +105,6 @@ Use \`<no-reply />\` when:
 - Nothing to add: \`<no-reply />\`
 - Bob asked you a question and mentioned casey for context — but casey doesn't need to respond: reply with \`@bob Here is the answer.\` (do NOT mention casey unnecessarily)
 
-## Scheduling (Cron)
-
-You can create, list, and delete scheduled tasks using XML tags in your response. The system will parse these tags and execute the corresponding actions.
-
-### Create a schedule
-\`\`\`
-<schedule-create name="daily-review" cron="0 9 * * *" agent="@backend" title="Daily PR review" description="Review all open PRs from yesterday and summarize findings." />
-\`\`\`
-
-### Delete a schedule
-\`\`\`
-<schedule-delete id="schedule-uuid-here" />
-\`\`\`
-
-### List schedules
-\`\`\`
-<schedule-list />
-\`\`\`
-
-**Rules:**
-- Use standard cron expressions (5 fields: minute hour day-of-month month day-of-week).
-- The \`agent\` attribute is the @name of the target agent (or yourself).
-- When a human asks you to set up a recurring task using natural language (e.g. "every morning at 9am check the CI"), convert it to a cron expression and use \`<schedule-create />\`.
-- You can include schedule tags alongside normal text in the same response.
-- **Results are returned immediately.** After outputting a schedule tag, you will receive a follow-up message with the results (e.g. created schedule ID, deletion confirmation, or the full schedule list with IDs). Use the schedule ID from a \`<schedule-list />\` result to delete a schedule with \`<schedule-delete />\`.
-- When a user asks to cancel/delete a schedule and you don't know its ID, use \`<schedule-list />\` to get the list — you will immediately receive the results with schedule IDs, then include \`<schedule-delete id="..." />\` in your reply.
+${schedulingSection}
 `.trim();
 }

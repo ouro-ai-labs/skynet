@@ -817,6 +817,53 @@ describe('Server HTTP API', () => {
     expect(getRes.status).toBe(404);
   });
 
+  it('deleting an agent also deletes its associated schedules', async () => {
+    const createRes = await fetch(`http://localhost:${API_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'sched-cleanup-agent', type: 'generic' }),
+    });
+    const agent = await createRes.json() as { id: string };
+
+    // Create two schedules for this agent
+    await fetch(`http://localhost:${API_PORT}/api/schedules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'sched-a',
+        cronExpr: '0 9 * * *',
+        agentId: agent.id,
+        taskTemplate: { title: 'A', description: 'Task A' },
+      }),
+    });
+    await fetch(`http://localhost:${API_PORT}/api/schedules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'sched-b',
+        cronExpr: '0 17 * * *',
+        agentId: agent.id,
+        taskTemplate: { title: 'B', description: 'Task B' },
+      }),
+    });
+
+    // Verify schedules exist
+    const listBefore = await fetch(`http://localhost:${API_PORT}/api/schedules?agentId=${agent.id}`);
+    const schedsBefore = await listBefore.json() as unknown[];
+    expect(schedsBefore).toHaveLength(2);
+
+    // Delete the agent
+    const deleteRes = await fetch(`http://localhost:${API_PORT}/api/agents/${agent.id}`, { method: 'DELETE' });
+    expect(deleteRes.status).toBe(200);
+    const body = await deleteRes.json() as { deletedSchedules: number };
+    expect(body.deletedSchedules).toBe(2);
+
+    // Verify schedules are gone
+    const listAfter = await fetch(`http://localhost:${API_PORT}/api/schedules?agentId=${agent.id}`);
+    const schedsAfter = await listAfter.json() as unknown[];
+    expect(schedsAfter).toHaveLength(0);
+  });
+
   it('returns 404 when deleting non-existent agent', async () => {
     const res = await fetch(`http://localhost:${API_PORT}/api/agents/nonexistent`, { method: 'DELETE' });
     expect(res.status).toBe(404);

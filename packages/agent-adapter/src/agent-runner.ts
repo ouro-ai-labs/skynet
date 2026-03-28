@@ -157,7 +157,7 @@ export class AgentRunner {
     const parts: string[] = [];
     if (options.role) parts.push(`You are a ${options.role}.`);
     if (options.persona) parts.push(options.persona);
-    parts.push(buildSkynetIntro(agentCard.name));
+    parts.push(buildSkynetIntro(agentCard.name, agentCard.type));
     this.basePersona = parts.join('\n\n');
     this.adapter.persona = this.basePersona;
 
