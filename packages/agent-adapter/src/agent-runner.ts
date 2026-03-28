@@ -707,30 +707,61 @@ export class AgentRunner {
   /**
    * Parse schedule commands from agent response, execute them via SDK,
    * and return the cleaned response text (without schedule tags).
+   * Results are fed back to the agent immediately via quickReply so it can
+   * act on them (e.g. relay a schedule list or use an ID to delete).
    */
   private async processResponse(response: string): Promise<string> {
     const commands = parseScheduleCommands(response);
     if (commands.length === 0) return response;
 
+    const feedbacks: string[] = [];
     for (const cmd of commands) {
       try {
-        await this.executeScheduleCommand(cmd);
+        const feedback = await this.executeScheduleCommand(cmd);
+        if (feedback) feedbacks.push(feedback);
       } catch (err) {
-        this.logger.error(`Schedule command failed: ${(err as Error).message}`);
+        const errMsg = (err as Error).message;
+        this.logger.error(`Schedule command failed: ${errMsg}`);
+        feedbacks.push(`[System] Schedule ${cmd.type} failed: ${errMsg}`);
       }
     }
 
-    return stripScheduleTags(response);
+    let cleaned = stripScheduleTags(response);
+
+    // Feed results back to the agent immediately via quickReply
+    if (feedbacks.length > 0) {
+      const feedbackText = feedbacks.join('\n');
+      try {
+        const followUp = await this.adapter.quickReply(feedbackText);
+        this.logger.info(`[result:schedule-feedback] ${followUp ? followUp.slice(0, 500) : '(empty)'}`);
+        if (followUp && !isNoReply(followUp)) {
+          // Recursively process in case follow-up contains more schedule tags
+          const processedFollowUp = await this.processResponse(followUp);
+          if (processedFollowUp) {
+            cleaned = cleaned ? `${cleaned}\n\n${processedFollowUp}` : processedFollowUp;
+          }
+        }
+      } catch (err) {
+        // quickReply failed — fall back to pendingNotices
+        this.logger.error('Schedule feedback quickReply failed, queuing as notice:', err);
+        this.pendingNotices.push(...feedbacks);
+      }
+    }
+
+    return cleaned;
   }
 
-  private async executeScheduleCommand(cmd: ScheduleCommand): Promise<void> {
+  /**
+   * Execute a single schedule command and return a feedback string for the agent.
+   */
+  private async executeScheduleCommand(cmd: ScheduleCommand): Promise<string | undefined> {
     switch (cmd.type) {
       case 'create': {
         // Resolve @name to agent ID
         const agentId = this.resolveAgentName(cmd.agent);
         if (!agentId) {
           this.logger.warn(`Schedule create: unknown agent '${cmd.agent}'`);
-          return;
+          return `[System] Schedule create failed: unknown agent '${cmd.agent}'`;
         }
         const schedule = await this.client.createSchedule({
           name: cmd.name,
@@ -740,19 +771,38 @@ export class AgentRunner {
           createdBy: this.client.agent.id,
         });
         this.logger.info(`Schedule created: ${schedule.name} (${schedule.id})`);
-        break;
+        return `[System] Schedule created: name="${schedule.name}", id="${schedule.id}", cron="${schedule.cronExpr}"`;
       }
       case 'delete': {
         await this.client.deleteSchedule(cmd.id);
         this.logger.info(`Schedule deleted: ${cmd.id}`);
-        break;
+        return `[System] Schedule deleted: id="${cmd.id}"`;
       }
       case 'list': {
         const schedules = await this.client.listSchedules();
         this.logger.info(`Schedules: ${JSON.stringify(schedules)}`);
-        break;
+        return this.formatScheduleList(schedules);
       }
     }
+  }
+
+  /** Format a schedule list into a readable system notice for the agent. */
+  private formatScheduleList(schedules: import('@skynet-ai/protocol').ScheduleInfo[]): string {
+    if (schedules.length === 0) {
+      return '[System] No schedules found.';
+    }
+    const lines = schedules.map((s) => {
+      const agentName = this.resolveAgentId(s.agentId) ?? s.agentId;
+      const status = s.enabled ? 'enabled' : 'disabled';
+      return `- id="${s.id}" name="${s.name}" cron="${s.cronExpr}" agent="@${agentName}" status=${status} title="${s.taskTemplate.title}"`;
+    });
+    return `[System] Schedules (${schedules.length}):\n${lines.join('\n')}`;
+  }
+
+  /** Resolve an agent ID back to its name. */
+  private resolveAgentId(agentId: string): string | undefined {
+    if (agentId === this.client.agent.id) return this.client.agent.name;
+    return this.memberInfo.get(agentId)?.name;
   }
 
   /** Resolve an agent name to its ID from the member info map. */
