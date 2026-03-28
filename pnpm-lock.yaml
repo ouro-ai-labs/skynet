@@ -48,9 +48,6 @@ importers:
 
   packages/chat:
     dependencies:
-      '@pinixai/weixin-bot':
-        specifier: ^1.2.0
-        version: 1.2.0
       '@skynet-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -88,6 +85,10 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.13)(tsx@4.21.0)
+    optionalDependencies:
+      '@pinixai/weixin-bot':
+        specifier: ^1.2.0
+        version: 1.2.0
 
   packages/cli:
     dependencies:
@@ -1949,7 +1950,8 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@pinixai/weixin-bot@1.2.0': {}
+  '@pinixai/weixin-bot@1.2.0':
+    optional: true
 
   '@pinojs/redact@0.4.0': {}
 

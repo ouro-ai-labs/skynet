@@ -41,7 +41,15 @@ export async function runChatWeixin(opts: ChatWeixinOptions): Promise<void> {
     };
   }
 
-  const { WeixinBot } = await import('@pinixai/weixin-bot');
+  let WeixinBot: typeof import('@pinixai/weixin-bot').WeixinBot;
+  try {
+    ({ WeixinBot } = await import('@pinixai/weixin-bot'));
+  } catch {
+    throw new Error(
+      'WeChat mode requires the "@pinixai/weixin-bot" package, which needs Node.js >= 22.\n' +
+      'Please upgrade Node.js to version 22 or later and run: npm install @pinixai/weixin-bot',
+    );
+  }
 
   const agentId = opts.id ?? `human-weixin-${Date.now()}`;
   const members = new Map<string, AgentCard>();

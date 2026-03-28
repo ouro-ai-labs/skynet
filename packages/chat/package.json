@@ -18,7 +18,7 @@
     "access": "public"
   },
   "scripts": {
-    "postinstall": "cd node_modules/@pinixai/weixin-bot && [ -d dist ] || npx tsc",
+    "postinstall": "node -e \"try{const r=require.resolve('@pinixai/weixin-bot/package.json');const p=require('path').dirname(r);if(!require('fs').existsSync(p+'/dist'))require('child_process').execSync('npx tsc',{cwd:p,stdio:'inherit'})}catch{}\"",
     "build": "tsc",
     "test": "vitest run",
     "clean": "rm -rf dist"
@@ -30,7 +30,9 @@
     "ink": "^6.8.0",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
-    "react": "^19.2.4",
+    "react": "^19.2.4"
+  },
+  "optionalDependencies": {
     "@pinixai/weixin-bot": "^1.2.0"
   },
   "devDependencies": {
