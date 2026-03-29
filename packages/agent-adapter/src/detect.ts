@@ -2,6 +2,7 @@ import { AgentType } from '@skynet-ai/protocol';
 import { ClaudeCodeAdapter } from './adapters/claude-code.js';
 import { GeminiCliAdapter } from './adapters/gemini-cli.js';
 import { CodexCliAdapter } from './adapters/codex-cli.js';
+import { OpenCodeAdapter } from './adapters/opencode.js';
 import type { AgentAdapter } from './base-adapter.js';
 
 export interface DetectedAgent {
@@ -10,7 +11,7 @@ export interface DetectedAgent {
   available: boolean;
 }
 
-const KNOWN_AGENTS = [AgentType.CLAUDE_CODE, AgentType.GEMINI_CLI, AgentType.CODEX_CLI] as const;
+const KNOWN_AGENTS = [AgentType.CLAUDE_CODE, AgentType.GEMINI_CLI, AgentType.CODEX_CLI, AgentType.OPENCODE] as const;
 
 export async function detectAvailableAgents(projectRoot: string): Promise<DetectedAgent[]> {
   const adapters = createAllAdapters(projectRoot);
@@ -34,6 +35,8 @@ export function createAdapter(type: AgentType, projectRoot: string): AgentAdapte
       return new GeminiCliAdapter({ projectRoot });
     case AgentType.CODEX_CLI:
       return new CodexCliAdapter({ projectRoot });
+    case AgentType.OPENCODE:
+      return new OpenCodeAdapter({ projectRoot });
     default:
       throw new Error(`No built-in adapter for type: ${type}. Use GenericAdapter instead.`);
   }

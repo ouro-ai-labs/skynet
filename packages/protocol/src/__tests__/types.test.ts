@@ -7,6 +7,7 @@ describe('AgentType enum', () => {
     expect(AgentType.CLAUDE_CODE).toBe('claude-code');
     expect(AgentType.GEMINI_CLI).toBe('gemini-cli');
     expect(AgentType.CODEX_CLI).toBe('codex-cli');
+    expect(AgentType.OPENCODE).toBe('opencode');
     expect(AgentType.HUMAN).toBe('human');
     expect(AgentType.MONITOR).toBe('monitor');
     expect(AgentType.GENERIC).toBe('generic');
