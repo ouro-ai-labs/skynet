@@ -245,31 +245,45 @@ export class OpenCodeAdapter extends AgentAdapter {
   }
 
   /**
-   * Parse the output from `opencode run --format json`.
-   * The JSON output contains a `content` field with the assistant's response.
-   * Falls back to raw stdout if JSON parsing fails.
+   * Parse the JSONL output from `opencode run --format json`.
+   *
+   * The output is newline-delimited JSON events:
+   *   {"type":"step_start", ...}
+   *   {"type":"text", "part": {"type":"text", "text":"response content"}, ...}
+   *   {"type":"tool_call", "part": {"type":"tool-call", "name":"...", ...}, ...}
+   *   {"type":"tool_result", "part": {"type":"tool-result", ...}, ...}
+   *   {"type":"step_finish", ...}
+   *
+   * We extract `part.text` from all "text" events and concatenate them.
+   * We also emit execution log events for tool calls.
    */
   private parseOutput(stdout: string): string {
     if (!stdout.trim()) return '';
 
-    try {
-      const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    const textParts: string[] = [];
+    const lines = stdout.split('\n');
 
-      // opencode JSON format: { content: string, ... } or { result: string, ... }
-      if (typeof parsed.content === 'string') return parsed.content;
-      if (typeof parsed.result === 'string') return parsed.result;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line) as Record<string, unknown>;
+        const part = event.part as Record<string, unknown> | undefined;
 
-      // Try to extract text from a messages array
-      if (Array.isArray(parsed.messages)) {
-        const last = parsed.messages[parsed.messages.length - 1] as Record<string, unknown> | undefined;
-        if (last && typeof last.content === 'string') return last.content;
+        if (event.type === 'text' && part) {
+          const text = part.text as string | undefined;
+          if (text) textParts.push(text);
+        } else if (event.type === 'tool_call' && part && this.onExecutionLog) {
+          const toolName = (part.name as string) ?? 'unknown';
+          this.onExecutionLog('tool.call', toolName);
+        } else if (event.type === 'tool_result' && part && this.onExecutionLog) {
+          this.onExecutionLog('tool.result', 'completed');
+        }
+      } catch {
+        // Not valid JSON — accumulate as raw text
+        textParts.push(line);
       }
-
-      // Fallback: stringify the whole thing
-      return stdout.trim();
-    } catch {
-      // Not JSON — return raw text
-      return stdout.trim();
     }
+
+    return textParts.join('') || stdout.trim();
   }
 }

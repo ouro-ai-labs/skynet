@@ -14,6 +14,25 @@ import { OpenCodeAdapter } from '../adapters/opencode.js';
 const mockExeca = vi.mocked(execa);
 const mockExecaCommand = vi.mocked(execaCommand);
 
+/** Build JSONL output matching OpenCode's `--format json` format. */
+function makeJsonlOutput(text: string): string {
+  const lines = [
+    JSON.stringify({ type: 'step_start', timestamp: Date.now(), sessionID: 'ses_test', part: { type: 'step-start' } }),
+    JSON.stringify({ type: 'text', timestamp: Date.now(), sessionID: 'ses_test', part: { type: 'text', text } }),
+    JSON.stringify({ type: 'step_finish', timestamp: Date.now(), sessionID: 'ses_test', part: { type: 'step-finish', reason: 'stop' } }),
+  ];
+  return lines.join('\n');
+}
+
+function mockOpenCodeResult(text: string) {
+  return {
+    stdout: makeJsonlOutput(text),
+    stderr: null,
+    exitCode: 0,
+    kill: vi.fn(),
+  } as never;
+}
+
 function makeChatMessage(text: string, from = 'user-1'): SkynetMessage {
   return {
     id: 'msg-1',
@@ -21,17 +40,6 @@ function makeChatMessage(text: string, from = 'user-1'): SkynetMessage {
     from,
     to: 'agent-1',
     payload: { text } as ChatPayload,
-    timestamp: Date.now(),
-  };
-}
-
-function makeTaskMessage(title: string, description: string): SkynetMessage {
-  return {
-    id: 'msg-2',
-    type: MessageType.TASK_ASSIGN,
-    from: 'user-1',
-    to: 'agent-1',
-    payload: { title, description } as TaskPayload,
     timestamp: Date.now(),
   };
 }
@@ -64,12 +72,7 @@ describe('OpenCodeAdapter', () => {
 
   describe('handleMessage', () => {
     it('sends chat message as prompt to opencode run', async () => {
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Hello back!' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Hello back!'));
 
       const result = await adapter.handleMessage(makeChatMessage('Hello'), 'Alice');
       expect(result).toBe('Hello back!');
@@ -80,17 +83,11 @@ describe('OpenCodeAdapter', () => {
       expect(args[0]).toBe('run');
       expect(args).toContain('--format');
       expect(args).toContain('json');
-      // Prompt should be the last argument
       expect(args[args.length - 1]).toContain('Message from Alice: Hello');
     });
 
     it('prepends notices to the prompt', async () => {
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Got it' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Got it'));
 
       await adapter.handleMessage(makeChatMessage('Hi'), 'Bob', 'Notice: Alice joined');
 
@@ -102,12 +99,7 @@ describe('OpenCodeAdapter', () => {
 
     it('prepends persona to prompt when set', async () => {
       adapter.persona = 'You are a helpful assistant.';
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Sure' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Sure'));
 
       await adapter.handleMessage(makeChatMessage('Help me'), 'Alice');
 
@@ -119,28 +111,16 @@ describe('OpenCodeAdapter', () => {
 
     it('uses --session and --continue for subsequent calls', async () => {
       // First call
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'First' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('First'));
       await adapter.handleMessage(makeChatMessage('First'), 'Alice');
 
-      // First call should NOT have --continue
       const firstArgs = mockExeca.mock.calls[0][1] as string[];
       expect(firstArgs).not.toContain('--continue');
 
       // Second call
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Second' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Second'));
       await adapter.handleMessage(makeChatMessage('Second'), 'Alice');
 
-      // Second call should have --session and --continue
       const secondArgs = mockExeca.mock.calls[1][1] as string[];
       expect(secondArgs).toContain('--session');
       expect(secondArgs).toContain('--continue');
@@ -148,12 +128,7 @@ describe('OpenCodeAdapter', () => {
 
     it('passes --model flag when model is set', async () => {
       adapter = new OpenCodeAdapter({ projectRoot: '/tmp/test', model: 'anthropic/claude-3-5-sonnet' });
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Done' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Done'));
 
       await adapter.handleMessage(makeChatMessage('Do it'), 'Alice');
 
@@ -165,12 +140,7 @@ describe('OpenCodeAdapter', () => {
 
   describe('executeTask', () => {
     it('returns success with summary', async () => {
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Task completed' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Task completed'));
 
       const result = await adapter.executeTask({
         title: 'Fix bug',
@@ -197,28 +167,29 @@ describe('OpenCodeAdapter', () => {
   });
 
   describe('parseOutput', () => {
-    it('extracts content field from JSON', async () => {
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Hello from opencode' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+    it('extracts text from JSONL text events', async () => {
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Hello from opencode'));
 
       const result = await adapter.handleMessage(makeChatMessage('Hi'), 'Alice');
       expect(result).toBe('Hello from opencode');
     });
 
-    it('extracts result field from JSON', async () => {
+    it('concatenates multiple text events', async () => {
+      const lines = [
+        JSON.stringify({ type: 'step_start', part: { type: 'step-start' } }),
+        JSON.stringify({ type: 'text', part: { type: 'text', text: 'Hello ' } }),
+        JSON.stringify({ type: 'text', part: { type: 'text', text: 'world!' } }),
+        JSON.stringify({ type: 'step_finish', part: { type: 'step-finish' } }),
+      ];
       mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ result: 'Some result' }),
+        stdout: lines.join('\n'),
         stderr: null,
         exitCode: 0,
         kill: vi.fn(),
       } as never);
 
       const result = await adapter.handleMessage(makeChatMessage('Hi'), 'Alice');
-      expect(result).toBe('Some result');
+      expect(result).toBe('Hello world!');
     });
 
     it('falls back to raw text for non-JSON output', async () => {
@@ -243,6 +214,29 @@ describe('OpenCodeAdapter', () => {
 
       const result = await adapter.handleMessage(makeChatMessage('Hi'), 'Alice');
       expect(result).toBe('');
+    });
+
+    it('emits execution log for tool calls', async () => {
+      const onLog = vi.fn();
+      adapter.onExecutionLog = onLog;
+
+      const lines = [
+        JSON.stringify({ type: 'step_start', part: { type: 'step-start' } }),
+        JSON.stringify({ type: 'tool_call', part: { type: 'tool-call', name: 'read_file' } }),
+        JSON.stringify({ type: 'tool_result', part: { type: 'tool-result' } }),
+        JSON.stringify({ type: 'text', part: { type: 'text', text: 'Done' } }),
+        JSON.stringify({ type: 'step_finish', part: { type: 'step-finish' } }),
+      ];
+      mockExeca.mockReturnValueOnce({
+        stdout: lines.join('\n'),
+        stderr: null,
+        exitCode: 0,
+        kill: vi.fn(),
+      } as never);
+
+      await adapter.handleMessage(makeChatMessage('Hi'), 'Alice');
+      expect(onLog).toHaveBeenCalledWith('tool.call', 'read_file');
+      expect(onLog).toHaveBeenCalledWith('tool.result', 'completed');
     });
   });
 
@@ -274,12 +268,7 @@ describe('OpenCodeAdapter', () => {
     });
 
     it('supportsQuickReply returns true after session starts', async () => {
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Ok' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Ok'));
       await adapter.handleMessage(makeChatMessage('Hi'), 'Alice');
       expect(adapter.supportsQuickReply()).toBe(true);
     });
@@ -287,7 +276,6 @@ describe('OpenCodeAdapter', () => {
 
   describe('quickReply', () => {
     it('uses --fork flag', async () => {
-      // Start session first
       adapter.restoreSessionState({ sessionId: 'sess-1', sessionStarted: true });
 
       mockExeca.mockReturnValueOnce({
@@ -324,12 +312,7 @@ describe('OpenCodeAdapter', () => {
       const onPrompt = vi.fn();
       adapter.onPrompt = onPrompt;
 
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Ok' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Ok'));
 
       await adapter.handleMessage(makeChatMessage('Hi'), 'Alice');
       expect(onPrompt).toHaveBeenCalledWith(expect.stringContaining('Message from Alice: Hi'), { type: 'message' });
@@ -339,12 +322,7 @@ describe('OpenCodeAdapter', () => {
       const onPrompt = vi.fn();
       adapter.onPrompt = onPrompt;
 
-      mockExeca.mockReturnValueOnce({
-        stdout: JSON.stringify({ content: 'Done' }),
-        stderr: null,
-        exitCode: 0,
-        kill: vi.fn(),
-      } as never);
+      mockExeca.mockReturnValueOnce(mockOpenCodeResult('Done'));
 
       await adapter.executeTask({ title: 'Fix', description: 'Fix it' } as TaskPayload);
       expect(onPrompt).toHaveBeenCalledWith(expect.stringContaining('Task: Fix'), { type: 'task' });
