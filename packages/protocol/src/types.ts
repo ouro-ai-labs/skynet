@@ -174,7 +174,7 @@ export interface FileChangePayload {
 export interface ScheduleInfo {
   id: string;
   name: string;
-  /** Cron expression (e.g. "0 9 * * *" = every day at 9am). */
+  /** Cron expression in UTC (e.g. "0 9 * * *" = every day at 9:00 UTC). */
   cronExpr: string;
   /** Target agent ID to receive the task on each tick. */
   agentId: string;

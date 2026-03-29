@@ -257,13 +257,15 @@ skynet schedule disable <schedule-id> --workspace <name-or-id>
 
 Standard 5-field format: `minute hour day-of-month month day-of-week`
 
+**All cron expressions are evaluated in UTC.** Agents are responsible for converting from the user's local timezone when creating schedules.
+
 | Expression | Meaning |
 |------------|---------|
-| `0 9 * * *` | Every day at 9:00 AM |
+| `0 9 * * *` | Every day at 9:00 UTC |
 | `*/30 * * * *` | Every 30 minutes |
-| `0 17 * * 1-5` | Weekdays at 5:00 PM |
-| `0 0 * * 0` | Every Sunday at midnight |
-| `0 9,17 * * *` | Every day at 9:00 AM and 5:00 PM |
+| `0 17 * * 1-5` | Weekdays at 17:00 UTC |
+| `0 0 * * 0` | Every Sunday at midnight UTC |
+| `0 9,17 * * *` | Every day at 9:00 and 17:00 UTC |
 
 Powered by [croner](https://github.com/hexagon/croner) — zero-dependency, ESM, supports second-level precision.
 
