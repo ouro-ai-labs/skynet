@@ -52,7 +52,7 @@ export class Scheduler {
 
   create(payload: ScheduleCreatePayload, createdBy?: string): ScheduleInfo {
     const now = Date.now();
-    const cron = new Cron(payload.cronExpr);
+    const cron = new Cron(payload.cronExpr, { timezone: 'Etc/UTC' });
     const nextRun = cron.nextRun();
     cron.stop();
 
@@ -90,7 +90,7 @@ export class Scheduler {
 
     // Update nextRunAt
     if (updated.enabled) {
-      const cron = new Cron(updated.cronExpr);
+      const cron = new Cron(updated.cronExpr, { timezone: 'Etc/UTC' });
       const nextRun = cron.nextRun();
       cron.stop();
       if (nextRun) {
@@ -122,7 +122,7 @@ export class Scheduler {
   private startJob(schedule: ScheduleInfo): void {
     if (this.jobs.has(schedule.id)) return;
 
-    const job = new Cron(schedule.cronExpr, () => {
+    const job = new Cron(schedule.cronExpr, { timezone: 'Etc/UTC' }, () => {
       this.onTick(schedule.id);
     });
 

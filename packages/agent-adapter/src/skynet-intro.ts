@@ -82,7 +82,7 @@ Manage scheduled tasks with these XML tags in your response. Do NOT use built-in
 <schedule-delete id="schedule-uuid-here" />
 \`\`\`
 
-- Cron uses 5 fields: minute hour day-of-month month day-of-week.
+- Cron uses 5 fields: minute hour day-of-month month day-of-week. **All cron times are in UTC.**
 - \`agent\` is the @name of the target agent (or yourself).
 - Tags can appear alongside normal text in the same response.
 - Results are returned immediately as a follow-up message. To delete a schedule whose ID you don't know, first use \`<schedule-list />\`, then use the returned ID in \`<schedule-delete />\`.
