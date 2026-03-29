@@ -7,6 +7,7 @@
 ```
 AgentAdapter (abstract base class)
 ├── ClaudeCodeAdapter   — claude CLI (fully implemented)
+├── OpenCodeAdapter     — opencode CLI (fully implemented)
 ├── GeminiCliAdapter    — gemini CLI (stub)
 ├── CodexCliAdapter     — codex CLI (stub)
 └── GenericAdapter      — configurable generic adapter
@@ -86,6 +87,25 @@ Invokes `claude -p <prompt> --output-format stream-json --verbose --dangerously-
 **Quick Reply (Fork)**: `supportsQuickReply()` returns `true` once a session has been started. Quick replies use `--resume <sessionId> --fork-session` to create a lightweight forked context that does not pollute the main conversation. Image attachments are not supported in quick replies and fall back to the normal queue.
 
 **Error Sanitization**: Execa errors are sanitized to prevent leaking the full command line (which includes `--append-system-prompt` with the entire persona). The adapter prefers execa's `shortMessage` and attaches collected stderr for diagnostics.
+
+### OpenCodeAdapter
+
+Invokes `opencode run <prompt> --format json` in non-interactive mode.
+
+**Options (`OpenCodeOptions`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `projectRoot` | `string` | Working directory (required) |
+| `model` | `string` | Specify model via `--model` (provider/model format, e.g. `anthropic/claude-3-5-sonnet`) |
+
+**Session Management**: Uses `--session <id> --continue` for multi-turn conversations. The first call creates a new session; subsequent calls resume it. Quick replies use `--session <id> --fork` to branch without polluting the main conversation.
+
+**Persona Injection**: When `persona` is set, the adapter prepends it to the prompt text directly (OpenCode does not have a dedicated system prompt flag).
+
+**Output Parsing**: The adapter uses `--format json` and extracts the `content` or `result` field from the JSON response. Falls back to raw text if JSON parsing fails.
+
+**Error Sanitization**: Same approach as ClaudeCodeAdapter — execa errors are sanitized to prevent leaking command-line internals.
 
 ### GeminiCliAdapter (Stub)
 

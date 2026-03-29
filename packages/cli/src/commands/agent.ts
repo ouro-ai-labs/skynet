@@ -32,6 +32,7 @@ const SKILLS_AGENT_MAP: Record<string, string> = {
   [AgentType.CLAUDE_CODE]: 'claude-code',
   [AgentType.GEMINI_CLI]: 'gemini-cli',
   [AgentType.CODEX_CLI]: 'codex-cli',
+  [AgentType.OPENCODE]: 'claude-code', // opencode uses similar file layout
   [AgentType.GENERIC]: 'claude-code', // fallback: install as claude-code layout
 };
 
@@ -235,7 +236,7 @@ export function registerAgentCommand(program: Command): void {
     .description('Create a new agent')
     .option('--workspace <name-or-id>', 'Workspace name or UUID')
     .option('--name <name>', 'Agent name (skip interactive prompt)')
-    .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, generic')
+    .option('--type <type>', 'Agent type: claude-code, gemini-cli, codex-cli, opencode, generic')
     .option('--role <role>', 'Agent role')
     .option('--persona <persona>', 'Persona description')
     .option('--workdir <path>', 'Custom working directory for the agent (default: ~/.skynet/<ws>/<id>/work)')
@@ -268,6 +269,7 @@ export function registerAgentCommand(program: Command): void {
               { name: 'Claude Code', value: AgentType.CLAUDE_CODE },
               { name: 'Gemini CLI', value: AgentType.GEMINI_CLI },
               { name: 'Codex CLI', value: AgentType.CODEX_CLI },
+              { name: 'OpenCode', value: AgentType.OPENCODE },
               { name: 'Generic', value: AgentType.GENERIC },
             ];
 
