@@ -76,7 +76,7 @@ pnpm skynet agent new --name <agent-name> --type <agent-type> [--role <role>] [-
 ```
 
 - `--name` (required): Agent display name
-- `--type` (required): Agent type. **Currently `claude-code` and `opencode` are supported.** Other types (`codex-cli`, `gemini-cli`, `generic`) are not yet supported — do not use them unless explicitly asked by the user.
+- `--type` (required): Agent type. **Currently `claude-code`, `opencode`, and `codex-cli` are supported.** Other types (`gemini-cli`, `generic`) are not yet supported — do not use them unless explicitly asked by the user.
 - `--role` (optional): Agent's role description (e.g., "backend engineer")
 - `--persona` (optional): Persona description for the agent's behavior
 - `--workdir` (optional): Custom working directory (default: `~/.skynet/<ws>/<id>/work`)

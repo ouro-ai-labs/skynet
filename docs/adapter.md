@@ -9,7 +9,7 @@ AgentAdapter (abstract base class)
 ├── ClaudeCodeAdapter   — claude CLI (fully implemented)
 ├── OpenCodeAdapter     — opencode CLI (fully implemented)
 ├── GeminiCliAdapter    — gemini CLI (stub)
-├── CodexCliAdapter     — codex CLI (stub)
+├── CodexCliAdapter     — codex CLI (fully implemented)
 └── GenericAdapter      — configurable generic adapter
         ↓
    AgentRunner — connects adapters to the Skynet network (WebSocket)
@@ -113,11 +113,25 @@ Invokes `opencode run <prompt> --format json` in non-interactive mode.
 
 **Options**: `projectRoot` only.
 
-### CodexCliAdapter (Stub)
+### CodexCliAdapter
 
-**Status: Not yet implemented.** `isAvailable()` always returns `false`; `handleMessage()` and `executeTask()` throw `"CodexCliAdapter is not yet implemented"`. Will be completed once the Claude Code adapter is stable.
+Invokes `codex exec <prompt> --json --dangerously-bypass-approvals-and-sandbox` in non-interactive mode.
 
-**Options**: `projectRoot` + optional `fullAuto`.
+**Options (`CodexCliOptions`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `projectRoot` | `string` | Working directory (required) |
+| `fullAuto` | `boolean` | Use `--full-auto` instead of `--dangerously-bypass-approvals-and-sandbox` |
+| `model` | `string` | Specify model via `-m` |
+
+**Session Management**: The first call creates a new session. Codex returns a `thread_id` in the `thread.started` JSONL event, which is captured and used for subsequent calls via `codex exec resume <thread-id> --json <prompt>`.
+
+**Persona Injection**: When `persona` is set, the adapter prepends it to the prompt text directly (Codex does not have a dedicated system prompt flag).
+
+**JSONL Parsing**: The adapter uses `--json` and parses JSONL events line-by-line. It extracts text from `item.completed` events with `type: "agent_message"`, and emits `tool.call` / `tool.result` execution log events for `command_execution` items via the `onExecutionLog` callback.
+
+**Error Sanitization**: Same approach as ClaudeCodeAdapter — execa errors are sanitized to prevent leaking command-line internals.
 
 ### GenericAdapter
 
