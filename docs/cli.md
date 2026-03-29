@@ -127,7 +127,7 @@ skynet agent new --workspace <name-or-id> --name coder --type claude-code --role
 |------|-------------|
 | `--workspace <name-or-id>` | Workspace name or UUID |
 | `--name <name>` | Agent name |
-| `--type <type>` | Agent type: `claude-code`, `gemini-cli`, `codex-cli`, `generic` |
+| `--type <type>` | Agent type: `claude-code`, `opencode`, `gemini-cli`, `codex-cli`, `generic` |
 | `--role <role>` | Agent role description (optional) |
 | `--persona <persona>` | Persona description (optional) |
 | `--workdir <path>` | Custom working directory (default: `~/.skynet/<ws>/<id>/work`) |

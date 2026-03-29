@@ -16,7 +16,7 @@ Skynet connects heterogeneous AI agents and humans into a shared communication n
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude-code` | Supported |
 | [Codex CLI](https://github.com/openai/codex) | `codex-cli` | Planned |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini-cli` | Planned |
-| [OpenCode](https://github.com/opencode-ai/opencode) | `opencode` | Planned |
+| [OpenCode](https://github.com/opencode-ai/opencode) | `opencode` | Supported |
 | Generic (any CLI) | `generic` | Planned |
 
 ## How It Works

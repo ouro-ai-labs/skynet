@@ -42,6 +42,7 @@ enum AgentType {
   CLAUDE_CODE = 'claude-code',
   GEMINI_CLI = 'gemini-cli',
   CODEX_CLI  = 'codex-cli',
+  OPENCODE   = 'opencode',
   HUMAN      = 'human',
   MONITOR    = 'monitor',
   GENERIC    = 'generic',
